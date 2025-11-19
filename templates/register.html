@@ -141,6 +141,68 @@
                         <small>Selecciona todas las carreras a las que perteneces marcando las casillas correspondientes.</small>
                     </div>
 
+                    <!-- Sección de Disponibilidad de Horario -->
+                    <div class="mb-4" id="disponibilidadDiv" style="display: none;">
+                        <h5 class="text-primary border-bottom pb-2 mb-3">
+                            <i class="fas fa-clock me-2"></i>Disponibilidad de Horario
+                        </h5>
+                        <div class="alert alert-info small">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Seleccione los horarios en los que tiene disponibilidad. <strong>Máximo 8 horas por día.</strong>
+                        </div>
+
+                        <!-- Botones de selección masiva -->
+                        <div class="mb-3 d-flex gap-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btnMatutino">
+                                <i class="fas fa-sun me-1"></i>Seleccionar Matutino
+                            </button>
+                            <button type="button" class="btn btn-outline-warning btn-sm" id="btnVespertino">
+                                <i class="fas fa-moon me-1"></i>Seleccionar Vespertino
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDesmarcar">
+                                <i class="fas fa-times me-1"></i>Desmarcar Todo
+                            </button>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm text-center">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Horario</th>
+                                        <th>Lun</th>
+                                        <th>Mar</th>
+                                        <th>Mié</th>
+                                        <th>Jue</th>
+                                        <th>Vie</th>
+                                        <th>Sáb</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for horario in horarios %}
+                                    <tr>
+                                        <td class="align-middle bg-light">
+                                            <small class="fw-bold">{{ horario.nombre }}</small><br>
+                                            <span class="badge bg-secondary">{{ horario.get_hora_inicio_str() }} - {{ horario.get_hora_fin_str() }}</span>
+                                        </td>
+                                        {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
+                                        <td class="align-middle">
+                                            <div class="form-check d-flex justify-content-center">
+                                                <input class="form-check-input availability-check" type="checkbox" 
+                                                       name="availability_{{ horario.id }}_{{ dia }}" 
+                                                       id="check_{{ horario.id }}_{{ dia }}"
+                                                       data-dia="{{ dia }}"
+                                                       data-turno="{{ horario.turno }}"
+                                                       data-duracion="{{ horario.get_duracion_minutos() }}">
+                                            </div>
+                                        </td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             {{ form.password.label(class="form-label") }}
@@ -209,12 +271,14 @@ document.addEventListener('DOMContentLoaded', function() {
             tipoProfesorDiv.style.display = 'block';
             carreraDiv.style.display = 'block';
             otraCarreraDiv.style.display = 'block';
+            document.getElementById('disponibilidadDiv').style.display = 'block';
             document.getElementById('tipo_profesor').required = true;
             document.getElementById('carrera').required = true;
         } else if (rolSelect.value === 'jefe_carrera') {
             tipoProfesorDiv.style.display = 'none';
             carreraDiv.style.display = 'block';
             otraCarreraDiv.style.display = 'none';
+            document.getElementById('disponibilidadDiv').style.display = 'none';
             document.getElementById('tipo_profesor').required = false;
             document.getElementById('carrera').required = true;
             document.getElementById('tipo_profesor').value = '';
@@ -222,6 +286,7 @@ document.addEventListener('DOMContentLoaded', function() {
             tipoProfesorDiv.style.display = 'none';
             carreraDiv.style.display = 'none';
             otraCarreraDiv.style.display = 'none';
+            document.getElementById('disponibilidadDiv').style.display = 'none';
             document.getElementById('tipo_profesor').required = false;
             document.getElementById('carrera').required = false;
             document.getElementById('tipo_profesor').value = '';
@@ -281,6 +346,76 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Escuchar cambios en el checkbox
     otraCarreraCheckbox.addEventListener('change', toggleMensajeOtraCarrera);
+
+    // ==========================================
+    // LÓGICA DE DISPONIBILIDAD Y VALIDACIÓN
+    // ==========================================
+    
+    const checks = document.querySelectorAll('.availability-check');
+    const MAX_MINUTOS_DIARIOS = 8 * 60; // 8 horas
+
+    function calcularMinutosDia(dia) {
+        let minutos = 0;
+        document.querySelectorAll(`.availability-check[data-dia="${dia}"]:checked`).forEach(chk => {
+            minutos += parseInt(chk.dataset.duracion);
+        });
+        return minutos;
+    }
+
+    function validarHoras(e) {
+        const checkbox = e.target;
+        if (checkbox.checked) {
+            const dia = checkbox.dataset.dia;
+            const minutosActuales = calcularMinutosDia(dia);
+            
+            if (minutosActuales > MAX_MINUTOS_DIARIOS) {
+                e.preventDefault();
+                checkbox.checked = false;
+                alert(`No puede exceder 8 horas diarias de disponibilidad para el día ${dia}.`);
+            }
+        }
+    }
+
+    // Asignar validación a cada checkbox
+    checks.forEach(chk => {
+        chk.addEventListener('change', validarHoras);
+    });
+
+    // Botones de selección masiva
+    document.getElementById('btnMatutino').addEventListener('click', function() {
+        aplicarSeleccionMasiva('matutino');
+    });
+
+    document.getElementById('btnVespertino').addEventListener('click', function() {
+        aplicarSeleccionMasiva('vespertino');
+    });
+
+    document.getElementById('btnDesmarcar').addEventListener('click', function() {
+        checks.forEach(chk => chk.checked = false);
+    });
+
+    function aplicarSeleccionMasiva(turno) {
+        const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+        
+        dias.forEach(dia => {
+            // Obtener checkboxes del turno y día específicos
+            const checkboxesDia = Array.from(document.querySelectorAll(`.availability-check[data-turno="${turno}"][data-dia="${dia}"]`));
+            
+            // Calcular minutos ya seleccionados en ese día (excluyendo los de este turno para recalcular)
+            // Pero para simplificar, intentamos marcar uno por uno y validamos
+            
+            checkboxesDia.forEach(chk => {
+                if (!chk.checked) {
+                    // Simular chequeo
+                    chk.checked = true;
+                    // Validar
+                    if (calcularMinutosDia(dia) > MAX_MINUTOS_DIARIOS) {
+                        chk.checked = false; // Revertir si se pasa
+                    }
+                }
+            });
+        });
+    }
 });
 </script>
 {% endblock %}

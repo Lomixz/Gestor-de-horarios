@@ -667,3 +667,159 @@ def crear_tabla_materias(materias):
         ])
     
     return data
+
+def procesar_archivo_carreras(archivo, usuario_id):
+    """
+    Procesar archivo CSV con datos de carreras
+    
+    Formato esperado del archivo CSV:
+    - codigo, nombre, descripcion, facultad
+    
+    Args:
+        archivo: Archivo CSV cargado
+        usuario_id: ID del usuario que está importando (para auditoría)
+    
+    Returns:
+        dict: Resultado de la operación con estadísticas y errores
+    """
+    resultado = {
+        'exito': False,
+        'procesados': 0,
+        'creados': 0,
+        'actualizados': 0,
+        'errores': [],
+        'carreras_creadas': [],
+        'mensaje': ''
+    }
+    
+    try:
+        # Leer archivo CSV con diferentes codificaciones
+        try:
+            df = pd.read_csv(archivo, encoding='utf-8')
+        except UnicodeDecodeError:
+            archivo.seek(0)
+            try:
+                df = pd.read_csv(archivo, encoding='latin-1')
+            except:
+                archivo.seek(0)
+                df = pd.read_csv(archivo, encoding='iso-8859-1')
+        
+        # Limpiar nombres de columnas (eliminar espacios y convertir a minúsculas)
+        df.columns = df.columns.str.strip().str.lower()
+        
+        # Validar columnas requeridas
+        columnas_requeridas = ['codigo', 'nombre']
+        columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+        
+        if columnas_faltantes:
+            columnas_encontradas = ', '.join(df.columns.tolist())
+            resultado['mensaje'] = f"Columnas faltantes: {', '.join(columnas_faltantes)}. Columnas encontradas: {columnas_encontradas}"
+            return resultado
+        
+        # Procesar cada fila
+        for index, row in df.iterrows():
+            try:
+                resultado['procesados'] += 1
+                
+                # Validar datos básicos
+                if pd.isna(row['codigo']) or pd.isna(row['nombre']):
+                    resultado['errores'].append(f"Fila {index + 2}: Código o nombre vacío")
+                    continue
+                
+                # Limpiar y normalizar datos
+                codigo = str(row['codigo']).strip().upper()
+                nombre = str(row['nombre']).strip()
+                descripcion = str(row['descripcion']).strip() if 'descripcion' in df.columns and not pd.isna(row['descripcion']) else None
+                facultad = str(row['facultad']).strip() if 'facultad' in df.columns and not pd.isna(row['facultad']) else None
+                
+                # Validar longitud de campos
+                if len(codigo) < 2 or len(codigo) > 10:
+                    resultado['errores'].append(f"Fila {index + 2}: El código '{codigo}' debe tener entre 2 y 10 caracteres")
+                    continue
+                
+                if len(nombre) < 5 or len(nombre) > 150:
+                    resultado['errores'].append(f"Fila {index + 2}: El nombre '{nombre}' debe tener entre 5 y 150 caracteres")
+                    continue
+                
+                if descripcion and len(descripcion) > 500:
+                    resultado['errores'].append(f"Fila {index + 2}: La descripción es demasiado larga (máximo 500 caracteres)")
+                    continue
+                
+                if facultad and len(facultad) > 100:
+                    resultado['errores'].append(f"Fila {index + 2}: El nombre de la facultad es demasiado largo (máximo 100 caracteres)")
+                    continue
+                
+                # Verificar si ya existe una carrera con ese código
+                carrera_existente = Carrera.query.filter_by(codigo=codigo, activa=True).first()
+                
+                if carrera_existente:
+                    # Actualizar carrera existente
+                    carrera_existente.nombre = nombre
+                    if descripcion:
+                        carrera_existente.descripcion = descripcion
+                    if facultad:
+                        carrera_existente.facultad = facultad
+                    
+                    resultado['actualizados'] += 1
+                    resultado['carreras_creadas'].append({
+                        'codigo': codigo,
+                        'nombre': nombre,
+                        'accion': 'actualizada'
+                    })
+                else:
+                    # Verificar si existe una carrera con el mismo nombre
+                    carrera_mismo_nombre = Carrera.query.filter_by(nombre=nombre, activa=True).first()
+                    if carrera_mismo_nombre:
+                        resultado['errores'].append(f"Fila {index + 2}: Ya existe una carrera con el nombre '{nombre}'")
+                        continue
+                    
+                    # Crear nueva carrera
+                    nueva_carrera = Carrera(
+                        codigo=codigo,
+                        nombre=nombre,
+                        descripcion=descripcion,
+                        facultad=facultad,
+                        creada_por=usuario_id
+                    )
+                    
+                    db.session.add(nueva_carrera)
+                    resultado['creados'] += 1
+                    resultado['carreras_creadas'].append({
+                        'codigo': codigo,
+                        'nombre': nombre,
+                        'accion': 'creada'
+                    })
+                
+            except Exception as e:
+                resultado['errores'].append(f"Fila {index + 2}: Error al procesar - {str(e)}")
+                continue
+        
+        # Guardar cambios en la base de datos
+        if resultado['creados'] > 0 or resultado['actualizados'] > 0:
+            db.session.commit()
+            resultado['exito'] = True
+            resultado['mensaje'] = f"Importación completada: {resultado['creados']} carreras creadas, {resultado['actualizados']} actualizadas"
+        else:
+            db.session.rollback()
+            resultado['mensaje'] = "No se crearon ni actualizaron carreras"
+        
+    except Exception as e:
+        db.session.rollback()
+        resultado['mensaje'] = f"Error al procesar el archivo: {str(e)}"
+        resultado['errores'].append(f"Error general: {str(e)}")
+    
+    return resultado
+
+def generar_plantilla_csv_carreras():
+    """
+    Generar plantilla CSV para importación de carreras
+    
+    Returns:
+        str: Contenido del archivo CSV de plantilla
+    """
+    plantilla = "codigo,nombre,descripcion,facultad\n"
+    plantilla += "ING-SIS,Ingeniería en Sistemas Computacionales,Carrera de ingeniería enfocada en desarrollo de software,Facultad de Ingeniería\n"
+    plantilla += "ADM-EMP,Administración de Empresas,Carrera enfocada en gestión empresarial,Facultad de Ciencias Económicas\n"
+    plantilla += "DER,Derecho,Carrera de ciencias jurídicas,Facultad de Derecho\n"
+    
+    return plantilla

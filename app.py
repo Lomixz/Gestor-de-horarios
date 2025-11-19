@@ -8,8 +8,8 @@ from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm
                    GenerarHorariosForm, EditarHorarioAcademicoForm, EliminarHorarioAcademicoForm,
                    DisponibilidadProfesorForm, EditarDisponibilidadProfesorForm, AgregarProfesorForm,
                    EditarUsuarioForm, AsignarMateriasProfesorForm, GrupoForm, AsignarMateriasGrupoForm,
-                   CambiarPasswordProfesorForm)
-from utils import procesar_archivo_profesores, generar_pdf_profesores, procesar_archivo_materias, generar_pdf_materias, generar_plantilla_csv
+                   CambiarPasswordProfesorForm, ImportarCarrerasForm)
+from utils import procesar_archivo_profesores, generar_pdf_profesores, procesar_archivo_materias, generar_pdf_materias, generar_plantilla_csv, procesar_archivo_carreras, generar_plantilla_csv_carreras
 from datetime import time, datetime
 import os
 import pandas as pd
@@ -91,6 +91,10 @@ def register():
         return redirect(url_for('dashboard'))
     
     form = RegistrationForm()
+    
+    # Obtener horarios para el formulario de disponibilidad
+    horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
+    
     if form.validate_on_submit():
         try:
             # Obtener el rol final (considerando tipo de profesor)
@@ -120,6 +124,25 @@ def register():
             db.session.add(user)
             db.session.commit()
             
+            # Procesar disponibilidad si es profesor
+            if rol_final in ['profesor_completo', 'profesor_asignatura']:
+                dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+                
+                for horario in horarios:
+                    for dia in dias:
+                        # Verificar si el checkbox fue marcado
+                        field_name = f"availability_{horario.id}_{dia}"
+                        if request.form.get(field_name):
+                            disponibilidad = DisponibilidadProfesor(
+                                profesor_id=user.id,
+                                horario_id=horario.id,
+                                dia_semana=dia,
+                                disponible=True
+                            )
+                            db.session.add(disponibilidad)
+                
+                db.session.commit()
+            
             flash(f'¡Registro exitoso! Bienvenido, {user.get_nombre_completo()}.', 'success')
             
             # Iniciar sesión automáticamente después del registro
@@ -131,7 +154,7 @@ def register():
             flash('Error al crear la cuenta. Inténtalo de nuevo.', 'error')
             print(f"Error en registro: {e}")
     
-    return render_template('register.html', form=form)
+    return render_template('register.html', form=form, horarios=horarios)
 
 @app.route('/cambiar-password-obligatorio', methods=['GET', 'POST'])
 @login_required
@@ -1612,6 +1635,78 @@ def eliminar_carrera(id):
     except Exception as e:
         db.session.rollback()
         flash('Error al eliminar la carrera. Inténtalo de nuevo.', 'error')
+        return redirect(url_for('gestionar_carreras'))
+
+@app.route('/admin/carreras/importar', methods=['GET', 'POST'])
+@login_required
+def importar_carreras():
+    """Importar carreras desde archivo CSV (solo admin)"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    form = ImportarCarrerasForm()
+    
+    if form.validate_on_submit():
+        try:
+            archivo = form.archivo.data
+            
+            # Procesar el archivo
+            resultado = procesar_archivo_carreras(archivo, current_user.id)
+            
+            if resultado['exito']:
+                # Mostrar resultados
+                flash(resultado['mensaje'], 'success')
+                
+                # Mostrar carreras creadas/actualizadas
+                if resultado['carreras_creadas']:
+                    carreras_msg = "Carreras procesadas: "
+                    for carrera in resultado['carreras_creadas'][:10]:  # Limitar a 10 para no saturar
+                        carreras_msg += f"{carrera['codigo']} ({carrera['accion']}), "
+                    flash(carreras_msg.rstrip(', '), 'info')
+                
+                # Mostrar errores si los hay
+                if resultado['errores']:
+                    for error in resultado['errores'][:5]:  # Mostrar solo los primeros 5 errores
+                        flash(error, 'warning')
+                    if len(resultado['errores']) > 5:
+                        flash(f"... y {len(resultado['errores']) - 5} errores más.", 'warning')
+                
+                return redirect(url_for('gestionar_carreras'))
+            else:
+                flash(resultado['mensaje'], 'error')
+                
+                # Mostrar errores
+                if resultado['errores']:
+                    for error in resultado['errores'][:5]:
+                        flash(error, 'warning')
+                    if len(resultado['errores']) > 5:
+                        flash(f"... y {len(resultado['errores']) - 5} errores más.", 'warning')
+                
+        except Exception as e:
+            flash(f'Error al procesar el archivo: {str(e)}', 'error')
+    
+    return render_template('admin/importar_carreras.html', form=form)
+
+@app.route('/admin/carreras/plantilla')
+@login_required
+def descargar_plantilla_carreras():
+    """Descargar plantilla CSV para importar carreras (solo admin)"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para realizar esta acción.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        plantilla = generar_plantilla_csv_carreras()
+        
+        response = make_response(plantilla)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = 'attachment; filename=plantilla_carreras.csv'
+        
+        return response
+        
+    except Exception as e:
+        flash(f'Error al generar la plantilla: {str(e)}', 'error')
         return redirect(url_for('gestionar_carreras'))
 
 # Rutas para gestión de materias

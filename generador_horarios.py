@@ -860,7 +860,8 @@ class GeneradorHorariosSinOR:
                 for horario in self.horarios:
                     disp = next((d for d in disponibilidades_profesor
                                if d.dia_semana == dia and d.horario_id == horario.id), None)
-                    disponibilidad_dict[dia][horario.id] = disp.disponible if disp else True
+                    # Si hay registro, usar su valor. Si NO hay registro, NO está disponible (False)
+                    disponibilidad_dict[dia][horario.id] = disp.disponible if disp else False
 
             self.disponibilidades[profesor.id] = disponibilidad_dict
     
