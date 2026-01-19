@@ -61,7 +61,7 @@
 
     <!-- Contenido principal -->
     <main class="py-4">
-        <div class="container">
+        <div class="{% block container_class %}container{% endblock %}">
             <!-- Mensajes flash -->
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}

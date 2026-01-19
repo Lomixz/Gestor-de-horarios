@@ -2,6 +2,8 @@
 
 {% block title %}Gestión de Usuarios - Administración{% endblock %}
 
+{% block container_class %}container-fluid px-4{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-12">
@@ -121,7 +123,7 @@
                             <option value="Administrador">Administrador</option>
                             <option value="Jefe de Carrera">Jefe de Carrera</option>
                             <option value="Profesor">Profesores (Todos)</option>
-                            <option value="Profesor Tiempo Completo">Profesor Tiempo Completo</option>
+                            <option value="Profesor de Tiempo Completo">Profesor de Tiempo Completo</option>
                             <option value="Profesor por Asignatura">Profesor por Asignatura</option>
                         </select>
                     </div>
@@ -406,12 +408,23 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-/* Evitar recorte de botones en la tabla de usuarios */
+/* ===== ESTILOS PARA LA TABLA DE USUARIOS ===== */
+
+/* Contenedor principal de la tabla - hacer responsive */
 .card-body .table-responsive {
     overflow-x: auto !important;
-    overflow-y: visible !important;
-    overflow: visible !important;
-    border-radius: 0 !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Tabla base */
+.table {
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 0;
+    table-layout: auto;
+    font-size: 0.9rem;
 }
 
 /* Desactivar el escalado en hover que causa recortes */
@@ -420,38 +433,116 @@ document.addEventListener('DOMContentLoaded', function() {
     box-shadow: none !important;
 }
 
-/* Asegurar que la columna de acciones tenga suficiente espacio */
-.table thead th:last-child,
-.table tbody td:last-child {
+/* Columnas con ancho mínimo para evitar que se compriman demasiado */
+.table thead th {
     white-space: nowrap;
-    min-width: 200px;
-    width: 200px;
-    padding-right: 1.5rem !important;
-    padding-left: 1rem !important;
+    vertical-align: middle;
+    font-weight: 600;
 }
 
-/* Asegurar que los btn-group no se envuelvan y sean visibles */
+/* Columna Usuario */
+.table thead th:nth-child(1),
+.table tbody td:nth-child(1) {
+    min-width: 100px;
+    max-width: 150px;
+}
+
+/* Columna Nombre */
+.table thead th:nth-child(2),
+.table tbody td:nth-child(2) {
+    min-width: 120px;
+    max-width: 180px;
+}
+
+/* Columna Email */
+.table thead th:nth-child(3),
+.table tbody td:nth-child(3) {
+    min-width: 150px;
+    max-width: 220px;
+    word-break: break-word;
+}
+
+/* Columna Rol */
+.table thead th:nth-child(4),
+.table tbody td:nth-child(4) {
+    min-width: 140px;
+    white-space: nowrap;
+}
+
+/* Columna Carrera */
+.table thead th:nth-child(5),
+.table tbody td:nth-child(5) {
+    min-width: 150px;
+    max-width: 200px;
+    font-size: 0.85rem;
+}
+
+/* Columna Estado */
+.table thead th:nth-child(6),
+.table tbody td:nth-child(6) {
+    min-width: 80px;
+    white-space: nowrap;
+}
+
+/* Columna Registro */
+.table thead th:nth-child(7),
+.table tbody td:nth-child(7) {
+    min-width: 100px;
+    white-space: nowrap;
+}
+
+/* Columna Acciones - la más importante */
+.table thead th:nth-child(8),
+.table tbody td:nth-child(8) {
+    min-width: 180px;
+    width: 180px;
+    white-space: nowrap;
+    text-align: center !important;
+}
+
+/* Badges de rol más compactos */
+.table .badge {
+    font-size: 0.75rem;
+    padding: 0.4em 0.6em;
+    white-space: nowrap;
+}
+
+/* Grupo de botones de acciones */
 .table .btn-group {
     display: inline-flex !important;
     flex-wrap: nowrap !important;
-    gap: 2px;
+    gap: 3px;
 }
 
-/* Ajustar tamaño de botones */
+/* Botones de acciones más compactos */
 .table .btn-group .btn-sm {
-    padding: 0.35rem 0.6rem !important;
-    font-size: 0.875rem;
+    padding: 0.3rem 0.5rem !important;
+    font-size: 0.8rem;
 }
 
-/* Forzar visibilidad de tooltips */
+/* Visibilidad en hover */
 .table tbody tr {
     position: relative;
-    z-index: 1;
 }
 
 .table tbody tr:hover {
-    z-index: 2;
-    position: relative;
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Responsive: en pantallas muy pequeñas */
+@media (max-width: 992px) {
+    .table {
+        font-size: 0.85rem;
+    }
+    
+    .table .btn-group .btn-sm {
+        padding: 0.25rem 0.4rem !important;
+        font-size: 0.75rem;
+    }
+    
+    .table .badge {
+        font-size: 0.7rem;
+    }
 }
 </style>
 {% endblock %}
