@@ -3,251 +3,365 @@
 {% block title %}Registro - Sistema Académico{% endblock %}
 
 {% block content %}
+<style>
+    /* Wizard Steps Styles */
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        position: relative;
+    }
+    .step-indicator::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #e9ecef;
+        z-index: 0;
+        transform: translateY(-50%);
+    }
+    .step {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+        font-weight: bold;
+        position: relative;
+        z-index: 1;
+        transition: all 0.3s ease;
+    }
+    .step.active {
+        border-color: #3f51b5;
+        background: #3f51b5;
+        color: #fff;
+        box-shadow: 0 0 0 5px rgba(63, 81, 181, 0.2);
+    }
+    .step.completed {
+        border-color: #28a745;
+        background: #28a745;
+        color: #fff;
+    }
+    
+    /* Role Card Styles */
+    .role-card-input {
+        display: none;
+    }
+    .role-card {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid #e9ecef;
+    }
+    .role-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border-color: #a4b0be;
+    }
+    .role-card-input:checked + .role-card {
+        border-color: #3f51b5;
+        background-color: #f8f9fa;
+        box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.2);
+    }
+    .role-icon {
+        font-size: 2.5rem;
+        color: #3f51b5;
+        margin-bottom: 1rem;
+    }
+    
+    /* Form Floating Fixes */
+    .form-floating > label {
+        z-index: 2;
+    }
+    .password-toggle {
+        cursor: pointer;
+        z-index: 9;
+        margin-top: 5px; /* Adjust for floating label */
+    }
+
+    /* Wizard Transitions */
+    .wizard-step {
+        display: none;
+        animation: fadeIn 0.4s ease;
+    }
+    .wizard-step.active {
+        display: block;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
 <div class="row justify-content-center">
-    <div class="col-md-8 col-lg-6">
-        <div class="card shadow">
-            <div class="card-body">
-                <div class="text-center mb-4">
-                    <i class="fas fa-user-plus fa-3x text-success mb-3"></i>
-                    <h3 class="card-title">Crear Cuenta</h3>
-                    <p class="text-muted">Complete los datos para registrarse</p>
+    <div class="col-md-10 col-lg-8">
+        <div class="card shadow border-0 rounded-4">
+            <div class="card-body p-5">
+                
+                <!-- Header -->
+                <div class="text-center mb-5">
+                    <h2 class="fw-bold text-dark mb-1">Crea tu Cuenta</h2>
+                    <p class="text-muted">Únete al Sistema de Gestión Académica</p>
+                </div>
+
+                <!-- Step Indicator -->
+                <div class="step-indicator px-5">
+                    <div class="step active" id="step1-ind" data-bs-toggle="tooltip" title="Credenciales">1</div>
+                    <div class="step" id="step2-ind" data-bs-toggle="tooltip" title="Datos Personales">2</div>
+                    <div class="step" id="step3-ind" data-bs-toggle="tooltip" title="Tu Rol">3</div>
+                    <div class="step" id="step4-ind" data-bs-toggle="tooltip" title="Detalles Finales">4</div>
                 </div>
 
                 <form method="POST" id="registrationForm">
                     {{ form.hidden_tag() }}
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            {{ form.nombre.label(class="form-label") }}
-                            {{ form.nombre(class="form-control") }}
-                            {% if form.nombre.errors %}
+
+                    <!-- STEP 1: Credenciales -->
+                    <div class="wizard-step active" id="step1">
+                        <h4 class="mb-4 text-primary"><i class="fas fa-lock me-2"></i>Credenciales de Acceso</h4>
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="form-floating">
+                                    {{ form.username(class="form-control", placeholder="Usuario") }}
+                                    {{ form.username.label }}
+                                </div>
+                                {% for error in form.username.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-12">
+                                <div class="form-floating">
+                                    {{ form.email(class="form-control", placeholder="correo@ejemplo.com") }}
+                                    {{ form.email.label }}
+                                </div>
+                                {% for error in form.email.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-floating position-relative">
+                                    {{ form.password(class="form-control", placeholder="Contraseña") }}
+                                    {{ form.password.label }}
+                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" onclick="togglePassword('password')">
+                                        <i class="far fa-eye"></i>
+                                    </span>
+                                </div>
+                                {% for error in form.password.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-floating position-relative">
+                                    {{ form.password2(class="form-control", placeholder="Confirmar") }}
+                                    {{ form.password2.label }}
+                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" onclick="togglePassword('password2')">
+                                        <i class="far fa-eye"></i>
+                                    </span>
+                                </div>
+                                {% for error in form.password2.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(2)">
+                                Siguiente <i class="fas fa-arrow-right ms-2"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: Datos Personales -->
+                    <div class="wizard-step" id="step2">
+                        <h4 class="mb-4 text-primary"><i class="fas fa-user me-2"></i>Información Personal</h4>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    {{ form.nombre(class="form-control", placeholder="Nombre") }}
+                                    {{ form.nombre.label }}
+                                </div>
                                 {% for error in form.nombre.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
+                                    <div class="text-danger small mt-1">{{ error }}</div>
                                 {% endfor %}
-                            {% endif %}
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            {{ form.apellido.label(class="form-label") }}
-                            {{ form.apellido(class="form-control") }}
-                            {% if form.apellido.errors %}
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-floating">
+                                    {{ form.apellido(class="form-control", placeholder="Apellido") }}
+                                    {{ form.apellido.label }}
+                                </div>
                                 {% for error in form.apellido.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
+                                    <div class="text-danger small mt-1">{{ error }}</div>
                                 {% endfor %}
-                            {% endif %}
+                            </div>
+                            <div class="col-12">
+                                <div class="form-floating">
+                                    {{ form.telefono(class="form-control", placeholder="Teléfono", maxlength="10", id="telefono_input") }}
+                                    {{ form.telefono.label }}
+                                </div>
+                                <small class="text-muted ms-1">Solo 10 dígitos numéricos</small>
+                                {% for error in form.telefono.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-4">
+                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(1)">
+                                <i class="fas fa-arrow-left me-2"></i> Atrás
+                            </button>
+                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(3)">
+                                Siguiente <i class="fas fa-arrow-right ms-2"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        {{ form.username.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-user"></i>
-                            </span>
-                            {{ form.username(class="form-control") }}
-                        </div>
-                        {% if form.username.errors %}
-                            {% for error in form.username.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        {{ form.email.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-envelope"></i>
-                            </span>
-                            {{ form.email(class="form-control") }}
-                        </div>
-                        {% if form.email.errors %}
-                            {% for error in form.email.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3">
-                        {{ form.telefono.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-phone"></i>
-                            </span>
-                            {{ form.telefono(class="form-control", placeholder="Ej: 5512345678 (10 dígitos)", maxlength="13", id="telefono_input") }}
-                        </div>
-                        {% if form.telefono.errors %}
-                            {% for error in form.telefono.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                        <small class="text-muted">Los guiones y espacios se eliminarán automáticamente</small>
-                    </div>
-
-                    <div class="mb-3">
-                        {{ form.rol.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-user-tag"></i>
-                            </span>
+                    <!-- STEP 3: Selección de Rol -->
+                    <div class="wizard-step" id="step3">
+                        <h4 class="mb-4 text-primary"><i class="fas fa-briefcase me-2"></i>¿Cuál es tu rol?</h4>
+                        
+                        <!-- Hidden Select for compatibility -->
+                        <div class="d-none">
                             {{ form.rol(class="form-select", id="rolSelect") }}
                         </div>
-                        {% if form.rol.errors %}
-                            {% for error in form.rol.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
 
-                    <div class="mb-3" id="tipoProfesorDiv" style="display: none;">
-                        {{ form.tipo_profesor.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-chalkboard-teacher"></i>
-                            </span>
-                            {{ form.tipo_profesor(class="form-select") }}
-                        </div>
-                        {% if form.tipo_profesor.errors %}
-                            {% for error in form.tipo_profesor.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3" id="carreraDiv" style="display: none;">
-                        {{ form.carrera.label(class="form-label") }}
-                        <div id="carreraContainer">
-                            {{ form.carrera(class="form-select") }}
-                        </div>
-                        {% if form.carrera.errors %}
-                            {% for error in form.carrera.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="mb-3" id="otraCarreraDiv" style="display: none;">
-                        <div class="form-check">
-                            {{ form.otra_carrera(class="form-check-input") }}
-                            {{ form.otra_carrera.label(class="form-check-label") }}
-                        </div>
-                        {% if form.otra_carrera.errors %}
-                            {% for error in form.otra_carrera.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div id="mensajeOtraCarrera" style="display: none;" class="alert alert-info mt-2">
-                        <small>Selecciona todas las carreras a las que perteneces marcando las casillas correspondientes.</small>
-                    </div>
-
-                    <!-- Sección de Disponibilidad de Horario -->
-                    <div class="mb-4" id="disponibilidadDiv" style="display: none;">
-                        <h5 class="text-primary border-bottom pb-2 mb-3">
-                            <i class="fas fa-clock me-2"></i>Disponibilidad de Horario
-                        </h5>
-                        <div class="alert alert-info small">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Seleccione los horarios en los que tiene disponibilidad. <strong>Máximo 8 horas por día.</strong>
-                        </div>
-
-                        <!-- Botones de selección masiva -->
-                        <div class="mb-3 d-flex gap-2">
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="btnMatutino">
-                                <i class="fas fa-sun me-1"></i>Seleccionar Matutino
-                            </button>
-                            <button type="button" class="btn btn-outline-warning btn-sm" id="btnVespertino">
-                                <i class="fas fa-moon me-1"></i>Seleccionar Vespertino
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDesmarcar">
-                                <i class="fas fa-times me-1"></i>Desmarcar Todo
-                            </button>
-                        </div>
-                        
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-sm text-center">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Horario</th>
-                                        <th>Lun</th>
-                                        <th>Mar</th>
-                                        <th>Mié</th>
-                                        <th>Jue</th>
-                                        <th>Vie</th>
-                                        <th>Sáb</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for horario in horarios %}
-                                    <tr>
-                                        <td class="align-middle bg-light">
-                                            <small class="fw-bold">{{ horario.nombre }}</small><br>
-                                            <span class="badge bg-secondary">{{ horario.get_hora_inicio_str() }} - {{ horario.get_hora_fin_str() }}</span>
-                                        </td>
-                                        {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
-                                        <td class="align-middle">
-                                            <div class="form-check d-flex justify-content-center">
-                                                <input class="form-check-input availability-check" type="checkbox" 
-                                                       name="availability_{{ horario.id }}_{{ dia }}" 
-                                                       id="check_{{ horario.id }}_{{ dia }}"
-                                                       data-dia="{{ dia }}"
-                                                       data-turno="{{ horario.turno }}"
-                                                       data-duracion="{{ horario.get_duracion_minutos() }}">
-                                            </div>
-                                        </td>
-                                        {% endfor %}
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            {{ form.password.label(class="form-label") }}
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-lock"></i>
-                                </span>
-                                {{ form.password(class="form-control") }}
+                        <div class="row g-3 justify-content-center">
+                            <!-- Opción Profesor -->
+                            <div class="col-md-4">
+                                <label class="w-100">
+                                    <input type="radio" name="rolBox" value="profesor" class="role-card-input" onchange="setRol('profesor')">
+                                    <div class="role-card card p-4 text-center h-100 rounded-4">
+                                        <div class="role-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+                                        <h5 class="fw-bold">Profesor</h5>
+                                        <p class="small text-muted mb-0">Imparto clases y gestiono mis horarios.</p>
+                                    </div>
+                                </label>
                             </div>
-                            {% if form.password.errors %}
-                                {% for error in form.password.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            {{ form.password2.label(class="form-label") }}
-                            <div class="input-group">
-                                <span class="input-group-text">
-                                    <i class="fas fa-lock"></i>
-                                </span>
-                                {{ form.password2(class="form-control") }}
+                            <!-- Opción Jefe de Carrera -->
+                            <div class="col-md-4">
+                                <label class="w-100">
+                                    <input type="radio" name="rolBox" value="jefe_carrera" class="role-card-input" onchange="setRol('jefe_carrera')">
+                                    <div class="role-card card p-4 text-center h-100 rounded-4">
+                                        <div class="role-icon"><i class="fas fa-user-tie"></i></div>
+                                        <h5 class="fw-bold">Jefe de Carrera</h5>
+                                        <p class="small text-muted mb-0">Administro la carrera, profesores y grupos.</p>
+                                    </div>
+                                </label>
                             </div>
-                            {% if form.password2.errors %}
-                                {% for error in form.password2.errors %}
-                                    <div class="text-danger small">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
+                            <!-- Opción Admin (Oculto o secundario si se desea, aquí lo pongo como opción) -->
+                             <div class="col-md-4">
+                                <label class="w-100">
+                                    <input type="radio" name="rolBox" value="admin" class="role-card-input" onchange="setRol('admin')">
+                                    <div class="role-card card p-4 text-center h-100 rounded-4">
+                                        <div class="role-icon"><i class="fas fa-cogs"></i></div>
+                                        <h5 class="fw-bold">Administrador</h5>
+                                        <p class="small text-muted mb-0">Gestión total del sistema.</p>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                         {% for error in form.rol.errors %}
+                            <div class="text-danger text-center mt-2">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="d-flex justify-content-between mt-5">
+                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(2)">
+                                <i class="fas fa-arrow-left me-2"></i> Atrás
+                            </button>
+                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(4)">
+                                Siguiente <i class="fas fa-arrow-right ms-2"></i>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="d-grid mb-3">
-                        {{ form.submit(class="btn btn-success btn-lg") }}
+                    <!-- STEP 4: Detalles Específicos -->
+                    <div class="wizard-step" id="step4">
+                        <h4 class="mb-4 text-primary"><i class="fas fa-list-ul me-2"></i>Detalles Finales</h4>
+                        
+                        <!-- Campos Dinámicos -->
+                        <div id="dynamicFields">
+                            
+                            <!-- Tipo Profesor -->
+                            <div class="mb-3" id="tipoProfesorDiv" style="display: none;">
+                                <div class="form-floating">
+                                    {{ form.tipo_profesor(class="form-select") }}
+                                    {{ form.tipo_profesor.label }}
+                                </div>
+                            </div>
+
+                            <!-- Carrera -->
+                            <div class="mb-3" id="carreraDiv" style="display: none;">
+                                <label class="form-label fw-bold">Carrera(s) de Adscripción</label>
+                                <div id="carreraContainer">
+                                    {{ form.carrera(class="form-select") }}
+                                </div>
+                                <div class="mt-2" id="otraCarreraDiv">
+                                    <div class="form-check form-switch">
+                                        {{ form.otra_carrera(class="form-check-input") }}
+                                        <label class="form-check-label" for="otra_carrera">¿Estás en otra carrera también?</label>
+                                    </div>
+                                </div>
+                                <div id="mensajeOtraCarrera" style="display: none;" class="alert alert-secondary mt-2 small">
+                                    <i class="fas fa-info-circle me-1"></i>Selecciona todas tus carreras abajo.
+                                </div>
+                            </div>
+                            
+                            <!-- Disponibilidad (Solo Profesor) -->
+                            <div id="disponibilidadDiv" style="display: none;">
+                                <h5 class="mt-4 mb-3 border-bottom pb-2">Disponibilidad Horaria</h5>
+                                <div class="d-flex gap-2 mb-3">
+                                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnMatutino">Mañana</button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnVespertino">Tarde</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDesmarcar">Borrar</button>
+                                </div>
+                                <div class="table-responsive rounded border">
+                                    <table class="table table-sm table-borderless text-center mb-0 align-middle">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th>Hora</th>
+                                                <th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for horario in horarios %}
+                                            <tr>
+                                                <td class="bg-white border-end"><small>{{ horario.nombre }}</small></td>
+                                                {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
+                                                <td>
+                                                    <input class="form-check-input availability-check" type="checkbox"
+                                                           name="availability_{{ horario.id }}_{{ dia }}"
+                                                           data-dia="{{ dia }}"
+                                                           data-turno="{{ horario.turno }}"
+                                                           data-duracion="{{ horario.get_duracion_minutos() }}">
+                                                </td>
+                                                {% endfor %}
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-5">
+                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(3)">
+                                <i class="fas fa-arrow-left me-2"></i> Atrás
+                            </button>
+                            {{ form.submit(class="btn btn-success btn-lg rounded-pill px-5 shadow-sm") }}
+                        </div>
                     </div>
+
                 </form>
 
-                <div class="text-center">
-                    <p class="mb-0">¿Ya tienes cuenta? 
-                        <a href="{{ url_for('login') }}" class="text-decoration-none">
+                <div class="text-center mt-4 pt-3 border-top">
+                    <p class="mb-0 text-muted">¿Ya tienes cuenta? 
+                        <a href="{{ url_for('login') }}" class="text-decoration-none fw-bold text-primary">
                             Inicia sesión aquí
                         </a>
                     </p>
                 </div>
+
             </div>
         </div>
     </div>
@@ -256,188 +370,191 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Limpiar teléfono de caracteres no numéricos antes de enviar
-    const telefonoInput = document.querySelector('#telefono_input');
-    const form = telefonoInput ? telefonoInput.closest('form') : null;
-    
-    if (form && telefonoInput) {
-        form.addEventListener('submit', function(e) {
-            // Eliminar todos los caracteres que no sean dígitos
-            const cleanedValue = telefonoInput.value.replace(/\D/g, '');
-            telefonoInput.value = cleanedValue;
-        });
+    // --- Step Navigation Logic ---
+    let currentStep = 1;
+    const totalSteps = 4;
+
+    function showStep(step) {
+        // Validation before moving next
+        if (step > currentStep) {
+            if (!validateStep(currentStep)) return;
+        }
+
+        // Hide all steps
+        document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+        
+        // Show target step
+        document.getElementById(`step${step}`).classList.add('active');
+        
+        // Update indicators
+        for (let i = 1; i <= totalSteps; i++) {
+            const ind = document.getElementById(`step${i}-ind`);
+            if (i < step) {
+                ind.classList.add('completed');
+                ind.classList.remove('active');
+                ind.innerHTML = '<i class="fas fa-check"></i>';
+            } else if (i === step) {
+                ind.classList.add('active');
+                ind.classList.remove('completed');
+                ind.innerHTML = i;
+            } else {
+                ind.classList.remove('active', 'completed');
+                ind.innerHTML = i;
+            }
+        }
+        currentStep = step;
     }
 
-    const rolSelect = document.getElementById('rolSelect');
-    const tipoProfesorDiv = document.getElementById('tipoProfesorDiv');
-    const carreraDiv = document.getElementById('carreraDiv');
-    const otraCarreraDiv = document.getElementById('otraCarreraDiv');
-    
-    // Guardar el HTML original del container de carrera
-    const carreraContainerOriginal = document.getElementById('carreraContainer').innerHTML;
-    const carreraSelect = document.getElementById('carrera');
-    const carreraOptions = Array.from(carreraSelect.options);
-    
-    function toggleTipoProfesor() {
-        if (rolSelect.value === 'profesor') {
-            tipoProfesorDiv.style.display = 'block';
+    function nextStep(target) { showStep(target); }
+    function prevStep(target) { showStep(target); }
+
+    function validateStep(step) {
+        const stepEl = document.getElementById(`step${step}`);
+        const inputs = stepEl.querySelectorAll('input:not([type="hidden"]), select');
+        let valid = true;
+        
+        inputs.forEach(input => {
+             // Exclude availability checks and optional checks from mandatory validation unless required
+            if (input.required && !input.value) {
+                input.classList.add('is-invalid');
+                valid = false;
+            } else {
+                input.classList.remove('is-invalid');
+            }
+            
+             // Password match check on step 1
+            if (step === 1 && input.name === 'password2') {
+                const p1 = document.querySelector('input[name="password"]').value;
+                if (input.value !== p1) {
+                    input.classList.add('is-invalid');
+                    valid = false;
+                }
+            }
+        });
+
+        // Specific Step 3 validation (Role)
+        if (step === 3) {
+            const rolSelect = document.getElementById('rolSelect');
+            if (!rolSelect.value) {
+                alert("Por favor selecciona un rol.");
+                valid = false;
+            }
+        }
+
+        return valid;
+    }
+
+    // --- Role & Dynamic Fields Logic ---
+    function setRol(rol) {
+        const select = document.getElementById('rolSelect');
+        select.value = rol;
+        // Trigger change event manually
+        updateDynamicFields();
+    }
+
+    function updateDynamicFields() {
+        const rol = document.getElementById('rolSelect').value;
+        const tipoDiv = document.getElementById('tipoProfesorDiv');
+        const carreraDiv = document.getElementById('carreraDiv');
+        const dispDiv = document.getElementById('disponibilidadDiv');
+        
+        // Hide all first
+        tipoDiv.style.display = 'none';
+        carreraDiv.style.display = 'none';
+        dispDiv.style.display = 'none';
+        
+        // Reset required
+        document.getElementById('tipo_profesor').required = false;
+        document.getElementById('carrera').required = false;
+
+        if (rol === 'profesor') {
+            tipoDiv.style.display = 'block';
             carreraDiv.style.display = 'block';
-            otraCarreraDiv.style.display = 'block';
-            document.getElementById('disponibilidadDiv').style.display = 'block';
+            dispDiv.style.display = 'block';
             document.getElementById('tipo_profesor').required = true;
             document.getElementById('carrera').required = true;
-        } else if (rolSelect.value === 'jefe_carrera') {
-            tipoProfesorDiv.style.display = 'none';
+        } else if (rol === 'jefe_carrera') {
             carreraDiv.style.display = 'block';
-            otraCarreraDiv.style.display = 'none';
-            document.getElementById('disponibilidadDiv').style.display = 'none';
-            document.getElementById('tipo_profesor').required = false;
             document.getElementById('carrera').required = true;
-            document.getElementById('tipo_profesor').value = '';
+        }
+        // Admin: nothing extra
+    }
+
+    // --- Password Toggle ---
+    function togglePassword(fieldName) {
+        const input = document.querySelector(`input[name="${fieldName}"]`);
+        const icon = input.nextElementSibling.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
         } else {
-            tipoProfesorDiv.style.display = 'none';
-            carreraDiv.style.display = 'none';
-            otraCarreraDiv.style.display = 'none';
-            document.getElementById('disponibilidadDiv').style.display = 'none';
-            document.getElementById('tipo_profesor').required = false;
-            document.getElementById('carrera').required = false;
-            document.getElementById('tipo_profesor').value = '';
-            document.getElementById('carrera').value = '';
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
         }
     }
-    
-    // Mostrar/ocultar campos basado en la selección inicial
-    toggleTipoProfesor();
-    
-    // Escuchar cambios en el rol
-    rolSelect.addEventListener('change', toggleTipoProfesor);
-    
-    // Lógica para el mensaje de otra carrera
-    const otraCarreraCheckbox = document.getElementById('otra_carrera');
-    
-    function generateCheckboxes() {
-        const container = document.getElementById('carreraContainer');
-        container.innerHTML = '';
+
+    // --- Phone numeric only ---
+    document.getElementById('telefono_input').addEventListener('input', function(e) {
+        this.value = this.value.replace(/\D/g, '');
+    });
+
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check existing selection (re-render after error)
+        const currentRol = document.getElementById('rolSelect').value;
+        if (currentRol) {
+            const radio = document.querySelector(`input[name="rolBox"][value="${currentRol}"]`);
+            if (radio) radio.checked = true;
+            updateDynamicFields();
+        }
         
-        // Crear checkboxes
-        carreraOptions.forEach(option => {
-            if (option.value) { // skip empty option
-                const div = document.createElement('div');
-                div.className = 'form-check';
-                const input = document.createElement('input');
-                input.type = 'checkbox';
-                input.className = 'form-check-input';
-                input.name = 'carrera';
-                input.value = option.value;
-                input.id = 'carrera_' + option.value;
-                const label = document.createElement('label');
-                label.className = 'form-check-label';
-                label.htmlFor = input.id;
-                label.textContent = option.textContent;
-                div.appendChild(input);
-                div.appendChild(label);
-                container.appendChild(div);
-            }
-        });
-    }
-    
-    function removeCheckboxes() {
-        const container = document.getElementById('carreraContainer');
-        container.innerHTML = carreraContainerOriginal;
-    }
-    
-    function toggleMensajeOtraCarrera() {
-        if (otraCarreraCheckbox.checked) {
-            generateCheckboxes();
-            document.getElementById('mensajeOtraCarrera').style.display = 'block';
-        } else {
-            removeCheckboxes();
-            document.getElementById('mensajeOtraCarrera').style.display = 'none';
-        }
-    }
-    
-    // Escuchar cambios en el checkbox
-    otraCarreraCheckbox.addEventListener('change', toggleMensajeOtraCarrera);
+        // Setup Carrera Multi Checkboxes logic (Adapted from original)
+        const carreraSelect = document.getElementById('carrera');
+        const carreraContainer = document.getElementById('carreraContainer');
+        const originalSelectHTML = carreraContainer.innerHTML;
+        const carreraOptions = Array.from(carreraSelect.options);
+        const otraCarreraCheck = document.getElementById('otra_carrera');
 
-    // ==========================================
-    // LÓGICA DE DISPONIBILIDAD Y VALIDACIÓN
-    // ==========================================
-    
-    const checks = document.querySelectorAll('.availability-check');
-    const MAX_MINUTOS_DIARIOS = 8 * 60; // 8 horas
-
-    function calcularMinutosDia(dia) {
-        let minutos = 0;
-        document.querySelectorAll(`.availability-check[data-dia="${dia}"]:checked`).forEach(chk => {
-            minutos += parseInt(chk.dataset.duracion);
-        });
-        return minutos;
-    }
-
-    function validarHoras(e) {
-        const checkbox = e.target;
-        if (checkbox.checked) {
-            const dia = checkbox.dataset.dia;
-            const minutosActuales = calcularMinutosDia(dia);
-            
-            if (minutosActuales > MAX_MINUTOS_DIARIOS) {
-                e.preventDefault();
-                checkbox.checked = false;
-                alert(`No puede exceder 8 horas diarias de disponibilidad para el día ${dia}.`);
-            }
-        }
-    }
-
-    // Asignar validación a cada checkbox
-    checks.forEach(chk => {
-        chk.addEventListener('change', validarHoras);
-    });
-
-    // Botones de selección masiva
-    document.getElementById('btnMatutino').addEventListener('click', function() {
-        // Primero deseleccionar vespertino, luego seleccionar matutino
-        deseleccionarTurno('vespertino');
-        aplicarSeleccionMasiva('matutino');
-    });
-
-    document.getElementById('btnVespertino').addEventListener('click', function() {
-        // Primero deseleccionar matutino, luego seleccionar vespertino
-        deseleccionarTurno('matutino');
-        aplicarSeleccionMasiva('vespertino');
-    });
-
-    document.getElementById('btnDesmarcar').addEventListener('click', function() {
-        checks.forEach(chk => chk.checked = false);
-    });
-
-    function deseleccionarTurno(turno) {
-        const checkboxesTurno = document.querySelectorAll(`.availability-check[data-turno="${turno}"]`);
-        checkboxesTurno.forEach(chk => chk.checked = false);
-    }
-
-    function aplicarSeleccionMasiva(turno) {
-        const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-        
-        dias.forEach(dia => {
-            // Obtener checkboxes del turno y día específicos
-            const checkboxesDia = Array.from(document.querySelectorAll(`.availability-check[data-turno="${turno}"][data-dia="${dia}"]`));
-            
-            // Calcular minutos ya seleccionados en ese día (excluyendo los de este turno para recalcular)
-            // Pero para simplificar, intentamos marcar uno por uno y validamos
-            
-            checkboxesDia.forEach(chk => {
-                if (!chk.checked) {
-                    // Simular chequeo
-                    chk.checked = true;
-                    // Validar
-                    if (calcularMinutosDia(dia) > MAX_MINUTOS_DIARIOS) {
-                        chk.checked = false; // Revertir si se pasa
+        function toggleMultiCarrera() {
+            if (otraCarreraCheck.checked) {
+                // Generate Checkboxes
+                carreraContainer.innerHTML = '';
+                carreraOptions.forEach(opt => {
+                    if (opt.value) {
+                       const div = document.createElement('div');
+                       div.className = 'form-check';
+                       div.innerHTML = `<input class="form-check-input" type="checkbox" name="carrera" value="${opt.value}" id="c_${opt.value}">
+                                        <label class="form-check-label" for="c_${opt.value}">${opt.text}</label>`;
+                       carreraContainer.appendChild(div);
                     }
-                }
-            });
-        });
-    }
-});
+                });
+                document.getElementById('mensajeOtraCarrera').style.display = 'block';
+            } else {
+                carreraContainer.innerHTML = originalSelectHTML;
+                document.getElementById('mensajeOtraCarrera').style.display = 'none';
+            }
+        }
+        otraCarreraCheck.addEventListener('change', toggleMultiCarrera);
+        
+        // Availability Tools
+        const checks = document.querySelectorAll('.availability-check');
+        document.getElementById('btnDesmarcar').onclick = () => checks.forEach(c => c.checked = false);
+        // Simple handlers for mat/vesp (Select all in range)
+        document.getElementById('btnMatutino').onclick = () => {
+             checks.forEach(c => { 
+                // Simple heuristic: if row index < 7 (pure guess) or based on turno? 
+                // The dataset 'turno' is available!
+                if(c.dataset.turno === 'matutino') c.checked = true;
+             });
+        };
+        document.getElementById('btnVespertino').onclick = () => {
+             checks.forEach(c => { 
+                if(c.dataset.turno === 'vespertino') c.checked = true;
+             });
+        };
+    });
 </script>
 {% endblock %}
