@@ -4421,8 +4421,12 @@ def eliminar_usuario(id):
                 # Eliminar físicamente el usuario y sus relaciones
                 # Primero eliminar las relaciones que podrían causar problemas
                 
+                # Eliminar asignaciones profesor-grupo donde el usuario es profesor
+                from models import HorarioAcademico, DisponibilidadProfesor, AsignacionProfesorGrupo
+                AsignacionProfesorGrupo.query.filter_by(profesor_id=usuario.id).delete()
+                AsignacionProfesorGrupo.query.filter_by(creado_por=usuario.id).delete()
+                
                 # Eliminar horarios académicos donde el usuario es profesor
-                from models import HorarioAcademico, DisponibilidadProfesor
                 HorarioAcademico.query.filter_by(profesor_id=usuario.id).delete()
                 HorarioAcademico.query.filter_by(creado_por=usuario.id).delete()
                 
