@@ -147,116 +147,70 @@
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h3 class="card-title mb-0">
                         <i class="fas fa-users-class me-2"></i>
                         Grupos con Horarios Generados
                     </h3>
+                    <a href="{{ url_for('admin_horario_grupos') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-calendar-alt me-1"></i>
+                        Ver Todos los Horarios
+                    </a>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     {% if grupos_con_horarios %}
-                        <div class="accordion" id="accordionGrupos">
-                            {% for item in grupos_con_horarios %}
-                            {% set grupo = item.grupo %}
-                            {% set horarios = item.horarios %}
-                            <div class="accordion-item mb-3">
-                                <h2 class="accordion-header" id="heading{{ grupo.id }}">
-                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
-                                            data-bs-target="#collapse{{ grupo.id }}" aria-expanded="false" 
-                                            aria-controls="collapse{{ grupo.id }}">
-                                        <div class="d-flex justify-content-between align-items-center w-100 me-3">
-                                            <div>
-                                                <strong class="text-primary fs-5">{{ grupo.codigo }}</strong>
-                                                <span class="text-muted ms-3">
-                                                    {{ grupo.get_carrera_nombre() }} - 
-                                                    Cuatrimestre {{ grupo.cuatrimestre }} - 
-                                                    Turno {{ grupo.get_turno_display() }}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span class="badge bg-info me-2">{{ horarios|length }} horarios</span>
-                                                <span class="badge bg-success">{{ grupo.materias|length }} materias</span>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </h2>
-                                <div id="collapse{{ grupo.id }}" class="accordion-collapse collapse" 
-                                     aria-labelledby="heading{{ grupo.id }}" data-bs-parent="#accordionGrupos">
-                                    <div class="accordion-body">
-                                        <!-- Barra de acciones del grupo -->
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <div>
-                                                <!-- Mostrar versión si existe -->
-                                                {% if horarios and horarios[0].version_nombre %}
-                                                <div class="d-inline-block">
-                                                    <i class="fas fa-tag me-2 text-primary"></i>
-                                                    <strong>Versión:</strong> {{ horarios[0].version_nombre }}
-                                                    <small class="text-muted ms-2">({{ horarios[0].periodo_academico }})</small>
-                                                </div>
-                                                {% endif %}
-                                            </div>
-                                            <div>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 120px;">Grupo</th>
+                                        <th>Carrera</th>
+                                        <th class="text-center" style="width: 100px;">Cuatrimestre</th>
+                                        <th class="text-center" style="width: 100px;">Turno</th>
+                                        <th class="text-center" style="width: 100px;">Horarios</th>
+                                        <th class="text-center" style="width: 180px;">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in grupos_con_horarios %}
+                                    {% set grupo = item.grupo %}
+                                    {% set horarios = item.horarios %}
+                                    <tr>
+                                        <td>
+                                            <strong class="text-primary fs-6">{{ grupo.codigo }}</strong>
+                                        </td>
+                                        <td>
+                                            <span class="text-dark">{{ grupo.get_carrera_nombre() }}</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ grupo.cuatrimestre }}°</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge {% if 'V' in grupo.codigo[1:3] %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                                                {{ grupo.get_turno_display() }}
+                                            </span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-success">{{ horarios|length }} clases</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{{ url_for('admin_horario_grupos') }}#grupo-{{ grupo.codigo }}" 
+                                                   class="btn btn-primary" title="Ver horario completo">
+                                                    <i class="fas fa-eye me-1"></i> Ver Horario
+                                                </a>
                                                 <a href="{{ url_for('eliminar_horarios_grupo', grupo_id=grupo.id) }}"
-                                                   class="btn btn-sm btn-danger"
-                                                   onclick="return confirm('¿Está seguro de que desea eliminar TODOS los horarios de este grupo ({{ grupo.codigo }})?')">
-                                                    <i class="fas fa-trash-alt me-1"></i>
-                                                    Eliminar Todos los Horarios
+                                                   class="btn btn-outline-danger"
+                                                   onclick="return confirm('¿Eliminar TODOS los horarios del grupo {{ grupo.codigo }}?')"
+                                                   title="Eliminar horarios">
+                                                    <i class="fas fa-trash-alt"></i>
                                                 </a>
                                             </div>
-                                        </div>
-                                        
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-striped table-hover">
-                                                <thead class="table-dark">
-                                                    <tr>
-                                                        <th>Día</th>
-                                                        <th>Hora</th>
-                                                        <th>Materia</th>
-                                                        <th>Profesor</th>
-                                                        <th>Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {% for horario in horarios %}
-                                                    <tr>
-                                                        <td>
-                                                            <span class="badge bg-primary">{{ horario.get_dia_display() }}</span>
-                                                        </td>
-                                                        <td>
-                                                            <strong>{{ horario.get_hora_inicio_str() }} - {{ horario.get_hora_fin_str() }}</strong>
-                                                            <br>
-                                                            <small class="text-muted">{{ horario.horario.nombre }}</small>
-                                                        </td>
-                                                        <td>
-                                                            <strong>{{ horario.get_materia_nombre() }}</strong>
-                                                            <br>
-                                                            <small class="text-muted">{{ horario.get_materia_codigo() }}</small>
-                                                        </td>
-                                                        <td>{{ horario.get_profesor_nombre() }}</td>
-                                                        <td>
-                                                            <div class="btn-group btn-group-sm" role="group">
-                                                                <a href="{{ url_for('editar_horario_academico', id=horario.id) }}"
-                                                                   class="btn btn-outline-warning"
-                                                                   title="Editar">
-                                                                    <i class="fas fa-edit"></i>
-                                                                </a>
-                                                                <a href="{{ url_for('eliminar_horario_academico', id=horario.id) }}"
-                                                                   class="btn btn-outline-danger"
-                                                                   title="Eliminar"
-                                                                   onclick="return confirm('¿Está seguro de que desea eliminar este horario?')">
-                                                                    <i class="fas fa-trash"></i>
-                                                                </a>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                    {% endfor %}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     {% else %}
                         <div class="text-center py-5">

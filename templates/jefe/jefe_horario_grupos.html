@@ -1,11 +1,168 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    .grupo-card {
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .grupo-header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .grupo-titulo {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .grupo-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    
+    .horario-grid {
+        display: grid;
+        grid-template-columns: 90px repeat(5, 1fr);
+        border: 1px solid #dee2e6;
+        background: white;
+    }
+    
+    .grid-header {
+        background: #343a40;
+        color: white;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.75rem;
+        border-right: 1px solid #495057;
+        font-size: 0.85rem;
+    }
+    
+    .grid-header:first-child {
+        background: #212529;
+    }
+    
+    .grid-header:last-child {
+        border-right: none;
+    }
+    
+    .hora-label {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        font-weight: 600;
+        text-align: center;
+        padding: 0.3rem;
+        border-right: 2px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        color: #495057;
+        font-size: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50px;
+    }
+    
+    .hora-label .hora-inicio,
+    .hora-label .hora-fin {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    
+    .celda-horario {
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        padding: 3px;
+        min-height: 50px;
+        position: relative;
+        background: white;
+    }
+    
+    .celda-horario:last-child {
+        border-right: none;
+    }
+    
+    .clase-card {
+        background: white;
+        color: #212529;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 0.7rem;
+        position: relative;
+        height: calc(100% - 6px);
+        min-height: 44px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    
+    .clase-materia {
+        font-weight: 700;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        color: #111827;
+    }
+    
+    .clase-profesor {
+        font-size: 0.68rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    .clase-profesor i {
+        color: #9ca3af;
+    }
+    
+    .acciones-grupo {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-accion-grupo {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .btn-accion-grupo:hover {
+        background: rgba(255,255,255,0.3);
+        color: white;
+    }
+</style>
+
 <div class="container-fluid mt-4 px-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="mb-0">Horario Semanal por Grupo</h3>
-            <small class="text-muted">Visualiza y exporta los horarios de los grupos de tu carrera.</small>
+            <h3 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Horario Semanal por Grupo</h3>
+            <small class="text-muted">Visualiza y exporta los horarios de los grupos de tu carrera</small>
         </div>
         <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Regresar
@@ -19,7 +176,6 @@
         </div>
         <div class="card-body py-3">
             <div class="row g-3 align-items-end">
-                <!-- Filtro por Cuatrimestre (Client-side) -->
                 <div class="col-md-4">
                     <label for="cuatrimestreSelect" class="form-label fw-bold mb-1">
                         <i class="fas fa-calendar-alt me-1"></i> Cuatrimestre
@@ -33,15 +189,13 @@
                     </select>
                 </div>
                 
-                <!-- Búsqueda por Código -->
                 <div class="col-md-4">
                     <label for="searchInput" class="form-label fw-bold mb-1">
-                        <i class="fas fa-search me-1"></i> Buscar por código
+                        <i class="fas fa-search me-1"></i> Buscar grupo
                     </label>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Ej: 7MSC1...">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Ej: 1MTII1...">
                 </div>
                 
-                <!-- Botón Limpiar -->
                 <div class="col-md-4">
                     <button type="button" id="btnLimpiar" class="btn btn-outline-secondary w-100">
                         <i class="fas fa-times me-1"></i> Limpiar filtros
@@ -51,7 +205,6 @@
         </div>
     </div>
     
-    <!-- Contador de resultados -->
     <div class="mb-3">
         <span class="badge bg-info fs-6">
             <i class="fas fa-list me-1"></i>
@@ -59,125 +212,125 @@
         </span>
     </div>
     
-    <div class="card shadow-sm">
-        <div class="card-body p-2">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover text-center align-middle mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th style="width: 12%;">Grupo</th>
-                            <th>Lunes</th>
-                            <th>Martes</th>
-                            <th>Miércoles</th>
-                            <th>Jueves</th>
-                            <th>Viernes</th>
-                            <th style="width: 8%;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="horariosTableBody">
-                        {% for grupo, dias in horarios_data.items() %}
-                        {# Extraer número de cuatrimestre del nombre del grupo (ej: 1MSC1 -> 1) #}
-                        {% set cuatri_numero = grupo[0:2] if grupo[1:2].isdigit() else grupo[0:1] %}
-                        {% if not cuatri_numero.isdigit() %}{% set cuatri_numero = '0' %}{% endif %}
-                        
-                        <tr class="schedule-row" data-cuatrimestre="{{ cuatri_numero }}">
-                            <td class="row-name">
-                                <div class="d-flex flex-column align-items-center">
-                                    <span class="badge bg-secondary mb-1" style="font-size: 0.7rem;">
-                                        {% if cuatri_numero == '0' %}Prop.{% else %}Cuatri {{ cuatri_numero }}{% endif %}
-                                    </span>
-                                    <strong class="fs-6">{{ grupo }}</strong>
-                                </div>
-                            </td>
-                             {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
-                            <td style="vertical-align: top; padding: 4px;">
-                                {% for clase in dias[dia_semana] %}
-                                    <div class="clase-item p-2 mb-1 border rounded bg-light small" style="font-size: 0.75rem;">
-                                        {{ clase | safe }}
-                                    </div>
-                                {% endfor %}
-                            </td>
-                            {% endfor %}
-                            <td>
-                                <div class="btn-group-vertical btn-group-sm" role="group">
-                                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}" 
-                                       class="btn btn-outline-success mb-1" 
-                                       data-bs-toggle="tooltip" 
-                                       title="Exportar a Excel">
-                                        <i class="fas fa-file-excel"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center p-4">
-                                <i class="fas fa-info-circle text-muted me-2"></i>
-                                No hay horarios registrados.
-                            </td>
-                        </tr>
+    <div id="gruposContainer">
+        {% for grupo, dias in horarios_data.items() %}
+        {% set cuatri_numero = grupo[0:2] if grupo[1:2].isdigit() else grupo[0:1] %}
+        {% if not cuatri_numero.isdigit() %}{% set cuatri_numero = '0' %}{% endif %}
+        {% set es_vespertino = 'V' in grupo[1:3] %}
+        
+        <div class="grupo-card grupo-item" data-grupo="{{ grupo }}" data-cuatrimestre="{{ cuatri_numero }}">
+            <div class="grupo-header">
+                <h4 class="grupo-titulo">
+                    <i class="fas fa-users"></i>
+                    {{ grupo }}
+                    <span class="grupo-badge">
+                        {% if cuatri_numero == '0' %}Propedéutico{% else %}Cuatrimestre {{ cuatri_numero }}{% endif %}
+                    </span>
+                    <span class="grupo-badge {% if es_vespertino %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                        {% if es_vespertino %}<i class="fas fa-moon me-1"></i>Vespertino{% else %}<i class="fas fa-sun me-1"></i>Matutino{% endif %}
+                    </span>
+                </h4>
+                <div class="acciones-grupo">
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}" 
+                       class="btn-accion-grupo" title="Exportar a Excel">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_pdf', nombre_grupo=grupo) }}" 
+                       class="btn-accion-grupo" title="Exportar a PDF">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                </div>
+            </div>
+            
+            <div class="card-body p-0">
+                {% set hora_inicio_turno = 13 if es_vespertino else 7 %}
+                {% set hora_fin_turno = 20 if es_vespertino else 14 %}
+                
+                <div class="horario-grid">
+                    <div class="grid-header"><i class="fas fa-clock"></i> Hora</div>
+                    <div class="grid-header">Lunes</div>
+                    <div class="grid-header">Martes</div>
+                    <div class="grid-header">Miércoles</div>
+                    <div class="grid-header">Jueves</div>
+                    <div class="grid-header">Viernes</div>
+                    
+                    {% for hora in range(hora_inicio_turno, hora_fin_turno) %}
+                    <div class="hora-label">
+                        <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
+                        <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>
+                    </div>
+                    
+                    {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+                    <div class="celda-horario">
+                        {% for clase in dias[dia_semana] %}
+                            {% set hora_str = '%02d:00'|format(hora) %}
+                            {% if hora_str in clase %}
+                            <div class="clase-card">
+                                {% set partes = clase.split('<br>') %}
+                                <div class="clase-materia">{{ partes[0] | safe }}</div>
+                                {% if partes|length > 1 %}
+                                <div class="clase-profesor"><i class="fas fa-user"></i> {{ partes[1] | replace('Prof: ', '') | safe }}</div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         {% endfor %}
-                        <tr id="noResultsRow" style="display: none;">
-                            <td colspan="7" class="text-center p-4">No se encontraron resultados para su búsqueda.</td>
-                        </tr>
-                    </tbody>
-                </table>
+                    </div>
+                    {% endfor %}
+                    {% endfor %}
+                </div>
             </div>
         </div>
+        {% else %}
+        <div class="card shadow-sm">
+            <div class="card-body text-center p-4">
+                <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                <h5>No hay horarios registrados</h5>
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
     
-    // Elementos DOM
     const searchInput = document.getElementById('searchInput');
     const cuatriSelect = document.getElementById('cuatrimestreSelect');
     const btnLimpiar = document.getElementById('btnLimpiar');
-    const tableBody = document.getElementById('horariosTableBody');
-    const rows = tableBody.querySelectorAll('.schedule-row'); // Use querySelectorAll for static list initially or dynamic?
-    // Note: getElementsByClassName is live, querySelectorAll is static. Since we don't add rows, static is fine.
-    // Actually consistent with admin script:
-    const rowsList = tableBody.getElementsByClassName('schedule-row'); 
-    
-    const noResultsRow = document.getElementById('noResultsRow');
+    const grupos = document.querySelectorAll('.grupo-item');
     const contadorGrupos = document.getElementById('contadorGrupos');
     
-    function filtrarTabla() {
+    function filtrar() {
         const searchText = searchInput.value.toLowerCase();
         const cuatriVal = cuatriSelect.value;
-        let visibleRows = 0;
+        let visibleCount = 0;
         
-        for (let row of rowsList) {
-            const nameCell = row.querySelector('.row-name');
-            const rowText = (nameCell.textContent || nameCell.innerText).toLowerCase();
-            const rowCuatri = row.getAttribute('data-cuatrimestre');
+        grupos.forEach(function(grupo) {
+            const nombre = grupo.dataset.grupo.toLowerCase();
+            const cuatri = grupo.dataset.cuatrimestre;
             
-            const matchSearch = rowText.indexOf(searchText) > -1;
-            const matchCuatri = (cuatriVal === "") || (rowCuatri === cuatriVal);
+            const matchSearch = nombre.indexOf(searchText) > -1;
+            const matchCuatri = (cuatriVal === "") || (cuatri === cuatriVal);
             
             if (matchSearch && matchCuatri) {
-                row.style.display = "";
-                visibleRows++;
+                grupo.style.display = '';
+                visibleCount++;
             } else {
-                row.style.display = "none";
+                grupo.style.display = 'none';
             }
-        }
+        });
         
-        contadorGrupos.textContent = visibleRows;
-        noResultsRow.style.display = (visibleRows === 0 && rowsList.length > 0) ? "" : "none";
+        contadorGrupos.textContent = visibleCount;
     }
     
-    searchInput.addEventListener('keyup', filtrarTabla);
-    cuatriSelect.addEventListener('change', filtrarTabla);
-    
+    searchInput.addEventListener('keyup', filtrar);
+    cuatriSelect.addEventListener('change', filtrar);
     btnLimpiar.addEventListener('click', function() {
         searchInput.value = '';
         cuatriSelect.value = '';
-        filtrarTabla();
+        filtrar();
     });
 });
 </script>

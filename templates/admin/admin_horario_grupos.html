@@ -1,15 +1,330 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    /* Estilos para el nuevo diseño de horarios tipo calendario */
+    .grupo-card {
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .grupo-header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .grupo-titulo {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .grupo-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    
+    .horario-grid {
+        display: grid;
+        grid-template-columns: 90px repeat(5, 1fr);
+        border: 1px solid #dee2e6;
+        background: white;
+    }
+    
+    .grid-header {
+        background: #343a40;
+        color: white;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.75rem;
+        border-right: 1px solid #495057;
+        font-size: 0.85rem;
+    }
+    
+    .grid-header:first-child {
+        background: #212529;
+    }
+    
+    .grid-header:last-child {
+        border-right: none;
+    }
+    
+    .hora-label {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        font-weight: 600;
+        text-align: center;
+        padding: 0.5rem;
+        border-right: 2px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        color: #495057;
+        font-size: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80px;
+    }
+    
+    .hora-label .hora-inicio {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    
+    .hora-label .hora-separator {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin: 0 2px;
+    }
+    
+    .hora-label .hora-fin {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    
+    .celda-horario {
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        padding: 4px;
+        min-height: 80px;
+        position: relative;
+        background: white;
+        vertical-align: top;
+    }
+    
+    .celda-horario:last-child {
+        border-right: none;
+    }
+    
+    .celda-horario:hover {
+        background: #f8f9fa;
+    }
+    
+    .clase-card {
+        background: white;
+        color: #212529;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 0.75rem;
+        position: relative;
+        height: calc(100% - 8px);
+        min-height: 70px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: box-shadow 0.2s;
+    }
+    
+    .clase-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        z-index: 10;
+    }
+    
+    .clase-materia {
+        font-weight: 700;
+        font-size: 0.85rem;
+        line-height: 1.3;
+        margin-bottom: 8px;
+        color: #111827;
+    }
+    
+    .clase-profesor {
+        font-size: 0.75rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .clase-profesor i {
+        color: #9ca3af;
+    }
+    
+    .btn-eliminar-clase {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background: #fee2e2;
+        border: none;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #dc2626;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.75rem;
+    }
+    
+    .btn-eliminar-clase:hover {
+        background: #dc2626;
+        color: white;
+    }
+    
+    .acciones-grupo {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-accion-grupo {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .btn-accion-grupo:hover {
+        background: rgba(255,255,255,0.3);
+        color: white;
+    }
+    
+    .btn-accion-grupo.btn-danger:hover {
+        background: rgba(220, 53, 69, 0.8);
+    }
+    
+    /* Vista compacta */
+    .vista-compacta .clase-card {
+        min-height: 55px;
+        padding: 8px;
+    }
+    
+    .vista-compacta .clase-materia {
+        font-size: 0.72rem;
+        margin-bottom: 4px;
+    }
+    
+    .vista-compacta .clase-profesor {
+        font-size: 0.65rem;
+    }
+    
+    .vista-compacta .btn-eliminar-clase {
+        width: 22px;
+        height: 22px;
+        font-size: 0.65rem;
+    }
+    
+    .vista-compacta .hora-label,
+    .vista-compacta .celda-horario {
+        min-height: 60px;
+    }
+    
+    /* Sin clases */
+    .sin-horarios {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .sin-horarios i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    
+    /* Celda vacía */
+    .celda-vacia {
+        background: repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 10px,
+            rgba(0,0,0,0.02) 10px,
+            rgba(0,0,0,0.02) 20px
+        );
+    }
+    
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .horario-grid {
+            grid-template-columns: 75px repeat(5, 1fr);
+        }
+        .clase-materia {
+            font-size: 0.7rem;
+        }
+        .clase-profesor, .clase-hora {
+            font-size: 0.6rem;
+        }
+    }
+    
+    @media (max-width: 992px) {
+        .horario-grid {
+            grid-template-columns: 65px repeat(5, 1fr);
+            font-size: 0.7rem;
+        }
+        .hora-label {
+            font-size: 0.7rem;
+        }
+        .hora-label .hora-inicio {
+            font-size: 0.75rem;
+        }
+        .grid-header {
+            font-size: 0.7rem;
+            padding: 0.5rem;
+        }
+        .grupo-titulo {
+            font-size: 1.2rem;
+        }
+        .grupo-header {
+            flex-direction: column;
+            gap: 10px;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .horario-grid {
+            grid-template-columns: 55px repeat(5, 1fr);
+        }
+        .clase-card {
+            padding: 4px;
+        }
+        .clase-materia {
+            font-size: 0.6rem;
+        }
+        .clase-profesor {
+            display: none;
+        }
+    }
+</style>
+
 <div class="container-fluid mt-4 px-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="mb-0">Horario Semanal por Grupo (Admin)</h3>
-            <small class="text-muted">Busca y exporta horarios de forma individual. Los grupos están ordenados por cuatrimestre.</small>
+            <h3 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Horario Semanal por Grupo</h3>
+            <small class="text-muted">Vista tipo calendario con horas en el eje vertical</small>
         </div>
-        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-1"></i> Regresar
-        </a>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" id="toggleVista" data-vista="normal">
+                <i class="fas fa-compress-alt me-1"></i> Vista Compacta
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Regresar
+            </a>
+        </div>
     </div>
 
     <!-- Filtros -->
@@ -52,19 +367,17 @@
                 <!-- Búsqueda por Código -->
                 <div class="col-md-3">
                     <label for="searchInput" class="form-label fw-bold mb-1">
-                        <i class="fas fa-search me-1"></i> Buscar por código
+                        <i class="fas fa-search me-1"></i> Buscar grupo
                     </label>
-                    <input type="text" id="searchInput" class="form-control" placeholder="Ej: 7MSC1...">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Ej: 1MTII1...">
                 </div>
                 
                 <!-- Botón Limpiar -->
                 <div class="col-md-2">
                     {% if filtro_carrera or filtro_cuatrimestre %}
                     <a href="{{ url_for('admin_horario_grupos') }}" class="btn btn-outline-danger w-100">
-                        <i class="fas fa-times me-1"></i> Limpiar filtros
+                        <i class="fas fa-times me-1"></i> Limpiar
                     </a>
-                    {% else %}
-                    <span class="text-muted small"><i class="fas fa-info-circle me-1"></i>Selecciona un filtro</span>
                     {% endif %}
                 </div>
             </form>
@@ -72,102 +385,139 @@
     </div>
     
     <!-- Contador de resultados -->
-    <div class="mb-3">
-        <span class="badge bg-info fs-6">
-            <i class="fas fa-list me-1"></i>
-            <span id="contadorGrupos">{{ horarios_data|length }}</span> grupos encontrados
-        </span>
-        {% if filtro_carrera or filtro_cuatrimestre %}
-        <span class="badge bg-warning text-dark ms-2">
-            <i class="fas fa-filter me-1"></i> Filtros activos
-        </span>
-        {% endif %}
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <div>
+            <span class="badge bg-info fs-6">
+                <i class="fas fa-list me-1"></i>
+                <span id="contadorGrupos">{{ horarios_data|length }}</span> grupos encontrados
+            </span>
+            {% if filtro_carrera or filtro_cuatrimestre %}
+            <span class="badge bg-warning text-dark ms-2">
+                <i class="fas fa-filter me-1"></i> Filtros activos
+            </span>
+            {% endif %}
+        </div>
     </div>
     
-    <div class="card shadow-sm">
-        <div class="card-body p-2">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover text-center align-middle mb-0">
-                    <thead class="table-dark">
-                        <tr>
-                            <th style="width: 12%;">Grupo</th>
-                            <th>Lunes</th>
-                            <th>Martes</th>
-                            <th>Miércoles</th>
-                            <th>Jueves</th>
-                            <th>Viernes</th>
-                            <th style="width: 8%;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="horariosTableBody">
-                        {% for grupo, dias in horarios_data.items() %}
-                        {% set grupo_id = namespace(value=None) %}
-                        {% set cuatri_numero = grupo[0:2] if grupo[1:2].isdigit() else grupo[0:1] %}
-                        <tr class="schedule-row">
-                            <td class="row-name">
-                                <div class="d-flex flex-column align-items-center">
-                                    <span class="badge bg-secondary mb-1" style="font-size: 0.7rem;">
-                                        Cuatri {{ cuatri_numero }}
-                                    </span>
-                                    <strong class="fs-6">{{ grupo }}</strong>
-                                </div>
-                            </td>
-                             {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
-                            <td style="vertical-align: top; padding: 4px;">
-                                {% for clase in dias[dia_semana] %}
-                                    {% if clase is mapping %}
-                                        {% if clase.grupo_id and not grupo_id.value %}
-                                            {% set grupo_id.value = clase.grupo_id %}
-                                        {% endif %}
-                                        <div class="clase-item p-2 mb-1 border rounded bg-light small position-relative" style="font-size: 0.75rem;">
-                                            {{ clase.html | safe }}
-                                            <form method="POST" action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este horario?');">
-                                                <button type="submit" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1" style="padding: 0.1rem 0.3rem; font-size: 0.65rem;">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </form>
+    <!-- Contenedor de grupos -->
+    <div id="gruposContainer">
+        {% if horarios_data %}
+            {% for grupo, dias in horarios_data.items() %}
+            {% set grupo_id = namespace(value=None) %}
+            {% set cuatri_numero = grupo[0:2] if grupo[1:2].isdigit() else grupo[0:1] %}
+            
+            {# Obtener grupo_id de las clases #}
+            {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+                {% for clase in dias[dia_semana] %}
+                    {% if clase is mapping and clase.grupo_id and not grupo_id.value %}
+                        {% set grupo_id.value = clase.grupo_id %}
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+            
+            <div class="grupo-card grupo-item" id="grupo-{{ grupo }}" data-grupo="{{ grupo }}">
+                <div class="grupo-header">
+                    <h4 class="grupo-titulo">
+                        <i class="fas fa-users"></i>
+                        {{ grupo }}
+                        <span class="grupo-badge">
+                            {% if cuatri_numero == '0' %}Propedéutico{% else %}Cuatrimestre {{ cuatri_numero }}{% endif %}
+                        </span>
+                        {# Detectar turno basado en el código del grupo (M=Matutino, V=Vespertino) #}
+                        {% set es_vespertino = 'V' in grupo[1:3] %}
+                        <span class="grupo-badge {% if es_vespertino %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                            {% if es_vespertino %}
+                                <i class="fas fa-moon me-1"></i>Vespertino
+                            {% else %}
+                                <i class="fas fa-sun me-1"></i>Matutino
+                            {% endif %}
+                        </span>
+                    </h4>
+                    <div class="acciones-grupo">
+                        <a href="{{ url_for('exportar_horario_individual_excel', nombre_grupo=grupo) }}" 
+                           class="btn-accion-grupo" 
+                           title="Exportar a Excel">
+                            <i class="fas fa-file-excel"></i> Excel
+                        </a>
+                        <a href="{{ url_for('exportar_horario_individual_pdf', nombre_grupo=grupo) }}" 
+                           class="btn-accion-grupo" 
+                           title="Exportar a PDF">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </a>
+                        {% if grupo_id.value %}
+                        <a href="{{ url_for('eliminar_horarios_grupo', grupo_id=grupo_id.value) }}"
+                           class="btn-accion-grupo btn-danger"
+                           title="Eliminar todos los horarios"
+                           onclick="return confirm('¿Eliminar TODOS los horarios del grupo {{ grupo }}?');">
+                            <i class="fas fa-trash-alt"></i> Eliminar Todo
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="card-body p-0">
+                    {# Determinar rango de horas según el turno #}
+                    {% set hora_inicio_turno = 13 if es_vespertino else 7 %}
+                    {% set hora_fin_turno = 20 if es_vespertino else 14 %}
+                    
+                    <div class="horario-grid">
+                        <!-- Encabezados -->
+                        <div class="grid-header"><i class="fas fa-clock"></i> Hora</div>
+                        <div class="grid-header">Lunes</div>
+                        <div class="grid-header">Martes</div>
+                        <div class="grid-header">Miércoles</div>
+                        <div class="grid-header">Jueves</div>
+                        <div class="grid-header">Viernes</div>
+                        
+                        <!-- Filas de horas según el turno -->
+                        {% for hora in range(hora_inicio_turno, hora_fin_turno) %}
+                        <div class="hora-label">
+                            <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
+                            <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>
+                        </div>
+                        
+                        {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+                        {% set tiene_clase = namespace(value=false) %}
+                        <div class="celda-horario">
+                            {% for clase in dias[dia_semana] %}
+                                {% if clase is mapping %}
+                                    {# Usar el campo hora_inicio para ubicar la clase correctamente #}
+                                    {% if clase.hora_inicio == hora %}
+                                        {% set tiene_clase.value = true %}
+                                        {% set color_num = (loop.index0 % 10) + 1 %}
+                                        
+                                        <div class="clase-card">
+                                            <div class="clase-materia">{{ clase.materia }}</div>
+                                            <div class="clase-profesor">
+                                                <i class="fas fa-user"></i> {{ clase.profesor }}
+                                            </div>
+                                            <button type="button" class="btn-eliminar-clase" 
+                                                    onclick="if(confirm('¿Eliminar este horario?')) { document.getElementById('form-eliminar-{{ clase.id }}').submit(); }">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                            <form id="form-eliminar-{{ clase.id }}" method="POST" 
+                                                  action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" 
+                                                  style="display: none;"></form>
                                         </div>
-                                    {% else %}
-                                        <div class="clase-item p-2 mb-1 border rounded bg-light small" style="font-size: 0.75rem;">{{ clase | safe }}</div>
                                     {% endif %}
-                                {% endfor %}
-                            </td>
+                                {% endif %}
                             {% endfor %}
-                            <td>
-                                <div class="btn-group-vertical btn-group-sm" role="group">
-                                    <a href="{{ url_for('exportar_horario_individual_excel', nombre_grupo=grupo) }}" 
-                                       class="btn btn-outline-success mb-1" 
-                                       data-bs-toggle="tooltip" 
-                                       title="Exportar a Excel">
-                                        <i class="fas fa-file-excel"></i>
-                                    </a>
-                                    {% if grupo_id.value %}
-                                    <a href="{{ url_for('eliminar_horarios_grupo', grupo_id=grupo_id.value) }}"
-                                       class="btn btn-outline-danger"
-                                       data-bs-toggle="tooltip"
-                                       title="Eliminar todos los horarios"
-                                       onclick="return confirm('¿Eliminar TODOS los horarios del grupo {{ grupo }}?');">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </a>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center p-4">
-                                <i class="fas fa-info-circle text-muted me-2"></i>
-                                No hay horarios registrados para los filtros seleccionados.
-                            </td>
-                        </tr>
+                        </div>
                         {% endfor %}
-                        <tr id="noResultsRow" style="display: none;">
-                            <td colspan="7" class="text-center p-4">No se encontraron resultados para su búsqueda.</td>
-                        </tr>
-                    </tbody>
-                </table>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
-        </div>
+            {% endfor %}
+        {% else %}
+            <div class="card shadow-sm">
+                <div class="sin-horarios">
+                    <i class="fas fa-calendar-times d-block"></i>
+                    <h5>No hay horarios registrados</h5>
+                    <p class="mb-0">No se encontraron horarios para los filtros seleccionados.</p>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
 
@@ -177,33 +527,59 @@ document.addEventListener('DOMContentLoaded', function() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
     
+    // Toggle vista compacta
+    const toggleBtn = document.getElementById('toggleVista');
+    const container = document.getElementById('gruposContainer');
+    
+    toggleBtn.addEventListener('click', function() {
+        if (this.dataset.vista === 'normal') {
+            container.classList.add('vista-compacta');
+            this.dataset.vista = 'compacta';
+            this.innerHTML = '<i class="fas fa-expand-alt me-1"></i> Vista Normal';
+        } else {
+            container.classList.remove('vista-compacta');
+            this.dataset.vista = 'normal';
+            this.innerHTML = '<i class="fas fa-compress-alt me-1"></i> Vista Compacta';
+        }
+    });
+    
     // Búsqueda en tiempo real
     const searchInput = document.getElementById('searchInput');
-    const tableBody = document.getElementById('horariosTableBody');
-    const rows = tableBody.getElementsByClassName('schedule-row');
-    const noResultsRow = document.getElementById('noResultsRow');
+    const grupos = document.querySelectorAll('.grupo-item');
     const contadorGrupos = document.getElementById('contadorGrupos');
     
     searchInput.addEventListener('keyup', function() {
         const filter = searchInput.value.toLowerCase();
-        let visibleRows = 0;
+        let visibleCount = 0;
         
-        for (let row of rows) {
-            const nameCell = row.getElementsByClassName('row-name')[0];
-            if (nameCell && (nameCell.textContent || nameCell.innerText).toLowerCase().indexOf(filter) > -1) {
-                row.style.display = "";
-                visibleRows++;
+        grupos.forEach(function(grupo) {
+            const grupoNombre = grupo.dataset.grupo.toLowerCase();
+            if (grupoNombre.indexOf(filter) > -1) {
+                grupo.style.display = '';
+                visibleCount++;
             } else {
-                row.style.display = "none";
+                grupo.style.display = 'none';
             }
-        }
+        });
         
-        // Actualizar contador
-        contadorGrupos.textContent = visibleRows;
-        
-        // Mostrar mensaje si no hay resultados
-        noResultsRow.style.display = (visibleRows === 0 && rows.length > 0) ? "" : "none";
+        contadorGrupos.textContent = visibleCount;
     });
+    
+    // Scroll suave al grupo si viene con anchor
+    if (window.location.hash) {
+        const targetId = window.location.hash;
+        const targetElement = document.querySelector(targetId);
+        if (targetElement) {
+            setTimeout(function() {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Resaltar el grupo temporalmente
+                targetElement.style.boxShadow = '0 0 20px 5px rgba(30, 60, 114, 0.5)';
+                setTimeout(function() {
+                    targetElement.style.boxShadow = '';
+                }, 2000);
+            }, 300);
+        }
+    }
 });
 </script>
 {% endblock %}

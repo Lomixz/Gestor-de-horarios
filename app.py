@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
+from sqlalchemy import func
 from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role
 from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm, 
                    CarreraForm, ImportarProfesoresForm, FiltrarProfesoresForm, ExportarProfesoresForm,
@@ -50,6 +51,57 @@ generacion_progreso = {
 progreso_lock = threading.Lock()
 
 import re
+
+
+# ==========================================
+# FUNCIONES AUXILIARES DE CARGA HORARIA
+# ==========================================
+def obtener_limite_horas_profesor(tipo_profesor):
+    """
+    Obtiene el límite de horas semanales para un tipo de profesor.
+    Los valores se configuran desde el panel de administración.
+    """
+    from models import ConfiguracionSistema
+    
+    tipo_lower = (tipo_profesor or '').lower().strip()
+    
+    if 'tiempo completo' in tipo_lower or 'tiempo_completo' in tipo_lower:
+        return ConfiguracionSistema.get_config('horas_tiempo_completo', 40)
+    elif 'asignatura' in tipo_lower:
+        return ConfiguracionSistema.get_config('horas_asignatura', 20)
+    elif 'medio tiempo' in tipo_lower or 'medio_tiempo' in tipo_lower:
+        return ConfiguracionSistema.get_config('horas_medio_tiempo', 20)
+    else:
+        # Tipo no reconocido: usar límite de asignatura como default
+        return ConfiguracionSistema.get_config('horas_asignatura', 20)
+
+
+def obtener_horas_actuales_profesor(profesor_id):
+    """
+    Calcula las horas actuales asignadas a un profesor.
+    """
+    from models import HorarioAcademico
+    return HorarioAcademico.query.filter_by(profesor_id=profesor_id, activo=True).count()
+
+
+def validar_carga_horaria_profesor(profesor):
+    """
+    Valida si un profesor puede recibir más horas de clase.
+    Retorna tuple: (puede_asignar, horas_actuales, limite, horas_disponibles)
+    """
+    from models import ConfiguracionSistema
+    
+    horas_actuales = obtener_horas_actuales_profesor(profesor.id)
+    limite = obtener_limite_horas_profesor(profesor.tipo_profesor)
+    limite_absoluto = ConfiguracionSistema.get_config('horas_limite_absoluto', 50)
+    
+    # El límite efectivo es el menor entre el límite del tipo y el absoluto
+    limite_efectivo = min(limite, limite_absoluto)
+    horas_disponibles = max(0, limite_efectivo - horas_actuales)
+    puede_asignar = horas_disponibles > 0
+    
+    return (puede_asignar, horas_actuales, limite_efectivo, horas_disponibles)
+
 
 app = Flask(__name__)
 
@@ -279,10 +331,16 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
                 
                 if grupo and (carrera_id is None or grupo.carrera_id == carrera_id):
                     clave_agrupacion = grupo_codigo
+                    # Obtener la hora de inicio como entero para la cuadrícula
+                    hora_inicio_int = a.horario.hora_inicio.hour if a.horario.hora_inicio else 7
                     if incluir_ids:
                         info_clase_html = {
                             'id': a.id,
                             'grupo_id': grupo.id,
+                            'hora_inicio': hora_inicio_int,
+                            'materia': a.materia.nombre,
+                            'profesor': a.profesor.get_nombre_completo(),
+                            'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
                             'html': f"{a.materia.nombre}<br>Prof: {a.profesor.get_nombre_completo()}<br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                         }
                     else:
@@ -4583,7 +4641,100 @@ def configuracion_sistema():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
 
-    return render_template('admin/configuracion.html')
+    from models import ConfiguracionSistema
+    
+    # Obtener configuración de carga horaria de profesores
+    config_horas = {
+        'tiempo_completo': ConfiguracionSistema.get_config('horas_tiempo_completo', 40),
+        'asignatura': ConfiguracionSistema.get_config('horas_asignatura', 20),
+        'medio_tiempo': ConfiguracionSistema.get_config('horas_medio_tiempo', 20),
+        'limite_absoluto': ConfiguracionSistema.get_config('horas_limite_absoluto', 50)
+    }
+
+    return render_template('admin/configuracion.html', config_horas=config_horas)
+
+
+# API para configuración de carga horaria de profesores
+@app.route('/admin/configuracion/carga-horaria', methods=['POST'])
+@login_required
+def guardar_configuracion_carga_horaria():
+    """Guardar configuración de límites de carga horaria por tipo de profesor"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+
+    try:
+        data = request.get_json()
+        
+        # Validar que el límite absoluto no sea excedido
+        limite_absoluto = int(data.get('limite_absoluto', 50))
+        tiempo_completo = int(data.get('tiempo_completo', 40))
+        asignatura = int(data.get('asignatura', 20))
+        medio_tiempo = int(data.get('medio_tiempo', 20))
+        
+        # Validar límite absoluto entre 20 y 60
+        if limite_absoluto < 20 or limite_absoluto > 60:
+            return jsonify({'success': False, 'message': 'El límite absoluto debe estar entre 20 y 60 horas'}), 400
+        
+        # Validar que ningún tipo exceda el límite absoluto
+        if tiempo_completo > limite_absoluto:
+            return jsonify({'success': False, 'message': 'Las horas de Tiempo Completo no pueden exceder el límite absoluto'}), 400
+        if asignatura > limite_absoluto:
+            return jsonify({'success': False, 'message': 'Las horas de Asignatura no pueden exceder el límite absoluto'}), 400
+        if medio_tiempo > limite_absoluto:
+            return jsonify({'success': False, 'message': 'Las horas de Medio Tiempo no pueden exceder el límite absoluto'}), 400
+        
+        # Guardar configuraciones
+        ConfiguracionSistema.set_config(
+            'horas_tiempo_completo', tiempo_completo,
+            tipo='int', descripcion='Horas máximas semanales para profesores de tiempo completo', 
+            categoria='profesores'
+        )
+        ConfiguracionSistema.set_config(
+            'horas_asignatura', asignatura,
+            tipo='int', descripcion='Horas máximas semanales para profesores por asignatura', 
+            categoria='profesores'
+        )
+        ConfiguracionSistema.set_config(
+            'horas_medio_tiempo', medio_tiempo,
+            tipo='int', descripcion='Horas máximas semanales para profesores de medio tiempo', 
+            categoria='profesores'
+        )
+        ConfiguracionSistema.set_config(
+            'horas_limite_absoluto', limite_absoluto,
+            tipo='int', descripcion='Límite absoluto de horas semanales para cualquier profesor', 
+            categoria='profesores'
+        )
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Configuración de carga horaria guardada exitosamente'
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error al guardar: {str(e)}'}), 500
+
+
+# API para obtener la carga horaria de un profesor
+@app.route('/api/profesor/<int:profesor_id>/carga-horaria')
+@login_required
+def api_carga_horaria_profesor(profesor_id):
+    """Obtener información de carga horaria de un profesor"""
+    try:
+        profesor = User.query.get_or_404(profesor_id)
+        puede_asignar, horas_actuales, limite, horas_disponibles = validar_carga_horaria_profesor(profesor)
+        
+        return jsonify({
+            'success': True,
+            'profesor': profesor.get_nombre_completo(),
+            'tipo_profesor': profesor.tipo_profesor or 'No especificado',
+            'horas_actuales': horas_actuales,
+            'limite_horas': limite,
+            'horas_disponibles': horas_disponibles,
+            'puede_asignar': puede_asignar
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 
 # API para configuración de base de datos
 @app.route('/admin/configuracion/database', methods=['POST'])
@@ -5643,56 +5794,86 @@ def exportar_horarios_grupo_pdf():
     if not current_user.is_admin():
         abort(403)
     
-    # Obtener horarios ordenados por día de semana y hora
-    asignaciones = HorarioAcademico.query.filter_by(activo=True).all()
+    # Obtener todos los grupos únicos con horarios
+    grupos_con_horarios = db.session.query(HorarioAcademico.grupo).filter_by(activo=True).distinct().all()
+    grupos_unicos = sorted([g[0] for g in grupos_con_horarios if g[0]])
     
-    # Ordenar por día de semana (Lunes a Viernes) y hora
-    asignaciones.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
+    if not grupos_unicos:
+        flash('No hay horarios para exportar.', 'warning')
+        return redirect(url_for('admin_horario_grupos'))
     
-    horarios_por_grupo = {}
+    # Mapeo de días
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
     
-    # Mapeo de días en minúsculas a días con tilde
-    dias_map = {
-        'lunes': 'Lunes',
-        'martes': 'Martes',
-        'miercoles': 'Miércoles',
-        'jueves': 'Jueves',
-        'viernes': 'Viernes',
-        'sabado': 'Sábado',
-        'domingo': 'Domingo'
-    }
-    
-    for a in asignaciones:
-        if not a.profesor or not a.materia or not a.horario:
-            continue
-        
-        # CORREGIDO: Usar el campo 'grupo' del HorarioAcademico directamente
-        grupo_nombre = a.grupo
-        
-        if grupo_nombre:
-            if grupo_nombre not in horarios_por_grupo:
-                horarios_por_grupo[grupo_nombre] = {'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': []}
-            
-            info = f"{a.materia.nombre}<br/>Prof: {a.profesor.get_nombre_completo()}<br/>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-            
-            # Usar el mapeo para obtener el día con tilde
-            dia_correcto = dias_map.get(a.dia_semana, a.dia_semana.capitalize())
-            if dia_correcto in horarios_por_grupo[grupo_nombre]:
-                horarios_por_grupo[grupo_nombre][dia_correcto].append(info)
-        
-
-  
-    styles = getSampleStyleSheet(); styleN = styles['BodyText']
-    data = [["Grupo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]]
-    for grupo, dias in horarios_por_grupo.items():
-        row_data = [Paragraph(grupo, styleN)]
-        for dia in data[0][1:]: row_data.append(Paragraph("<br/><br/>".join(dias.get(dia, [])), styleN))
-        data.append(row_data)
+    # Crear PDF
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
-    table = Table(data, hAlign='CENTER', colWidths=[1.5*inch]*6)
-    style = TableStyle([('BACKGROUND', (0,0), (-1,0), colors.green), ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke), ('GRID', (0,0), (-1,-1), 1, colors.black)])
-    table.setStyle(style); doc.build([table]); buffer.seek(0)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=9)
+    
+    for grupo in grupos_unicos:
+        # Obtener horarios del grupo
+        asignaciones = HorarioAcademico.query.filter_by(grupo=grupo, activo=True).all()
+        
+        # Determinar turno y sábado
+        es_vespertino = 'V' in grupo[1:3]
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 21 if es_vespertino else 14
+        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+        
+        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        if tiene_sabado:
+            dias_semana.append('Sábado')
+        
+        # Título del grupo
+        elements.append(Paragraph(f"Horario: {grupo}", title_style))
+        elements.append(Spacer(1, 10))
+        
+        # Crear tabla de cuadrícula
+        data = [['Hora'] + dias_semana]
+        
+        for hora in range(hora_inicio_turno, hora_fin_turno):
+            hora_str = f"{hora:02d}:00"
+            row = [hora_str]
+            
+            for dia in dias_semana:
+                # Buscar clase para esta hora y día
+                contenido = ""
+                for a in asignaciones:
+                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                    if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                        contenido = f"{a.materia.nombre}<br/>Prof: {a.profesor.get_nombre_completo()}"
+                        break
+                row.append(Paragraph(contenido, cell_style))
+            
+            data.append(row)
+        
+        # Calcular anchos de columna
+        col_widths = [0.8*inch] + [1.4*inch] * len(dias_semana)
+        
+        table = Table(data, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),  # #1e3c72
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),  # #f8f9fa
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),  # #dee2e6
+            ('ROWHEIGHTS', (0, 1), (-1, -1), 40),
+        ]))
+        
+        elements.append(table)
+        elements.append(Spacer(1, 30))
+    
+    doc.build(elements)
+    buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name='horarios_por_grupo.pdf', mimetype='application/pdf')
 
 # ==========================================
@@ -5704,42 +5885,191 @@ def exportar_horario_individual_excel(nombre_grupo):
     if not current_user.is_admin():
         abort(403)
 
-    # 1. Obtenemos TODOS los horarios de grupos usando nuestra función cerebro
-    todos_los_horarios = procesar_horarios(agrupar_por='grupo')
-    
-    # 2. Buscamos el horario del grupo específico que nos pidieron
-    horario_especifico = todos_los_horarios.get(nombre_grupo)
+    # 1. Obtener horarios del grupo específico
+    asignaciones = HorarioAcademico.query.filter_by(grupo=nombre_grupo, activo=True).all()
 
-    if not horario_especifico:
+    if not asignaciones:
         flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
         return redirect(url_for('admin_horario_grupos'))
 
-    # 3. Limpiamos el HTML para que se vea bien en Excel
-    datos_para_excel = {}
-    for dia, clases in horario_especifico.items():
-        clases_limpias = [clase.replace('<br>', '\n').replace('<small class=\'text-muted\'>', '').replace('</small>', '') for clase in clases]
-        datos_para_excel[dia] = "\n\n".join(clases_limpias)
+    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    es_vespertino = 'V' in nombre_grupo[1:3]
+    hora_inicio_turno = 13 if es_vespertino else 7
+    hora_fin_turno = 21 if es_vespertino else 14
+    
+    tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+    
+    # 3. Crear estructura de datos por hora
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('Sábado')
+    
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
-    # 4. Creamos el DataFrame y el archivo Excel
-    df = pd.DataFrame([datos_para_excel], index=[nombre_grupo])
+    # 4. Crear workbook con openpyxl para mejor formato
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f'Horario {nombre_grupo}'
+    
+    # Estilos
+    header_fill = PatternFill(start_color='1e3c72', end_color='1e3c72', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    hora_fill = PatternFill(start_color='f8f9fa', end_color='f8f9fa', fill_type='solid')
+    hora_font = Font(bold=True, size=10)
+    cell_border = Border(
+        left=Side(style='thin', color='dee2e6'),
+        right=Side(style='thin', color='dee2e6'),
+        top=Side(style='thin', color='dee2e6'),
+        bottom=Side(style='thin', color='dee2e6')
+    )
+    
+    # Encabezados
+    headers = ['Hora'] + dias_semana
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = cell_border
+    
+    # Filas por hora
+    row_num = 2
+    for hora in range(hora_inicio_turno, hora_fin_turno):
+        hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+        
+        # Celda de hora
+        cell = ws.cell(row=row_num, column=1, value=hora_str)
+        cell.fill = hora_fill
+        cell.font = hora_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = cell_border
+        
+        # Celdas de cada día
+        for col, dia in enumerate(dias_semana, 2):
+            # Buscar clase para esta hora y día
+            clase_encontrada = None
+            for a in asignaciones:
+                dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                    clase_encontrada = a
+                    break
+            
+            if clase_encontrada:
+                contenido = f"{clase_encontrada.materia.nombre}\nProf: {clase_encontrada.profesor.get_nombre_completo()}"
+            else:
+                contenido = ""
+            
+            cell = ws.cell(row=row_num, column=col, value=contenido)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.border = cell_border
+        
+        row_num += 1
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 15
+    for col_letter in ['B', 'C', 'D', 'E', 'F', 'G']:
+        ws.column_dimensions[col_letter].width = 30
+    
+    # Ajustar altura de filas
+    for row in range(2, row_num):
+        ws.row_dimensions[row].height = 50
     
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name=f'Horario {nombre_grupo}')
-        worksheet = writer.sheets[f'Horario {nombre_grupo}']
-        worksheet.column_dimensions['A'].width = 30  # Ancho para la columna del grupo
-        for col_letter in ['B', 'C', 'D', 'E', 'F']:
-            worksheet.column_dimensions[col_letter].width = 40 # Ancho para los días
-
+    wb.save(output)
     output.seek(0)
 
-    # 5. Enviamos el archivo
     return send_file(
         output,
         as_attachment=True,
         download_name=f'horario_{nombre_grupo.replace(" ", "_")}.xlsx',
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+
+# ==========================================
+# EXPORTAR PDF INDIVIDUAL POR GRUPO (ADMIN)
+# ==========================================
+@app.route('/admin/horarios/grupos/exportar-pdf/<nombre_grupo>')
+@login_required
+def exportar_horario_individual_pdf(nombre_grupo):
+    if not current_user.is_admin():
+        abort(403)
+
+    # 1. Obtener horarios del grupo específico
+    asignaciones = HorarioAcademico.query.filter_by(grupo=nombre_grupo, activo=True).all()
+
+    if not asignaciones:
+        flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
+        return redirect(url_for('admin_horario_grupos'))
+
+    # 2. Determinar turno y si tiene sábado
+    es_vespertino = 'V' in nombre_grupo[1:3]
+    hora_inicio_turno = 13 if es_vespertino else 7
+    hora_fin_turno = 21 if es_vespertino else 14
+    
+    tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+    
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('Sábado')
+    
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+
+    # 3. Crear PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=10, alignment=1)
+    
+    # Título
+    elements.append(Paragraph(f"Horario del Grupo: {nombre_grupo}", title_style))
+    
+    # Crear tabla de cuadrícula
+    data = [['Hora'] + dias_semana]
+    
+    for hora in range(hora_inicio_turno, hora_fin_turno):
+        hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+        row = [hora_str]
+        
+        for dia in dias_semana:
+            contenido = ""
+            for a in asignaciones:
+                dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                    contenido = f"{a.materia.nombre}<br/><font size='7'>Prof: {a.profesor.get_nombre_completo()}</font>"
+                    break
+            row.append(Paragraph(contenido, cell_style))
+        
+        data.append(row)
+    
+    # Calcular anchos de columna
+    col_widths = [1.0*inch] + [1.4*inch] * len(dias_semana)
+    
+    table = Table(data, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 1), (0, -1), 8),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),
+        ('ROWHEIGHTS', (0, 1), (-1, -1), 45),
+    ]))
+    
+    elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
 
 
 # ===================================================================
@@ -5780,47 +6110,102 @@ def exportar_jefe_horario_grupo_excel(nombre_grupo):
         
     id_carrera = current_user.primera_carrera_id
     
-    # 1. Recalculamos horarios pero filtrando por la carrera del jefe
-    todos_los_horarios = procesar_horarios(agrupar_por='grupo', carrera_id=id_carrera)
+    # 1. Obtener horarios del grupo específico filtrando por carrera
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.grupo == nombre_grupo,
+        HorarioAcademico.activo == True,
+        Materia.carrera_id == id_carrera
+    ).all()
     
-    # 2. Buscamos el horario
-    horario_especifico = todos_los_horarios.get(nombre_grupo)
-    
-    if not horario_especifico:
+    if not asignaciones:
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
 
-    # 3. Preparamos datos para DataFrame
-    datos_para_excel = {}
-    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    es_vespertino = 'V' in nombre_grupo[1:3]
+    hora_inicio_turno = 13 if es_vespertino else 7
+    hora_fin_turno = 21 if es_vespertino else 14
     
-    for dia in dias_semana:
-        clases = horario_especifico[dia]
-        clases_limpias = []
-        for clase in clases:
-            # Limpiar HTML básico
-            text_content = re.sub('<[^<]+?>', '', clase)
-            text_content = text_content.replace('&nbsp;', ' ').strip()
-            if text_content:
-                clases_limpias.append(text_content)
-        
-        datos_para_excel[dia] = "\n\n".join(clases_limpias)
+    tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+    
+    # 3. Crear estructura de datos por hora
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('Sábado')
+    
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
-    # 4. Creamos el DataFrame y el archivo Excel
-    df = pd.DataFrame([datos_para_excel], index=[nombre_grupo])
+    # 4. Crear workbook con openpyxl para mejor formato
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f'Horario {nombre_grupo}'
+    
+    # Estilos
+    header_fill = PatternFill(start_color='1e3c72', end_color='1e3c72', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF', size=11)
+    hora_fill = PatternFill(start_color='f8f9fa', end_color='f8f9fa', fill_type='solid')
+    hora_font = Font(bold=True, size=10)
+    cell_border = Border(
+        left=Side(style='thin', color='dee2e6'),
+        right=Side(style='thin', color='dee2e6'),
+        top=Side(style='thin', color='dee2e6'),
+        bottom=Side(style='thin', color='dee2e6')
+    )
+    
+    # Encabezados
+    headers = ['Hora'] + dias_semana
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = cell_border
+    
+    # Filas por hora
+    row_num = 2
+    for hora in range(hora_inicio_turno, hora_fin_turno):
+        hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+        
+        # Celda de hora
+        cell = ws.cell(row=row_num, column=1, value=hora_str)
+        cell.fill = hora_fill
+        cell.font = hora_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = cell_border
+        
+        # Celdas de cada día
+        for col, dia in enumerate(dias_semana, 2):
+            # Buscar clase para esta hora y día
+            clase_encontrada = None
+            for a in asignaciones:
+                dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                    clase_encontrada = a
+                    break
+            
+            if clase_encontrada:
+                contenido = f"{clase_encontrada.materia.nombre}\nProf: {clase_encontrada.profesor.get_nombre_completo()}"
+            else:
+                contenido = ""
+            
+            cell = ws.cell(row=row_num, column=col, value=contenido)
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.border = cell_border
+        
+        row_num += 1
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 15
+    for col_letter in ['B', 'C', 'D', 'E', 'F', 'G']:
+        ws.column_dimensions[col_letter].width = 30
+    
+    # Ajustar altura de filas
+    for row in range(2, row_num):
+        ws.row_dimensions[row].height = 50
     
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name=f'Horario {nombre_grupo}')
-        worksheet = writer.sheets[f'Horario {nombre_grupo}']
-        worksheet.column_dimensions['A'].width = 30
-        for col_letter in ['B', 'C', 'D', 'E', 'F']:
-            worksheet.column_dimensions[col_letter].width = 40
-            
-        for row in worksheet.iter_rows():
-            for cell in row:
-                cell.alignment = Alignment(wrap_text=True, vertical='top')
-
+    wb.save(output)
     output.seek(0)
 
     return send_file(
@@ -5829,6 +6214,97 @@ def exportar_jefe_horario_grupo_excel(nombre_grupo):
         download_name=f'horario_{nombre_grupo.replace(" ", "_")}.xlsx',
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+
+# ==========================================
+# EXPORTAR PDF INDIVIDUAL POR GRUPO (JEFE)
+# ==========================================
+@app.route('/jefe/horarios/grupos/exportar-pdf/<nombre_grupo>')
+@login_required
+def exportar_jefe_horario_grupo_pdf(nombre_grupo):
+    if not current_user.is_jefe_carrera():
+        abort(403)
+        
+    id_carrera = current_user.primera_carrera_id
+    
+    # 1. Obtener horarios del grupo específico filtrando por carrera
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.grupo == nombre_grupo,
+        HorarioAcademico.activo == True,
+        Materia.carrera_id == id_carrera
+    ).all()
+    
+    if not asignaciones:
+        flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
+        return redirect(url_for('jefe_ver_horarios_grupos'))
+
+    # 2. Determinar turno y si tiene sábado
+    es_vespertino = 'V' in nombre_grupo[1:3]
+    hora_inicio_turno = 13 if es_vespertino else 7
+    hora_fin_turno = 21 if es_vespertino else 14
+    
+    tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+    
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('Sábado')
+    
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+
+    # 3. Crear PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=10, alignment=1)
+    
+    # Título
+    elements.append(Paragraph(f"Horario del Grupo: {nombre_grupo}", title_style))
+    
+    # Crear tabla de cuadrícula
+    data = [['Hora'] + dias_semana]
+    
+    for hora in range(hora_inicio_turno, hora_fin_turno):
+        hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+        row = [hora_str]
+        
+        for dia in dias_semana:
+            contenido = ""
+            for a in asignaciones:
+                dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                    contenido = f"{a.materia.nombre}<br/><font size='7'>Prof: {a.profesor.get_nombre_completo()}</font>"
+                    break
+            row.append(Paragraph(contenido, cell_style))
+        
+        data.append(row)
+    
+    # Calcular anchos de columna
+    col_widths = [1.0*inch] + [1.4*inch] * len(dias_semana)
+    
+    table = Table(data, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 1), (0, -1), 8),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),
+        ('ROWHEIGHTS', (0, 1), (-1, -1), 45),
+    ]))
+    
+    elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
 
 
 # --- Rutas de Exportación para Jefes ---
@@ -5932,49 +6408,117 @@ def exportar_jefe_horarios_grupo_excel():
     if not id_carrera: return redirect(url_for('dashboard'))
     
     try:
-        # Obtener horarios ordenados por día de semana y hora
+        # Obtener horarios de la carrera
         asignaciones = HorarioAcademico.query.join(Materia).filter(
             Materia.carrera_id==id_carrera,
             HorarioAcademico.activo==True
         ).all()
         
-        # Ordenar por día de semana (Lunes a Viernes) y hora
-        asignaciones.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
+        # Obtener grupos únicos
+        grupos_unicos = sorted(list(set([a.grupo for a in asignaciones if a.grupo])))
         
-        horarios_por_grupo = {}
-        for a in asignaciones:
-            if not all([a.profesor, a.materia, a.horario]): continue
+        if not grupos_unicos:
+            flash('No hay horarios para exportar.', 'warning')
+            return redirect(url_for('jefe_ver_horarios_grupos'))
+        
+        # Mapeo de días
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+        
+        # Crear workbook
+        wb = openpyxl.Workbook()
+        
+        # Estilos
+        header_fill = PatternFill(start_color='1e3c72', end_color='1e3c72', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        hora_fill = PatternFill(start_color='f8f9fa', end_color='f8f9fa', fill_type='solid')
+        hora_font = Font(bold=True, size=10)
+        cell_border = Border(
+            left=Side(style='thin', color='dee2e6'),
+            right=Side(style='thin', color='dee2e6'),
+            top=Side(style='thin', color='dee2e6'),
+            bottom=Side(style='thin', color='dee2e6')
+        )
+        center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+        for i, grupo in enumerate(grupos_unicos):
+            # Verificar que el grupo pertenece a la carrera
+            grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
+            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+                continue
             
-            # CORREGIDO: Usar el campo 'grupo' del HorarioAcademico directamente
-            grupo_nombre = a.grupo
+            # Crear hoja para cada grupo
+            if i == 0:
+                ws = wb.active
+                ws.title = grupo[:31]  # Excel limita nombres de hojas a 31 caracteres
+            else:
+                ws = wb.create_sheet(title=grupo[:31])
             
-            if grupo_nombre:
-                # Verificar que el grupo pertenece a la carrera del jefe
-                grupo = Grupo.query.filter_by(codigo=grupo_nombre).first()
-                if grupo and grupo.carrera_id == id_carrera:
-                    if grupo_nombre not in horarios_por_grupo:
-                        horarios_por_grupo[grupo_nombre] = {'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': []}
+            # Obtener horarios del grupo
+            horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
+            
+            # Determinar turno y sábado
+            es_vespertino = 'V' in grupo[1:3]
+            hora_inicio_turno = 13 if es_vespertino else 7
+            hora_fin_turno = 21 if es_vespertino else 14
+            tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
+            
+            dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+            if tiene_sabado:
+                dias_semana.append('Sábado')
+            
+            # Encabezados
+            headers = ['Hora'] + dias_semana
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+                cell.border = cell_border
+            
+            # Filas por hora
+            row_num = 2
+            for hora in range(hora_inicio_turno, hora_fin_turno):
+                hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+                
+                # Celda de hora
+                cell = ws.cell(row=row_num, column=1, value=hora_str)
+                cell.fill = hora_fill
+                cell.font = hora_font
+                cell.alignment = center_align
+                cell.border = cell_border
+                
+                # Celdas de cada día
+                for col, dia in enumerate(dias_semana, 2):
+                    contenido = ""
+                    for a in horarios_grupo:
+                        dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                        if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                            contenido = f"{a.materia.nombre}\nProf: {a.profesor.get_nombre_completo()}"
+                            break
                     
-                    info = f"{a.materia.nombre}\nProf: {a.profesor.get_nombre_completo()}\n{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                    dia_correcto = obtener_dia_correcto(a.dia_semana)
-                    if dia_correcto in horarios_por_grupo[grupo_nombre]:
-                        horarios_por_grupo[grupo_nombre][dia_correcto].append(info)
+                    cell = ws.cell(row=row_num, column=col, value=contenido)
+                    cell.alignment = center_align
+                    cell.border = cell_border
+                
+                row_num += 1
+            
+            # Ajustar anchos
+            ws.column_dimensions['A'].width = 15
+            for col_letter in ['B', 'C', 'D', 'E', 'F', 'G']:
+                ws.column_dimensions[col_letter].width = 25
+            
+            # Ajustar altura de filas
+            for row in range(2, row_num):
+                ws.row_dimensions[row].height = 45
         
-        wb = openpyxl.Workbook(); ws = wb.active; ws.title = f"Horarios Grupos {current_user.carrera.codigo}"
-        headers = ["Grupo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-        ws.append(headers)
-        for cell in ws[1]: cell.font = Font(bold=True); cell.alignment = Alignment(horizontal='center')
-        for grupo, dias in horarios_por_grupo.items():
-            ws.append([grupo] + ["\n\n".join(dias.get(dia, [])) for dia in headers[1:]])
-        for col_cells in ws.columns:
-            ws.column_dimensions[col_cells[0].column_letter].width = 30
-            for cell in col_cells: cell.alignment = Alignment(wrap_text=True, vertical='top')
-        
-        buffer = BytesIO(); wb.save(buffer); buffer.seek(0)
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
         return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         flash(f"Error al generar el archivo Excel: {e}", "danger")
-        return redirect(url_for('jefe/jefe_ver_horarios_grupos'))
+        return redirect(url_for('jefe_ver_horarios_grupos'))
 
 @app.route('/jefe/horarios/grupos/exportar/pdf')
 @login_required
@@ -5984,50 +6528,99 @@ def exportar_jefe_horarios_grupo_pdf():
     if not id_carrera: return redirect(url_for('dashboard'))
     
     try:
-        # Obtener horarios ordenados por día de semana y hora
+        # Obtener grupos únicos de la carrera con horarios
         asignaciones = HorarioAcademico.query.join(Materia).filter(
             Materia.carrera_id==id_carrera,
             HorarioAcademico.activo==True
         ).all()
         
-        # Ordenar por día de semana (Lunes a Viernes) y hora
-        asignaciones.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
+        grupos_unicos = sorted(list(set([a.grupo for a in asignaciones if a.grupo])))
         
-        horarios_por_grupo = {}
-        for a in asignaciones:
-            if not all([a.profesor, a.materia, a.horario]): continue
-            
-            # CORREGIDO: Usar el campo 'grupo' del HorarioAcademico directamente
-            grupo_nombre = a.grupo
-            
-            if grupo_nombre:
-                # Verificar que el grupo pertenece a la carrera del jefe
-                grupo = Grupo.query.filter_by(codigo=grupo_nombre).first()
-                if grupo and grupo.carrera_id == id_carrera:
-                    if grupo_nombre not in horarios_por_grupo:
-                        horarios_por_grupo[grupo_nombre] = {'Lunes': [], 'Martes': [], 'Miércoles': [], 'Jueves': [], 'Viernes': []}
-                    
-                    info = f"{a.materia.nombre}<br/>Prof: {a.profesor.get_nombre_completo()}<br/>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                    dia_correcto = obtener_dia_correcto(a.dia_semana)
-                    if dia_correcto in horarios_por_grupo[grupo_nombre]:
-                        horarios_por_grupo[grupo_nombre][dia_correcto].append(info)
-
-        styles=getSampleStyleSheet(); styleN = styles['BodyText']
-        data = [["Grupo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]]
-        for grupo, dias in horarios_por_grupo.items():
-            row_data = [Paragraph(grupo, styleN)]
-            for dia in data[0][1:]: row_data.append(Paragraph("<br/><br/>".join(dias.get(dia, [])), styleN))
-            data.append(row_data)
-            
+        if not grupos_unicos:
+            flash('No hay horarios para exportar.', 'warning')
+            return redirect(url_for('jefe_ver_horarios_grupos'))
+        
+        # Mapeo de días
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+        
+        # Crear PDF
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
-        table = Table(data, hAlign='CENTER', colWidths=[1.5*inch]*6)
-        style = TableStyle([('BACKGROUND', (0,0), (-1,0), colors.green),('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),('GRID', (0,0), (-1,-1), 1, colors.black)])
-        table.setStyle(style); doc.build([table]); buffer.seek(0)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, alignment=1)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=9)
+        
+        for grupo in grupos_unicos:
+            # Verificar que el grupo pertenece a la carrera
+            grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
+            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+                continue
+            
+            # Obtener horarios del grupo
+            horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
+            
+            # Determinar turno y sábado
+            es_vespertino = 'V' in grupo[1:3]
+            hora_inicio_turno = 13 if es_vespertino else 7
+            hora_fin_turno = 21 if es_vespertino else 14
+            tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
+            
+            dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+            if tiene_sabado:
+                dias_semana.append('Sábado')
+            
+            # Título del grupo
+            elements.append(Paragraph(f"Horario: {grupo}", title_style))
+            elements.append(Spacer(1, 10))
+            
+            # Crear tabla de cuadrícula
+            data = [['Hora'] + dias_semana]
+            
+            for hora in range(hora_inicio_turno, hora_fin_turno):
+                hora_str = f"{hora:02d}:00"
+                row = [hora_str]
+                
+                for dia in dias_semana:
+                    # Buscar clase para esta hora y día
+                    contenido = ""
+                    for a in horarios_grupo:
+                        dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                        if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                            contenido = f"{a.materia.nombre}<br/>Prof: {a.profesor.get_nombre_completo()}"
+                            break
+                    row.append(Paragraph(contenido, cell_style))
+                
+                data.append(row)
+            
+            # Calcular anchos de columna
+            col_widths = [0.8*inch] + [1.4*inch] * len(dias_semana)
+            
+            table = Table(data, colWidths=col_widths)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),
+                ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),
+                ('ROWHEIGHTS', (0, 1), (-1, -1), 40),
+            ]))
+            
+            elements.append(table)
+            elements.append(Spacer(1, 30))
+        
+        doc.build(elements)
+        buffer.seek(0)
         return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
-        return redirect(url_for('jefe/jefe_ver_horarios_grupos'))
+        return redirect(url_for('jefe_ver_horarios_grupos'))
     
 # =================================================================
 # RUTAS DE EXPORTACIÓN EN FORMATO FDA (ADMIN)
@@ -6094,112 +6687,132 @@ def exportar_jefe_fda_profesor(profesor_nombre):
 
 def _generar_excel_horario_profesor(profesor_nombre):
     """
-    Función auxiliar interna que genera y retorna el archivo Excel del horario.
+    Función auxiliar interna que genera y retorna el archivo Excel del horario
+    con formato de cuadrícula donde cada hora tiene su propia fila.
     """
     try:
         # =====================================================================
-        # 1. OBTENER DATOS (SECCIÓN A MODIFICAR POR TI)
+        # 1. OBTENER DATOS REALES DEL PROFESOR
         # =====================================================================
-        profesor = User.query.filter((User.nombre + ' ' + User.apellido) == profesor_nombre).first()
+        profesor = User.query.filter(
+            (User.nombre + ' ' + User.apellido_paterno + ' ' + func.coalesce(User.apellido_materno, '')) == profesor_nombre
+        ).first()
+        
+        if not profesor:
+            # Intentar buscar solo con nombre y apellido paterno
+            profesor = User.query.filter(
+                (User.nombre + ' ' + User.apellido_paterno) == profesor_nombre
+            ).first()
+        
         if not profesor:
             return "Profesor no encontrado", 404
 
-        # --- LÓGICA DE CONSULTA DE HORARIO (DEBES ADAPTARLA) ---
-        horario_profesor = {
-            'Lunes': { '08:00': 'Gestión a la Administración', '09:00': 'Gestión a la Administración' },
-            'Martes': { '08:00': 'Tecnología de Negocios 9MSC1', '09:00': 'Tecnología de Negocios 9MSC1' },
-            'Jueves': { '11:00': 'Tutoria' }
-        }
+        # Obtener horarios reales del profesor
+        asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
+        
+        # Determinar si tiene sábado
+        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+        
+        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        if tiene_sabado:
+            dias_semana.append('Sábado')
+        
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
-        # --- LÓGICA CORREGIDA PARA "TIPO DE HORAS" ---
-        tipo_horas_labels = [
-            "Impartición de Curso", "Asesoría", "Tutoría",
-            "Apoyo a la Gestión", "Dual", "Investigación"
-        ]
-        tipo_horas_valores = {}
-        if profesor.tipo_profesor == 'Tiempo Completo':
-            tipo_horas_valores = {
-                "Impartición de Curso": 24, "Asesoría": 0, "Tutoría": 1,
-                "Apoyo a la Gestión": 15, "Dual": 0, "Investigación": 0
-            }
-
-    
         # =====================================================================
-        # 2. CREACIÓN Y CONFIGURACIÓN DEL EXCEL (CÓDIGO COMPLETO)
+        # 2. CREACIÓN DEL EXCEL CON FORMATO DE CUADRÍCULA
         # =====================================================================
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Carga Horaria"
-        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        top_border = Border(top=Side(style='thin'))
-        bold_font_16 = Font(bold=True, size=16)
-        bold_font = Font(bold=True)
+        ws.title = "Horario Profesor"
+        
+        # Estilos
+        header_fill = PatternFill(start_color='1e3c72', end_color='1e3c72', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF', size=11)
+        title_font = Font(bold=True, size=16)
+        hora_fill = PatternFill(start_color='f8f9fa', end_color='f8f9fa', fill_type='solid')
+        hora_font = Font(bold=True, size=10)
+        cell_border = Border(
+            left=Side(style='thin', color='dee2e6'),
+            right=Side(style='thin', color='dee2e6'),
+            top=Side(style='thin', color='dee2e6'),
+            bottom=Side(style='thin', color='dee2e6')
+        )
         center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        small_font_center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        ws.column_dimensions['A'].width = 14
-        for col in ['B', 'C', 'D', 'E', 'F', 'J']: ws.column_dimensions[col].width = 20
-        for col in ['G', 'H', 'I']: ws.column_dimensions[col].width = 3
-        ws.merge_cells('B2:K2'); cell = ws['B2']; cell.value = 'Carga Horaria'; cell.font = bold_font_16; cell.alignment = center_align
-        ws.merge_cells('B3:D3'); ws['B3'].value = 'Área: Dirección Academica'
-        ws.merge_cells('E3:G3'); ws['E3'].value = 'Vigencia: 16/05/2017'
-        ws.merge_cells('H3:J3'); ws['H3'].value = 'Código: FDA-02.5'
-        ws['B5'].value = 'Nombre:'; ws.merge_cells('C5:F5'); ws['C5'].value = profesor_nombre
-        ws['G5'].value = 'Prof. Asignatura'; ws.merge_cells('I5:J5'); ws['I5'].value = 'Prof. Tiempo Completo'
-        if profesor.tipo_profesor == 'Tiempo Completo':
-            ws['K5'].value = 'x'; ws['K5'].border = thin_border; ws['K5'].alignment = center_align
-        else:
-            ws['H5'].value = 'x'; ws['H5'].border = thin_border; ws['H5'].alignment = center_align
-        ws['B7'].value = 'Periodo:'; ws['C7'].value = 'Septiembre - Diciembre'
-        ws['E7'].value = 'Fecha de Inicio:'; ws['F7'].value = datetime.now().strftime("%Y-%m-%d")
-        ws['H7'].value = 'Plan de Estudios:'; ws['I7'].value = '2018'
-        ws.merge_cells('B9:K9'); ws['B9'].value = 'Instrucciones: Introducir nombre de la Asignatura, Salón y Grupo dentro de la celda correspondiente al día y la hora que será impartida.'; ws['B9'].alignment = Alignment(wrap_text=True)
-        dias_semana_map = {'Lunes': 'B', 'Martes': 'C', 'Miercoles': 'D', 'Jueves': 'E', 'Viernes': 'F', 'Sábado': 'J'}
-        header_horario = {'A': 'Horario', **{col: dia for dia, col in dias_semana_map.items()}}
-        for col, text in header_horario.items():
-            cell = ws[f'{col}12']; cell.value = text; cell.font = bold_font; cell.alignment = center_align; cell.border = thin_border; cell.fill = PatternFill("solid", fgColor="D9D9D9")
-        current_row = 13
-        for hour in range(7, 22):
-            hora_str_key = f"{hour:02d}:00"
-            ws[f'A{current_row}'].value = f"{hora_str_key}:00"
-            for dia, col in dias_semana_map.items():
-                cell = ws[f'{col}{current_row}']; cell.value = horario_profesor.get(dia, {}).get(hora_str_key, ''); cell.alignment = small_font_center_align; cell.font = Font(size=9)
-            for col in ['A'] + list(dias_semana_map.values()): ws[f'{col}{current_row}'].border = thin_border
-            current_row += 1; ws.row_dimensions[current_row].height = 4; current_row += 1
-        total_row_idx = current_row - 1
-        ws[f'A{total_row_idx}'].value = 'Total'; ws[f'A{total_row_idx}'].font = bold_font
-        for dia, col in dias_semana_map.items():
-            count = len(horario_profesor.get(dia, {}))
-            ws[f'{col}{total_row_idx}'].value = count if count > 0 else 0; ws[f'{col}{total_row_idx}'].font = bold_font; ws[f'{col}{total_row_idx}'].alignment = center_align
-        row_offset = total_row_idx + 2
-        ws.merge_cells(f'B{row_offset}:C{row_offset}'); ws[f'B{row_offset}'].value = 'Tipo de Horas'; ws[f'B{row_offset}'].font = bold_font
-        ws[f'D{row_offset}'].value = 'Horas'; ws[f'D{row_offset}'].font = bold_font
-        total_general = 0
-        for i, label in enumerate(tipo_horas_labels, 1):
-            valor = tipo_horas_valores.get(label, '')
-            ws[f'B{row_offset + i}'].value = label
-            ws[f'D{row_offset + i}'].value = valor
-            total_general += valor if isinstance(valor, int) else 0
-        total_tipo_horas_row = row_offset + len(tipo_horas_labels) + 1
-        ws[f'B{total_tipo_horas_row}'].value = 'Total de Horas'; ws[f'B{total_tipo_horas_row}'].font = bold_font
-        ws[f'D{total_tipo_horas_row}'].value = total_general if profesor.tipo_profesor == 'Tiempo Completo' else ''; ws[f'D{total_tipo_horas_row}'].font = bold_font
-        ws.merge_cells(f'B{total_tipo_horas_row + 1}:F{total_tipo_horas_row + 1}'); ws[f'B{total_tipo_horas_row + 1}'].value = '*Solo llenar en caso de ser Profesor de Tiempo Completo'
-        firma_row = total_tipo_horas_row + 4
-        ws[f'B{firma_row}'].value = 'Elaboró:'; ws[f'E{firma_row}'].value = 'Autorizó:'; ws[f'H{firma_row}'].value = 'Recibió:'
-        firma_row += 4
-        ws.merge_cells(f'B{firma_row}:D{firma_row}'); ws[f'B{firma_row}'].value = profesor_nombre; ws[f'B{firma_row}'].alignment = center_align
-        ws.merge_cells(f'E{firma_row}:G{firma_row}'); ws[f'E{firma_row}'].value = 'M. en E. Héctor Manuel Gómez Martínez'; ws[f'E{firma_row}'].alignment = center_align
-        ws.merge_cells(f'H{firma_row}:J{firma_row}'); ws[f'H{firma_row}'].value = profesor_nombre; ws[f'H{firma_row}'].alignment = center_align
-        firma_row += 1
-        ws.merge_cells(f'B{firma_row}:D{firma_row}'); ws[f'B{firma_row}'].value = 'Responsable del PE de Ingeniería en: ISC'; ws[f'B{firma_row}'].alignment = center_align
-        ws.merge_cells(f'E{firma_row}:G{firma_row}'); ws[f'E{firma_row}'].value = 'Director Académico'; ws[f'E{firma_row}'].alignment = center_align
-        ws.merge_cells(f'H{firma_row}:J{firma_row}'); ws[f'H{firma_row}'].value = 'Profesor de Tiempo Completo'; ws[f'H{firma_row}'].alignment = center_align
-        firma_row += 2
-        for cols in [('B','D'), ('E','G'), ('H','J')]:
-            ws.merge_cells(f'{cols[0]}{firma_row}:{cols[1]}{firma_row}'); cell = ws[f'{cols[0]}{firma_row}']; cell.value = 'Firma'; cell.alignment = center_align; cell.border = top_border
+        
+        # Título
+        ws.merge_cells('A1:G1')
+        title_cell = ws['A1']
+        title_cell.value = f'Horario de {profesor_nombre}'
+        title_cell.font = title_font
+        title_cell.alignment = center_align
+        
+        # Información del profesor
+        ws['A3'] = 'Tipo:'
+        ws['B3'] = profesor.tipo_profesor or 'No especificado'
+        
+        # Encabezados de la cuadrícula (fila 5)
+        headers = ['Hora'] + dias_semana
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=5, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = center_align
+            cell.border = cell_border
+        
+        # Filas por hora (7:00 a 21:00)
+        row_num = 6
+        for hora in range(7, 21):
+            hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+            
+            # Celda de hora
+            cell = ws.cell(row=row_num, column=1, value=hora_str)
+            cell.fill = hora_fill
+            cell.font = hora_font
+            cell.alignment = center_align
+            cell.border = cell_border
+            
+            # Celdas de cada día
+            for col, dia in enumerate(dias_semana, 2):
+                # Buscar clase para esta hora y día
+                clase_encontrada = None
+                for a in asignaciones:
+                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                    if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                        clase_encontrada = a
+                        break
+                
+                if clase_encontrada:
+                    contenido = f"{clase_encontrada.materia.nombre}\nGrupo: {clase_encontrada.grupo}"
+                else:
+                    contenido = ""
+                
+                cell = ws.cell(row=row_num, column=col, value=contenido)
+                cell.alignment = center_align
+                cell.border = cell_border
+            
+            row_num += 1
+        
+        # Ajustar anchos de columna
+        ws.column_dimensions['A'].width = 15
+        for col_letter in ['B', 'C', 'D', 'E', 'F', 'G']:
+            ws.column_dimensions[col_letter].width = 25
+        
+        # Ajustar altura de filas
+        for row in range(6, row_num):
+            ws.row_dimensions[row].height = 45
+        
+        # Calcular total de horas
+        total_horas = len(asignaciones)
+        ws.cell(row=row_num + 1, column=1, value='Total de horas:').font = Font(bold=True)
+        ws.cell(row=row_num + 1, column=2, value=total_horas).font = Font(bold=True)
+        
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.xlsx"
+        
+        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido_paterno.replace(' ','_')}.xlsx"
         return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     except Exception as e:
@@ -6223,6 +6836,126 @@ def exportar_jefe_excel_profesor(profesor_nombre):
     # por ejemplo, verificar que el jefe de carrera solo pueda
     # exportar horarios de profesores de su carrera.
     return _generar_excel_horario_profesor(profesor_nombre)
+
+
+# =====================================================================
+# FUNCIÓN AUXILIAR PARA GENERAR PDF DE HORARIO DE PROFESOR
+# =====================================================================
+def _generar_pdf_horario_profesor(profesor_nombre):
+    """
+    Función auxiliar interna que genera y retorna el archivo PDF del horario
+    con formato de cuadrícula donde cada hora tiene su propia fila.
+    """
+    try:
+        # 1. OBTENER DATOS REALES DEL PROFESOR
+        profesor = User.query.filter(
+            (User.nombre + ' ' + User.apellido_paterno + ' ' + func.coalesce(User.apellido_materno, '')) == profesor_nombre
+        ).first()
+        
+        if not profesor:
+            profesor = User.query.filter(
+                (User.nombre + ' ' + User.apellido_paterno) == profesor_nombre
+            ).first()
+        
+        if not profesor:
+            return "Profesor no encontrado", 404
+
+        # Obtener horarios reales del profesor
+        asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
+        
+        # Determinar si tiene sábado
+        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
+        
+        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        if tiene_sabado:
+            dias_semana.append('Sábado')
+        
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+
+        # 2. CREAR PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=15)
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=10, alignment=1)
+        
+        # Título
+        elements.append(Paragraph(f"Horario de: {profesor_nombre}", title_style))
+        
+        tipo_profesor = profesor.tipo_profesor or 'No especificado'
+        elements.append(Paragraph(f"Tipo: {tipo_profesor}", subtitle_style))
+        
+        # Crear tabla de cuadrícula
+        data = [['Hora'] + dias_semana]
+        
+        for hora in range(7, 21):
+            hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
+            row = [hora_str]
+            
+            for dia in dias_semana:
+                contenido = ""
+                for a in asignaciones:
+                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
+                    if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
+                        contenido = f"{a.materia.nombre}<br/><font size='7'>Grupo: {a.grupo}</font>"
+                        break
+                row.append(Paragraph(contenido, cell_style))
+            
+            data.append(row)
+        
+        # Calcular anchos de columna
+        col_widths = [1.0*inch] + [1.4*inch] * len(dias_semana)
+        
+        table = Table(data, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 1), (0, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),
+            ('ROWHEIGHTS', (0, 1), (-1, -1), 45),
+        ]))
+        
+        elements.append(table)
+        
+        # Total de horas
+        total_horas = len(asignaciones)
+        elements.append(Paragraph(f"<br/><b>Total de horas asignadas: {total_horas}</b>", styles['Normal']))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido_paterno.replace(' ','_')}.pdf"
+        return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"Ocurrió un error al generar el archivo PDF: {e}", 500
+
+
+# 4. RUTA PDF PARA ADMIN (HORARIO DE PROFESOR)
+@app.route('/exportar/horario-pdf/<profesor_nombre>')
+# @login_required
+def exportar_pdf_profesor(profesor_nombre):
+    return _generar_pdf_horario_profesor(profesor_nombre)
+
+
+# 5. RUTA PDF PARA JEFE DE CARRERA (HORARIO DE PROFESOR)
+@app.route('/exportar/horario-jefe-pdf/<profesor_nombre>')
+# @login_required
+def exportar_jefe_pdf_profesor(profesor_nombre):
+    return _generar_pdf_horario_profesor(profesor_nombre)
+
 
 with app.app_context():
     init_db()

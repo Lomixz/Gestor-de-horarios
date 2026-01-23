@@ -1,121 +1,320 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-5">
+<style>
+    .profesor-card {
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .profesor-header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .profesor-titulo {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .horario-grid {
+        display: grid;
+        grid-template-columns: 90px repeat(5, 1fr);
+        border: 1px solid #dee2e6;
+        background: white;
+    }
+    
+    .grid-header {
+        background: #343a40;
+        color: white;
+        font-weight: 600;
+        text-align: center;
+        padding: 0.75rem;
+        border-right: 1px solid #495057;
+        font-size: 0.85rem;
+    }
+    
+    .grid-header:first-child {
+        background: #212529;
+    }
+    
+    .grid-header:last-child {
+        border-right: none;
+    }
+    
+    .hora-label {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+        font-weight: 600;
+        text-align: center;
+        padding: 0.5rem;
+        border-right: 2px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        color: #495057;
+        font-size: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 70px;
+    }
+    
+    .hora-label .hora-inicio,
+    .hora-label .hora-fin {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #212529;
+    }
+    
+    .celda-horario {
+        border-right: 1px solid #dee2e6;
+        border-bottom: 1px solid #dee2e6;
+        padding: 4px;
+        min-height: 70px;
+        position: relative;
+        background: white;
+    }
+    
+    .celda-horario:last-child {
+        border-right: none;
+    }
+    
+    .clase-card {
+        background: white;
+        color: #212529;
+        border-radius: 12px;
+        padding: 10px;
+        font-size: 0.75rem;
+        position: relative;
+        height: calc(100% - 8px);
+        min-height: 60px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    .clase-materia {
+        font-weight: 700;
+        font-size: 0.8rem;
+        line-height: 1.3;
+        margin-bottom: 4px;
+        color: #111827;
+    }
+    
+    .clase-codigo {
+        font-size: 0.7rem;
+        color: #6b7280;
+    }
+    
+    .clase-hora {
+        font-size: 0.7rem;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+    
+    .btn-eliminar-clase {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        background: #fee2e2;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #dc2626;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.7rem;
+    }
+    
+    .btn-eliminar-clase:hover {
+        background: #dc2626;
+        color: white;
+    }
+    
+    .acciones-profesor {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-accion-profesor {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .btn-accion-profesor:hover {
+        background: rgba(255,255,255,0.3);
+        color: white;
+    }
+    
+    .btn-accion-profesor.btn-fda {
+        background: rgba(220, 53, 69, 0.8);
+    }
+    
+    .btn-accion-profesor.btn-excel {
+        background: rgba(25, 135, 84, 0.8);
+    }
+    
+    .btn-accion-profesor.btn-pdf {
+        background: rgba(220, 53, 69, 0.8);
+    }
+</style>
+
+<div class="container-fluid mt-4 px-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h3 class="mb-0">Horario Semanal por Profesor (Admin)</h3>
-            <small class="text-muted">Busca y exporta la carga horaria individual de cada profesor.</small>
+            <h3 class="mb-0"><i class="fas fa-chalkboard-teacher me-2"></i>Horario Semanal por Profesor</h3>
+            <small class="text-muted">Vista tipo calendario con horas en el eje vertical</small>
         </div>
-        <div class="d-flex align-items-center gap-2">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Regresar
-            </a>
-        </div>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Regresar
+        </a>
     </div>
 
-    <div class="mb-3">
-        <div class="input-group">
+    <div class="mb-4">
+        <div class="input-group" style="max-width: 400px;">
             <span class="input-group-text"><i class="fas fa-search"></i></span>
             <input type="text" id="searchInput" class="form-control" placeholder="Buscar por nombre del profesor...">
         </div>
     </div>
     
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover text-center align-middle">
-                    <thead class="table-dark">
-                        <tr>
-                            <th style="width: 20%;">Profesor</th>
-                            <th>Lunes</th>
-                            <th>Martes</th>
-                            <th>Miércoles</th>
-                            <th>Jueves</th>
-                            <th>Viernes</th>
-                            <th style="width: 15%;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="horariosTableBody">
-                        {% for profesor, dias in horarios_data.items() %}
-                        <tr class="schedule-row">
-                            <td class="row-name text-start ps-3"><strong>{{ profesor }}</strong></td>
-                            {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
-                            <td>
-                                {% for clase in dias[dia_semana] %}
-                                    {% if clase is mapping %}
-                                        <div class="clase-item p-2 mb-1 border rounded bg-light small position-relative">
-                                            {{ clase.html | safe }}
-                                            <form method="POST" action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este horario?');">
-                                                <button type="submit" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1" style="padding: 0.1rem 0.3rem; font-size: 0.7rem;">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    {% else %}
-                                        <div class="clase-item p-2 mb-1 border rounded bg-light small">{{ clase | safe }}</div>
+    <div class="mb-3">
+        <span class="badge bg-info fs-6">
+            <i class="fas fa-users me-1"></i>
+            <span id="contadorProfesores">{{ horarios_data|length }}</span> profesores
+        </span>
+    </div>
+    
+    <div id="profesoresContainer">
+        {% for profesor, dias in horarios_data.items() %}
+        <div class="profesor-card profesor-item" data-profesor="{{ profesor }}">
+            <div class="profesor-header">
+                <h4 class="profesor-titulo">
+                    <i class="fas fa-user-tie"></i>
+                    {{ profesor }}
+                </h4>
+                <div class="acciones-profesor">
+                    <a href="{{ url_for('exportar_admin_fda_profesor', profesor_nombre=profesor) }}"
+                       class="btn-accion-profesor btn-fda" title="Exportar FDA">
+                        <i class="fas fa-file-invoice"></i> FDA
+                    </a>
+                    <a href="{{ url_for('exportar_excel_profesor', profesor_nombre=profesor) }}"
+                       class="btn-accion-profesor btn-excel" title="Exportar Excel">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ url_for('exportar_pdf_profesor', profesor_nombre=profesor) }}"
+                       class="btn-accion-profesor btn-pdf" title="Exportar PDF">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                </div>
+            </div>
+            
+            <div class="card-body p-0">
+                <div class="horario-grid">
+                    <!-- Encabezados -->
+                    <div class="grid-header"><i class="fas fa-clock"></i> Hora</div>
+                    <div class="grid-header">Lunes</div>
+                    <div class="grid-header">Martes</div>
+                    <div class="grid-header">Miércoles</div>
+                    <div class="grid-header">Jueves</div>
+                    <div class="grid-header">Viernes</div>
+                    
+                    <!-- Filas de horas (7:00 a 20:00 para cubrir ambos turnos) -->
+                    {% for hora in range(7, 21) %}
+                    <div class="hora-label">
+                        <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
+                        <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>
+                    </div>
+                    
+                    {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+                    <div class="celda-horario">
+                        {% for clase in dias[dia_semana] %}
+                            {% if clase is mapping %}
+                                {% set hora_str = '%02d:00'|format(hora) %}
+                                {% if hora_str in clase.html %}
+                                <div class="clase-card">
+                                    {% set partes = clase.html.split('<br>') %}
+                                    <div class="clase-materia">{{ partes[0] | safe }}</div>
+                                    {% if partes|length > 1 %}
+                                    <div class="clase-codigo">{{ partes[1] | safe }}</div>
                                     {% endif %}
-                                {% endfor %}
-                            </td>
-                            {% endfor %}
-                            <td class="d-flex flex-column gap-2">
-                                <a href="{{ url_for('exportar_admin_fda_profesor', profesor_nombre=profesor) }}"
-                                   class="btn btn-sm btn-danger"
-                                   data-bs-toggle="tooltip"
-                                   title="Exportar Carga Horaria (Formato Oficial FDA)">
-                                    <i class="fas fa-file-invoice me-1"></i> FDA
-                                </a>
-                                <a href="{{ url_for('exportar_excel_profesor', profesor_nombre=profesor) }}"
-                                   class="btn btn-sm btn-success"
-                                   data-bs-toggle="tooltip"
-                                   title="Exportar Carga Horaria (Formato Excel)">
-                                    <i class="fas fa-file-excel me-1"></i> Excel
-                                </a>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center p-4">No hay horarios registrados.</td>
-                        </tr>
+                                    <button type="button" class="btn-eliminar-clase" 
+                                            onclick="if(confirm('¿Eliminar este horario?')) { document.getElementById('form-eliminar-{{ clase.id }}').submit(); }">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                    <form id="form-eliminar-{{ clase.id }}" method="POST" 
+                                          action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" 
+                                          style="display: none;"></form>
+                                </div>
+                                {% endif %}
+                            {% endif %}
                         {% endfor %}
-                        <tr id="noResultsRow" style="display: none;">
-                            <td colspan="7" class="text-center p-4">No se encontraron resultados para su búsqueda.</td>
-                        </tr>
-                    </tbody>
-                </table>
+                    </div>
+                    {% endfor %}
+                    {% endfor %}
+                </div>
             </div>
         </div>
+        {% else %}
+        <div class="card shadow-sm">
+            <div class="card-body text-center p-4">
+                <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                <h5>No hay horarios registrados</h5>
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar tooltips de Bootstrap
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
-
-    // Lógica de búsqueda
+    tooltipTriggerList.map(function (tooltipTriggerEl) { return new bootstrap.Tooltip(tooltipTriggerEl); });
+    
     const searchInput = document.getElementById('searchInput');
-    const tableBody = document.getElementById('horariosTableBody');
-    const rows = tableBody.getElementsByClassName('schedule-row');
-    const noResultsRow = document.getElementById('noResultsRow');
-
+    const profesores = document.querySelectorAll('.profesor-item');
+    const contador = document.getElementById('contadorProfesores');
+    
     searchInput.addEventListener('keyup', function() {
         const filter = searchInput.value.toLowerCase();
-        let visibleRows = 0;
+        let visibleCount = 0;
         
-        for (let row of rows) {
-            const nameCell = row.getElementsByClassName('row-name')[0];
-            if (nameCell && (nameCell.textContent || nameCell.innerText).toLowerCase().indexOf(filter) > -1) {
-                row.style.display = "";
-                visibleRows++;
+        profesores.forEach(function(profesor) {
+            const nombre = profesor.dataset.profesor.toLowerCase();
+            if (nombre.indexOf(filter) > -1) {
+                profesor.style.display = '';
+                visibleCount++;
             } else {
-                row.style.display = "none";
+                profesor.style.display = 'none';
             }
-        }
-        noResultsRow.style.display = (visibleRows === 0 && rows.length > 0) ? "" : "none";
+        });
+        
+        contador.textContent = visibleCount;
     });
 });
 </script>

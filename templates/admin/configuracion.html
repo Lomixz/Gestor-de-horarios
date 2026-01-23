@@ -152,6 +152,104 @@
         </div>
     </div>
 
+    <!-- Configuración de Carga Horaria de Profesores -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-clock me-2"></i>
+                        Límites de Carga Horaria por Tipo de Profesor
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Nota:</strong> Estos límites se aplicarán al asignar horarios a profesores. El sistema no permitirá exceder las horas máximas configuradas por semana.
+                    </div>
+                    <form id="cargaHorariaForm">
+                        <div class="row g-3">
+                            <!-- Tiempo Completo -->
+                            <div class="col-md-6">
+                                <label for="horas_tiempo_completo" class="form-label">
+                                    <i class="fas fa-briefcase me-1 text-primary"></i>
+                                    Profesor Tiempo Completo
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="horas_tiempo_completo" 
+                                           value="{{ config_horas.tiempo_completo or 40 }}" min="1" max="50">
+                                    <span class="input-group-text">horas/semana</span>
+                                </div>
+                                <div class="form-text">Máximo de horas semanales para profesores de tiempo completo</div>
+                            </div>
+
+                            <!-- Asignatura -->
+                            <div class="col-md-6">
+                                <label for="horas_asignatura" class="form-label">
+                                    <i class="fas fa-book me-1 text-success"></i>
+                                    Profesor por Asignatura
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="horas_asignatura" 
+                                           value="{{ config_horas.asignatura or 20 }}" min="1" max="50">
+                                    <span class="input-group-text">horas/semana</span>
+                                </div>
+                                <div class="form-text">Máximo de horas semanales para profesores por asignatura</div>
+                            </div>
+
+                            <!-- Medio Tiempo -->
+                            <div class="col-md-6">
+                                <label for="horas_medio_tiempo" class="form-label">
+                                    <i class="fas fa-user-clock me-1 text-warning"></i>
+                                    Profesor Medio Tiempo
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="horas_medio_tiempo" 
+                                           value="{{ config_horas.medio_tiempo or 20 }}" min="1" max="50">
+                                    <span class="input-group-text">horas/semana</span>
+                                </div>
+                                <div class="form-text">Máximo de horas semanales para profesores de medio tiempo</div>
+                            </div>
+
+                            <!-- Límite Absoluto -->
+                            <div class="col-md-6">
+                                <label for="horas_limite_absoluto" class="form-label">
+                                    <i class="fas fa-exclamation-triangle me-1 text-danger"></i>
+                                    Límite Absoluto del Sistema
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="horas_limite_absoluto" 
+                                           value="{{ config_horas.limite_absoluto or 50 }}" min="20" max="60">
+                                    <span class="input-group-text">horas/semana</span>
+                                </div>
+                                <div class="form-text">Ningún profesor puede exceder este límite sin importar su tipo</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Los cambios se aplicarán a las nuevas asignaciones de horario
+                                        </small>
+                                    </div>
+                                    <button type="button" class="btn btn-info" onclick="guardarCargaHoraria()">
+                                        <i class="fas fa-save me-1"></i>
+                                        Guardar Límites
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Configuración de Seguridad -->
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
@@ -542,6 +640,54 @@ function guardarSeguridad() {
     };
 
     mostrarMensaje('Configuración de seguridad guardada exitosamente', 'success');
+}
+
+function guardarCargaHoraria() {
+    const limiteAbsoluto = parseInt(document.getElementById('horas_limite_absoluto').value);
+    const tiempoCompleto = parseInt(document.getElementById('horas_tiempo_completo').value);
+    const asignatura = parseInt(document.getElementById('horas_asignatura').value);
+    const medioTiempo = parseInt(document.getElementById('horas_medio_tiempo').value);
+
+    // Validaciones
+    if (tiempoCompleto > limiteAbsoluto) {
+        mostrarMensaje('Las horas de Tiempo Completo no pueden exceder el límite absoluto', 'danger');
+        return;
+    }
+    if (asignatura > limiteAbsoluto) {
+        mostrarMensaje('Las horas de Asignatura no pueden exceder el límite absoluto', 'danger');
+        return;
+    }
+    if (medioTiempo > limiteAbsoluto) {
+        mostrarMensaje('Las horas de Medio Tiempo no pueden exceder el límite absoluto', 'danger');
+        return;
+    }
+
+    const formData = {
+        tiempo_completo: tiempoCompleto,
+        asignatura: asignatura,
+        medio_tiempo: medioTiempo,
+        limite_absoluto: limiteAbsoluto
+    };
+
+    fetch('/admin/configuracion/carga-horaria', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarMensaje(data.message, 'success');
+        } else {
+            mostrarMensaje(data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('Error al guardar la configuración de carga horaria', 'danger');
+    });
 }
 
 function toggleDatabaseConfig() {
