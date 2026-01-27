@@ -362,10 +362,10 @@ function mostrarResultadoFinal(data) {
     document.getElementById('resultado-mensaje').textContent = data.mensaje;
 }
 
-// Función para cerrar modal y recargar
+// Función para cerrar modal y ver resultados
 function cerrarModalYRecargar() {
     document.getElementById('progresoModal').style.display = 'none';
-    window.location.reload();
+    window.location.href = '/admin/horarios-academicos';
 }
 
 // Manejar envío del formulario con AJAX
