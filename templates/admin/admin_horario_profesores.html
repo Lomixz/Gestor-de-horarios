@@ -266,8 +266,8 @@
                     <div class="celda-horario">
                         {% for clase in dias[dia_semana] %}
                             {% if clase is mapping %}
-                                {% set hora_str = '%02d:00'|format(hora) %}
-                                {% if hora_str in clase.html %}
+                                {# Usar comparación por entero #}
+                                {% if clase.hora_inicio == hora %}
                                 <div class="clase-card">
                                     {% set partes = clase.html.split('<br>') %}
                                     <div class="clase-materia">{{ partes[0] | safe }}</div>

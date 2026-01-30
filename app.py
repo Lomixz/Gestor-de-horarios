@@ -310,11 +310,16 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
             clave_agrupacion = a.profesor.get_nombre_completo()
             # Obtener código del grupo para mostrar junto con la materia
             grupo_codigo = a.grupo if a.grupo else ""
+            # Obtener la hora de inicio como entero para la cuadrícula
+            hora_inicio_int = a.horario.hora_inicio.hour if a.horario.hora_inicio else 7
+            
             if incluir_ids:
                 info_clase_html = {
                     'id': a.id,
                     'html': f"{a.materia.nombre}<br><small class='text-muted'>{a.materia.codigo}</small><br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
-                    'grupo': grupo_codigo
+                    'grupo': grupo_codigo,
+                    'hora_inicio': hora_inicio_int,
+                    'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                 }
             else:
                 info_clase_html = (
@@ -6221,7 +6226,7 @@ def jefe_ver_horarios_profesores():
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
-    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_id=id_carrera)
+    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_id=id_carrera, incluir_ids=True)
     return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data)
 
 

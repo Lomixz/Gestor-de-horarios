@@ -245,15 +245,17 @@
                     {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
                     <div class="celda-horario">
                         {% for clase in dias[dia_semana] %}
-                            {% set hora_str = '%02d:00'|format(hora) %}
-                            {% if hora_str in clase %}
-                            <div class="clase-card">
-                                {% set partes = clase.split('<br>') %}
-                                <div class="clase-materia">{{ partes[0] | safe }}</div>
-                                {% if partes|length > 1 %}
-                                <div class="clase-grupo"><i class="fas fa-users"></i> {{ partes[1] | replace('Grupo: ', '') | safe }}</div>
+                            {% if clase is mapping %}
+                                {# Usar comparación por entero #}
+                                {% if clase.hora_inicio == hora %}
+                                <div class="clase-card">
+                                    {% set partes = clase.html.split('<br>') %}
+                                    <div class="clase-materia">{{ partes[0] | safe }}</div>
+                                    {% if partes|length > 1 %}
+                                    <div class="clase-grupo"><i class="fas fa-users"></i> {{ clase.grupo }}</div>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
-                            </div>
                             {% endif %}
                         {% endfor %}
                     </div>
