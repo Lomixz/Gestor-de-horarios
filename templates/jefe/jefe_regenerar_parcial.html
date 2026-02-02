@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Regenerar Horarios - {{ profesor.get_nombre_completo() }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="d-flex align-items-center mb-4">
+                <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-outline-secondary me-3">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div>
+                    <h2 class="mb-0 fw-bold">
+                        <i class="fas fa-sync-alt text-warning me-2"></i>
+                        Regeneración Parcial de Horarios
+                    </h2>
+                    <p class="text-muted mb-0">Cambios detectados en la disponibilidad del profesor</p>
+                </div>
+            </div>
+
+            <!-- Profesor Info -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body d-flex align-items-center">
+                    <div class="avatar-circle bg-primary text-white me-3">
+                        {{ profesor.nombre[0] }}{{ profesor.apellido_paterno[0] }}
+                    </div>
+                    <div>
+                        <h5 class="mb-0">{{ profesor.get_nombre_completo() }}</h5>
+                        <span class="text-muted small">{{ profesor.email }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if resumen.total_horarios_afectados > 0 %}
+            <!-- Alerta de Conflictos -->
+            <div class="alert alert-warning border-0 shadow-sm mb-4">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle fa-2x me-3 text-warning"></i>
+                    <div>
+                        <h5 class="mb-1">⚠️ Se detectaron conflictos</h5>
+                        <p class="mb-0">
+                            <strong>{{ resumen.total_horarios_afectados }}</strong> horario(s) 
+                            asignado(s) en slots que ya no están disponibles.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Conflictos -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock me-2"></i>
+                        Horarios en Conflicto
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Día/Hora</th>
+                                    <th>Materia</th>
+                                    <th>Grupo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for slot in resumen.conflictos_por_slot %}
+                                {% for horario in slot.horarios %}
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ slot.dia_semana }}</span>
+                                        {{ slot.hora }}
+                                    </td>
+                                    <td>
+                                        <strong>{{ horario.materia }}</strong>
+                                        <br><small class="text-muted">{{ horario.materia_codigo }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ horario.grupo }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resumen -->
+            <div class="card shadow-sm border-0 mb-4 bg-light">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3">
+                        <i class="fas fa-info-circle me-2"></i>Resumen
+                    </h6>
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <h3 class="text-danger mb-0">{{ resumen.total_horarios_afectados }}</h3>
+                            <small class="text-muted">Horarios afectados</small>
+                        </div>
+                        <div class="col-4">
+                            <h3 class="text-warning mb-0">{{ resumen.total_grupos_afectados }}</h3>
+                            <small class="text-muted">Grupos involucrados</small>
+                        </div>
+                        <div class="col-4">
+                            <h3 class="text-success mb-0">Sin cambios</h3>
+                            <small class="text-muted">Otros horarios</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulario de Acción -->
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-tag me-1"></i>
+                                Nombre para la nueva versión
+                            </label>
+                            <input type="text" name="version_nombre" class="form-control" 
+                                   placeholder="Regeneración Jefe">
+                        </div>
+
+                        <div class="d-flex gap-3 justify-content-end">
+                            <button type="submit" name="accion" value="ignorar" 
+                                    class="btn btn-outline-secondary btn-lg">
+                                <i class="fas fa-times me-2"></i>
+                                Ignorar Cambios
+                            </button>
+                            <button type="submit" name="accion" value="regenerar" 
+                                    class="btn btn-warning btn-lg">
+                                <i class="fas fa-sync-alt me-2"></i>
+                                Regenerar Ahora
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% else %}
+            <!-- Sin conflictos -->
+            <div class="alert alert-success border-0 shadow-sm">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-check-circle fa-2x me-3 text-success"></i>
+                    <div>
+                        <h5 class="mb-1">✅ Sin conflictos pendientes</h5>
+                        <p class="mb-0">No hay horarios afectados por cambios de disponibilidad.</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.avatar-circle {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+</style>
+{% endblock %}

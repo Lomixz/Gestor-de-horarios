@@ -3856,6 +3856,84 @@ def generar_horarios_masivo():
         generacion_progreso['mensaje'] = resultado['mensaje']
         generacion_progreso['activo'] = False
         
+        # Crear backup/versión después de generar
+        if resultado.get('exito') or resultado.get('horarios_generados', 0) > 0:
+            try:
+                import json
+                from models import VersionHorario, Grupo as GrupoModel
+                
+                # Obtener los códigos de los grupos seleccionados
+                grupos_codigos = []
+                for gid in grupos_ids:
+                    grupo = GrupoModel.query.get(gid)
+                    if grupo:
+                        grupos_codigos.append(grupo.codigo.upper())
+                
+                # Obtener TODOS los horarios activos de los grupos seleccionados
+                print(f"🔍 Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
+                horarios_generados = HorarioAcademico.query.filter(
+                    HorarioAcademico.grupo.in_(grupos_codigos),
+                    HorarioAcademico.activo == True
+                ).all()
+                
+                print(f"   📊 Encontrados {len(horarios_generados)} horarios para backup")
+                
+                # Serializar datos
+                datos = []
+                grupos_set = set()
+                for h in horarios_generados:
+                    datos.append({
+                        'id': h.id,
+                        'profesor_id': h.profesor_id,
+                        'materia_id': h.materia_id,
+                        'horario_id': h.horario_id,
+                        'dia_semana': h.dia_semana,
+                        'grupo': h.grupo,
+                        'periodo_academico': h.periodo_academico,
+                        'version_nombre': h.version_nombre
+                    })
+                    grupos_set.add(h.grupo)
+                
+                # Determinar carrera - usar la del primer grupo generado
+                carrera_id = None
+                primer_grupo = GrupoModel.query.get(grupos_ids[0]) if grupos_ids else None
+                if primer_grupo:
+                    carrera_id = primer_grupo.carrera_id
+                
+                # Crear registro de versión
+                version = VersionHorario(
+                    nombre_version=version_nombre,
+                    descripcion=f"Generación masiva Admin de {len(grupos_ids)} grupos",
+                    datos_horarios=json.dumps(datos, ensure_ascii=False),
+                    total_horarios=len(datos),
+                    grupos_afectados=','.join(grupos_set),
+                    carrera_id=carrera_id,
+                    creado_por=current_user.id
+                )
+                db.session.add(version)
+                db.session.commit()
+                
+                print(f"   ✅ Backup creado: {version_nombre} con {len(datos)} horarios")
+                
+                # Limitar versiones por usuario - 20 para admin, 10 para usuarios normales
+                from models import User
+                usuario = User.query.get(current_user.id)
+                limite_versiones = 20 if usuario and usuario.is_admin() else 10
+                
+                versiones_usuario = VersionHorario.query.filter(
+                    VersionHorario.creado_por == current_user.id,
+                    VersionHorario.activo == True
+                ).order_by(VersionHorario.fecha_creacion.desc()).all()
+                
+                if len(versiones_usuario) > limite_versiones:
+                    for v_old in versiones_usuario[limite_versiones:]:
+                        v_old.activo = False
+                    db.session.commit()
+                    print(f"   🗑️ Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                    
+            except Exception as e:
+                print(f"❌ Error creando backup: {e}")
+        
         if resultado['exito']:
             flash(f"✅ {resultado['mensaje']}", 'success')
         else:
@@ -4106,6 +4184,89 @@ def api_iniciar_generacion_masiva():
                 creado_por=user_id,  # Usar la variable capturada, no current_user
                 dias_semana=dias_semana
             )
+            
+            # Crear backup/versión después de generar
+            if resultado.get('exito') or resultado.get('horarios_generados', 0) > 0:
+                try:
+                    import json
+                    from models import VersionHorario, Grupo as GrupoModel, User, Carrera
+                    from collections import defaultdict
+                    
+                    # Agrupar grupos seleccionados por carrera
+                    grupos_por_carrera = defaultdict(list)
+                    for gid in grupos_ids:
+                        grupo = GrupoModel.query.get(gid)
+                        if grupo:
+                            grupos_por_carrera[grupo.carrera_id].append(grupo.codigo.upper())
+                    
+                    print(f"🔍 Creando backups para {len(grupos_por_carrera)} carrera(s)")
+                    
+                    # Crear un backup por cada carrera
+                    for carrera_id, grupos_codigos in grupos_por_carrera.items():
+                        # Obtener horarios solo de los grupos de esta carrera
+                        horarios_generados = HorarioAcademico.query.filter(
+                            HorarioAcademico.grupo.in_(grupos_codigos),
+                            HorarioAcademico.activo == True
+                        ).all()
+                        
+                        if not horarios_generados:
+                            continue
+                        
+                        # Serializar datos
+                        datos = []
+                        grupos_set = set()
+                        for h in horarios_generados:
+                            datos.append({
+                                'id': h.id,
+                                'profesor_id': h.profesor_id,
+                                'materia_id': h.materia_id,
+                                'horario_id': h.horario_id,
+                                'dia_semana': h.dia_semana,
+                                'grupo': h.grupo,
+                                'periodo_academico': h.periodo_academico,
+                                'version_nombre': h.version_nombre
+                            })
+                            grupos_set.add(h.grupo)
+                        
+                        # Obtener nombre de carrera para descripción
+                        carrera = Carrera.query.get(carrera_id)
+                        carrera_nombre = carrera.nombre if carrera else 'Sin carrera'
+                        
+                        # Crear registro de versión para esta carrera
+                        version = VersionHorario(
+                            nombre_version=version_nombre,
+                            descripcion=f"Generación masiva de {len(grupos_codigos)} grupos ({carrera_nombre})",
+                            datos_horarios=json.dumps(datos, ensure_ascii=False),
+                            total_horarios=len(datos),
+                            grupos_afectados=','.join(sorted(grupos_set)),
+                            carrera_id=carrera_id,
+                            creado_por=user_id
+                        )
+                        db.session.add(version)
+                        
+                        print(f"   ✅ Backup creado: {version_nombre} ({carrera_nombre}) con {len(datos)} horarios")
+                    
+                    db.session.commit()
+                    
+                    # Limitar versiones por usuario - 20 para admin
+                    usuario = User.query.get(user_id)
+                    limite_versiones = 20 if usuario and usuario.is_admin() else 10
+                    
+                    versiones_usuario = VersionHorario.query.filter(
+                        VersionHorario.creado_por == user_id,
+                        VersionHorario.activo == True
+                    ).order_by(VersionHorario.fecha_creacion.desc()).all()
+                    
+                    if len(versiones_usuario) > limite_versiones:
+                        for v_old in versiones_usuario[limite_versiones:]:
+                            v_old.activo = False
+                        db.session.commit()
+                        print(f"   🗑️ Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                        
+                except Exception as e:
+                    print(f"❌ Error creando backup: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Marcar como completado
             with progreso_lock:
@@ -7096,6 +7257,1087 @@ def exportar_pdf_profesor(profesor_nombre):
 # @login_required
 def exportar_jefe_pdf_profesor(profesor_nombre):
     return _generar_pdf_horario_profesor(profesor_nombre)
+
+
+# ===================================================================
+# RUTAS DE GENERACIÓN DE HORARIOS PARA JEFES DE CARRERA
+# ===================================================================
+
+@app.route('/jefe/horarios/generar', methods=['GET', 'POST'])
+@login_required
+def generar_horarios_jefe():
+    """Generar horarios para un grupo individual (solo jefes de carrera)"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener carreras del jefe
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash('No tienes carreras asignadas.', 'warning')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener grupos solo de las carreras del jefe
+    grupos = Grupo.query.filter(
+        Grupo.carrera_id.in_(carrera_ids),
+        Grupo.activo == True
+    ).order_by(Grupo.carrera_id, Grupo.cuatrimestre, Grupo.codigo).all()
+    
+    resultado = None
+    
+    if request.method == 'POST':
+        from generador_horarios_mejorado import GeneradorHorariosMejorado
+        
+        grupo_id = request.form.get('grupo_id', type=int)
+        version_nombre = request.form.get('version_nombre', '').strip()
+        dias_config = request.form.get('dias_semana', 'lunes_viernes')
+        
+        if not grupo_id:
+            flash('Debe seleccionar un grupo.', 'error')
+        else:
+            # Verificar que el grupo pertenece a las carreras del jefe
+            grupo = Grupo.query.get(grupo_id)
+            if not grupo or grupo.carrera_id not in carrera_ids:
+                flash('No tienes permisos para generar horarios de este grupo.', 'error')
+            else:
+                # Configurar días
+                if dias_config == 'lunes_viernes':
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+                elif dias_config == 'lunes_sabado':
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+                else:
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+                
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                periodo_academico = f"{datetime.now().year}-{timestamp}"
+                
+                if not version_nombre:
+                    version_nombre = f"Generación Jefe {timestamp}"
+                
+                try:
+                    generador = GeneradorHorariosMejorado(
+                        grupos_ids=[grupo_id],
+                        periodo_academico=periodo_academico,
+                        version_nombre=version_nombre,
+                        creado_por=current_user.id,
+                        dias_semana=dias_semana,
+                        tiempo_limite=60
+                    )
+                    
+                    resultado = generador.generar()
+                    
+                    if resultado['exito']:
+                        db.session.commit()
+                        flash(f"✅ Horario generado exitosamente para {grupo.codigo}", 'success')
+                    else:
+                        flash(f"❌ {resultado.get('mensaje', 'Error en generación')}", 'error')
+                        
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error al generar horarios: {str(e)}', 'error')
+    
+    return render_template('jefe/jefe_generar_horarios.html', 
+                         grupos=grupos, 
+                         resultado=resultado,
+                         carreras=current_user.carreras)
+
+
+@app.route('/jefe/horarios/generar-masivo', methods=['GET', 'POST'])
+@login_required
+def generar_horarios_masivo_jefe():
+    """Generar horarios para múltiples grupos (solo jefes de carrera)"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash('No tienes carreras asignadas.', 'warning')
+        return redirect(url_for('dashboard'))
+    
+    # Obtener grupos organizados por carrera y cuatrimestre
+    grupos = Grupo.query.filter(
+        Grupo.carrera_id.in_(carrera_ids),
+        Grupo.activo == True
+    ).order_by(Grupo.carrera_id, Grupo.cuatrimestre, Grupo.codigo).all()
+    
+    # Organizar por carrera y cuatrimestre
+    grupos_organizados = {}
+    for grupo in grupos:
+        carrera_nombre = grupo.get_carrera_nombre()
+        if carrera_nombre not in grupos_organizados:
+            grupos_organizados[carrera_nombre] = {}
+        
+        cuatri = grupo.cuatrimestre
+        if cuatri not in grupos_organizados[carrera_nombre]:
+            grupos_organizados[carrera_nombre][cuatri] = []
+        
+        grupos_organizados[carrera_nombre][cuatri].append(grupo)
+    
+    resultado = None
+    
+    if request.method == 'POST':
+        grupos_ids = request.form.getlist('grupos_ids[]')
+        
+        if not grupos_ids:
+            flash('❌ Debe seleccionar al menos un grupo', 'error')
+        else:
+            grupos_ids = [int(gid) for gid in grupos_ids]
+            
+            # Verificar que todos los grupos pertenecen a las carreras del jefe
+            grupos_validos = Grupo.query.filter(
+                Grupo.id.in_(grupos_ids),
+                Grupo.carrera_id.in_(carrera_ids)
+            ).all()
+            
+            if len(grupos_validos) != len(grupos_ids):
+                flash('❌ Algunos grupos seleccionados no pertenecen a tus carreras.', 'error')
+            else:
+                version_nombre = request.form.get('version_nombre', '').strip()
+                dias_config = request.form.get('dias_semana', 'lunes_viernes')
+                
+                if not version_nombre:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    version_nombre = f"Generación Masiva Jefe {timestamp}"
+                
+                if dias_config == 'lunes_viernes':
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+                elif dias_config == 'lunes_sabado':
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+                else:
+                    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+                
+                año_actual = datetime.now().year
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                periodo_academico = f"{año_actual}-{año_actual}_{timestamp}"
+                
+                # Usar la función existente de generación masiva
+                resultado = generar_horarios_masivos_con_progreso(
+                    grupos_ids=[g.id for g in grupos_validos],
+                    periodo_academico=periodo_academico,
+                    version_nombre=version_nombre,
+                    creado_por=current_user.id,
+                    dias_semana=dias_semana
+                )
+                
+                if resultado['exito']:
+                    flash(f"✅ {resultado['mensaje']}", 'success')
+                else:
+                    flash(f"❌ {resultado['mensaje']}", 'error')
+    
+    return render_template('jefe/jefe_generar_horarios_masivo.html',
+                         grupos_organizados=grupos_organizados,
+                         resultado=resultado)
+
+
+@app.route('/api/jefe/iniciar-generacion-masiva', methods=['POST'])
+@login_required
+def api_iniciar_generacion_masiva_jefe():
+    """API para iniciar generación masiva en segundo plano (jefes)"""
+    global generacion_progreso, progreso_lock
+    
+    if not current_user.is_jefe_carrera():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    
+    data = request.get_json()
+    grupos_ids = data.get('grupos_ids', [])
+    version_nombre = data.get('version_nombre', '')
+    dias_config = data.get('dias_semana', 'lunes_viernes')
+    
+    if not grupos_ids:
+        return jsonify({'error': 'Selecciona al menos un grupo'}), 400
+    
+    grupos_ids = [int(gid) for gid in grupos_ids]
+    
+    # Verificar permisos sobre los grupos
+    grupos_validos = Grupo.query.filter(
+        Grupo.id.in_(grupos_ids),
+        Grupo.carrera_id.in_(carrera_ids)
+    ).count()
+    
+    if grupos_validos != len(grupos_ids):
+        return jsonify({'error': 'Algunos grupos no pertenecen a tus carreras'}), 403
+    
+    user_id = current_user.id
+    
+    if dias_config == 'lunes_viernes':
+        dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    elif dias_config == 'lunes_sabado':
+        dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    else:
+        dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    
+    año_actual = datetime.now().year
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    periodo_academico = f"{año_actual}-{año_actual}_{timestamp}"
+    
+    if not version_nombre:
+        version_nombre = f"Generación Masiva Jefe {timestamp}"
+    
+    with progreso_lock:
+        generacion_progreso = {
+            'activo': True,
+            'total_grupos': len(grupos_ids),
+            'grupos_procesados': 0,
+            'grupo_actual': 0,
+            'codigo_grupo': 'Iniciando...',
+            'horarios_generados': 0,
+            'mensaje': 'Iniciando generación...',
+            'completado': False,
+            'exito': False
+        }
+    
+    def ejecutar_generacion():
+        global generacion_progreso, progreso_lock
+        with app.app_context():
+            resultado = generar_horarios_masivos_con_progreso(
+                grupos_ids=grupos_ids,
+                periodo_academico=periodo_academico,
+                version_nombre=version_nombre,
+                creado_por=user_id,
+                dias_semana=dias_semana
+            )
+            
+            # Crear backup/versión después de generar
+            if resultado.get('exito') or resultado.get('horarios_generados', 0) > 0:
+                try:
+                    import json
+                    from models import VersionHorario, Grupo
+                    
+                    # Obtener los códigos de los grupos seleccionados
+                    grupos_codigos = []
+                    for gid in grupos_ids:
+                        grupo = Grupo.query.get(gid)
+                        if grupo:
+                            grupos_codigos.append(grupo.codigo.upper())
+                    
+                    # MEJORADO: Obtener TODOS los horarios activos de los grupos seleccionados
+                    # Esto asegura que el backup tenga el estado completo de esos grupos
+                    print(f"🔍 Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
+                    horarios_generados = HorarioAcademico.query.filter(
+                        HorarioAcademico.grupo.in_(grupos_codigos),
+                        HorarioAcademico.activo == True
+                    ).all()
+                    
+                    print(f"   📊 Encontrados {len(horarios_generados)} horarios para backup")
+                    
+                    # Serializar datos
+                    datos = []
+                    grupos_set = set()
+                    for h in horarios_generados:
+                        datos.append({
+                            'id': h.id,
+                            'profesor_id': h.profesor_id,
+                            'materia_id': h.materia_id,
+                            'horario_id': h.horario_id,
+                            'dia_semana': h.dia_semana,
+                            'grupo': h.grupo,
+                            'periodo_academico': h.periodo_academico,
+                            'version_nombre': h.version_nombre
+                        })
+                        grupos_set.add(h.grupo)
+                    
+                    # Determinar carrera - usar la del primer grupo generado
+                    carrera_id = None
+                    from models import Grupo
+                    primer_grupo = Grupo.query.get(grupos_ids[0]) if grupos_ids else None
+                    if primer_grupo:
+                        carrera_id = primer_grupo.carrera_id
+                    
+                    # Crear registro de versión
+                    version = VersionHorario(
+                        nombre_version=version_nombre,
+                        descripcion=f"Generación masiva de {len(grupos_ids)} grupos",
+                        datos_horarios=json.dumps(datos, ensure_ascii=False),
+                        total_horarios=len(datos),
+                        grupos_afectados=','.join(grupos_set),
+                        carrera_id=carrera_id,
+                        creado_por=user_id
+                    )
+                    db.session.add(version)
+                    db.session.commit()
+                    
+                    # Limitar versiones por usuario - 20 para admin, 10 para usuarios normales
+                    from models import User
+                    usuario = User.query.get(user_id)
+                    limite_versiones = 20 if usuario and usuario.is_admin() else 10
+                    
+                    versiones_usuario = VersionHorario.query.filter(
+                        VersionHorario.creado_por == user_id,
+                        VersionHorario.activo == True
+                    ).order_by(VersionHorario.fecha_creacion.desc()).all()
+                    
+                    if len(versiones_usuario) > limite_versiones:
+                        # Marcar las versiones más antiguas como inactivas
+                        for v_old in versiones_usuario[limite_versiones:]:
+                            v_old.activo = False
+                        db.session.commit()
+                        print(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                        
+                except Exception as e:
+                    print(f"Error creando versión: {e}")
+            
+            with progreso_lock:
+                generacion_progreso['completado'] = True
+                generacion_progreso['exito'] = resultado['exito']
+                generacion_progreso['mensaje'] = resultado['mensaje']
+                generacion_progreso['activo'] = False
+    
+    thread = threading.Thread(target=ejecutar_generacion)
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'mensaje': 'Generación iniciada', 'total_grupos': len(grupos_ids)})
+
+
+# ===================================================================
+# RUTAS DE REGENERACIÓN PARCIAL Y GESTIÓN DE VERSIONES
+# ===================================================================
+
+@app.route('/admin/horarios/regenerar-parcial/<int:profesor_id>', methods=['GET', 'POST'])
+@login_required
+def regenerar_parcial_admin(profesor_id):
+    """Vista para regenerar horarios de un profesor (admin)"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from regenerador_parcial import RegeneradorParcial
+    
+    profesor = User.query.get_or_404(profesor_id)
+    regenerador = RegeneradorParcial(profesor_id)
+    regenerador.detectar_horarios_afectados()
+    resumen = regenerador.get_resumen_conflictos()
+    
+    if request.method == 'POST':
+        accion = request.form.get('accion')
+        
+        if accion == 'regenerar':
+            version_nombre = request.form.get('version_nombre', f'Regeneración {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            resultado = regenerador.regenerar_parcial(
+                version_nombre=version_nombre,
+                creado_por=current_user.id
+            )
+            
+            if resultado['exito']:
+                flash(f"✅ {resultado['mensaje']}. Backup ID: {resultado['backup_id']}", 'success')
+            else:
+                flash(f"❌ Error: {'; '.join(resultado['errores'])}", 'error')
+            
+            return redirect(url_for('admin_horario_grupos'))
+        
+        elif accion == 'ignorar':
+            from models import HistorialCambioDisponibilidad
+            HistorialCambioDisponibilidad.query.filter_by(
+                profesor_id=profesor_id,
+                procesado=False
+            ).update({'procesado': True}, synchronize_session=False)
+            db.session.commit()
+            flash('Cambios ignorados. Los horarios se mantienen sin modificar.', 'info')
+            return redirect(url_for('admin_horario_grupos'))
+    
+    return render_template('admin/regenerar_parcial.html',
+                         profesor=profesor,
+                         resumen=resumen)
+
+
+@app.route('/jefe/horarios/regenerar-parcial/<int:profesor_id>', methods=['GET', 'POST'])
+@login_required
+def regenerar_parcial_jefe(profesor_id):
+    """Vista para regenerar horarios de un profesor (jefe de carrera)"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from regenerador_parcial import RegeneradorParcial
+    
+    profesor = User.query.get_or_404(profesor_id)
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    
+    # Verificar que el profesor pertenece a las carreras del jefe
+    profesor_carreras = [c.id for c in profesor.carreras]
+    if not any(cid in carrera_ids for cid in profesor_carreras):
+        flash('Este profesor no pertenece a tus carreras.', 'error')
+        return redirect(url_for('jefe_ver_horarios_profesores'))
+    
+    regenerador = RegeneradorParcial(profesor_id)
+    regenerador.detectar_horarios_afectados()
+    resumen = regenerador.get_resumen_conflictos()
+    
+    # Filtrar solo conflictos de las carreras del jefe
+    # (en una implementación más robusta filtrar por carrera)
+    
+    if request.method == 'POST':
+        accion = request.form.get('accion')
+        
+        if accion == 'regenerar':
+            version_nombre = request.form.get('version_nombre', f'Regeneración Jefe {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            resultado = regenerador.regenerar_parcial(
+                version_nombre=version_nombre,
+                creado_por=current_user.id
+            )
+            
+            if resultado['exito']:
+                flash(f"✅ {resultado['mensaje']}. Backup ID: {resultado['backup_id']}", 'success')
+            else:
+                flash(f"❌ Error: {'; '.join(resultado['errores'])}", 'error')
+            
+            return redirect(url_for('jefe_ver_horarios_grupos'))
+        
+        elif accion == 'ignorar':
+            from models import HistorialCambioDisponibilidad
+            HistorialCambioDisponibilidad.query.filter_by(
+                profesor_id=profesor_id,
+                procesado=False
+            ).update({'procesado': True}, synchronize_session=False)
+            db.session.commit()
+            flash('Cambios ignorados. Los horarios se mantienen sin modificar.', 'info')
+            return redirect(url_for('jefe_ver_horarios_grupos'))
+    
+    return render_template('jefe/jefe_regenerar_parcial.html',
+                         profesor=profesor,
+                         resumen=resumen)
+
+
+@app.route('/admin/horarios/versiones')
+@login_required
+def listar_versiones_admin():
+    """Listar todas las versiones/backups de horarios (admin) - agrupadas por carrera"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario, Carrera, User
+    import json
+    
+    # Obtener todas las carreras
+    carreras = Carrera.query.order_by(Carrera.nombre).all()
+    
+    # Estructura para agrupar versiones por carrera
+    versiones_por_carrera = {}
+    
+    for carrera in carreras:
+        # Obtener las últimas 10 versiones activas de esta carrera
+        versiones = VersionHorario.query.filter(
+            VersionHorario.activo == True,
+            VersionHorario.carrera_id == carrera.id
+        ).order_by(VersionHorario.fecha_creacion.desc()).limit(10).all()
+        
+        if versiones:
+            versiones_data = []
+            for v in versiones:
+                datos_backup = json.loads(v.datos_horarios) if v.datos_horarios else []
+                horarios_count = len(datos_backup)
+                grupos_lista = list(set(d.get('grupo') for d in datos_backup if d.get('grupo')))
+                grupos_lista.sort()
+                creador = User.query.get(v.creado_por) if v.creado_por else None
+                
+                versiones_data.append({
+                    'version': v,
+                    'horarios_count': horarios_count,
+                    'grupos': grupos_lista,
+                    'creador_nombre': creador.get_nombre_completo() if creador else 'Sistema'
+                })
+            
+            versiones_por_carrera[carrera.nombre] = {
+                'carrera_id': carrera.id,
+                'versiones': versiones_data
+            }
+    
+    # También agregar versiones sin carrera asignada (si las hay)
+    versiones_sin_carrera = VersionHorario.query.filter(
+        VersionHorario.activo == True,
+        VersionHorario.carrera_id == None
+    ).order_by(VersionHorario.fecha_creacion.desc()).limit(10).all()
+    
+    if versiones_sin_carrera:
+        versiones_data = []
+        for v in versiones_sin_carrera:
+            datos_backup = json.loads(v.datos_horarios) if v.datos_horarios else []
+            horarios_count = len(datos_backup)
+            grupos_lista = list(set(d.get('grupo') for d in datos_backup if d.get('grupo')))
+            grupos_lista.sort()
+            creador = User.query.get(v.creado_por) if v.creado_por else None
+            
+            versiones_data.append({
+                'version': v,
+                'horarios_count': horarios_count,
+                'grupos': grupos_lista,
+                'creador_nombre': creador.get_nombre_completo() if creador else 'Sistema'
+            })
+        
+        versiones_por_carrera['Sin carrera asignada'] = {
+            'carrera_id': None,
+            'versiones': versiones_data
+        }
+    
+    return render_template('admin/versiones_horarios.html', versiones_por_carrera=versiones_por_carrera)
+
+
+@app.route('/admin/horarios/versiones/<int:version_id>/descargar/excel')
+@login_required
+def descargar_version_excel_admin(version_id):
+    """Descargar horarios de una versión en Excel (Admin)"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario, Materia, User, Horario
+    import json
+    
+    version = VersionHorario.query.get_or_404(version_id)
+    
+    # Usar datos del backup JSON
+    datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
+    
+    # Ordenar: por grupo, día de la semana (L-V), y hora
+    dias_orden = {'lunes': 1, 'martes': 2, 'miercoles': 3, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sabado': 6, 'sábado': 6}
+    
+    def get_orden(d):
+        dia = d.get('dia_semana', '').lower()
+        hora_str = '00:00'
+        if d.get('horario_id'):
+            horario = Horario.query.get(d['horario_id'])
+            if horario:
+                hora_str = horario.hora_inicio.strftime('%H:%M')
+        return (dias_orden.get(dia, 99), hora_str)
+    
+    # Organizar por grupo
+    horarios_por_grupo = {}
+    for d in datos_backup:
+        grupo = d.get('grupo', 'Sin grupo')
+        if grupo not in horarios_por_grupo:
+            horarios_por_grupo[grupo] = []
+        horarios_por_grupo[grupo].append(d)
+    
+    # Ordenar dentro de cada grupo
+    for grupo in horarios_por_grupo:
+        horarios_por_grupo[grupo] = sorted(horarios_por_grupo[grupo], key=get_orden)
+    
+    # Crear Excel
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    wb = Workbook()
+    wb.remove(wb.active)
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1e3c72", end_color="1e3c72", fill_type="solid")
+    grupo_font = Font(bold=True, color="FFFFFF", size=14)
+    grupo_fill = PatternFill(start_color="2a5298", end_color="2a5298", fill_type="solid")
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    headers = ['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor']
+    
+    for grupo in sorted(horarios_por_grupo.keys()):
+        horarios_grupo = horarios_por_grupo[grupo]
+        sheet_name = grupo[:31] if len(grupo) > 31 else grupo
+        try:
+            ws = wb.create_sheet(title=sheet_name)
+        except ValueError:
+            # Si el nombre ya existe (raro), usar sufijo
+            ws = wb.create_sheet(title=f"{sheet_name}_")
+            
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        grupo_cell = ws.cell(row=1, column=1, value=f"📚 Horarios - Grupo: {grupo}")
+        grupo_cell.font = grupo_font
+        grupo_cell.fill = grupo_fill
+        grupo_cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 30
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        row = 4
+        for d in horarios_grupo:
+            horario = Horario.query.get(d.get('horario_id')) if d.get('horario_id') else None
+            materia = Materia.query.get(d.get('materia_id')) if d.get('materia_id') else None
+            profesor = User.query.get(d.get('profesor_id')) if d.get('profesor_id') else None
+            
+            ws.cell(row=row, column=1, value=d.get('dia_semana', '').capitalize()).border = thin_border
+            ws.cell(row=row, column=2, value=horario.hora_inicio.strftime('%H:%M') if horario else '').border = thin_border
+            ws.cell(row=row, column=3, value=horario.hora_fin.strftime('%H:%M') if horario else '').border = thin_border
+            ws.cell(row=row, column=4, value=materia.nombre if materia else '').border = thin_border
+            ws.cell(row=row, column=5, value=profesor.get_nombre_completo() if profesor else '').border = thin_border
+            row += 1
+            
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 12
+        ws.column_dimensions['C'].width = 12
+        ws.column_dimensions['D'].width = 45
+        ws.column_dimensions['E'].width = 35
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"horarios_{version.nombre_version.replace(' ', '_')}_admin.xlsx"
+    return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=filename)
+
+
+@app.route('/admin/horarios/versiones/<int:version_id>/descargar/pdf')
+@login_required
+def descargar_version_pdf_admin(version_id):
+    """Descargar horarios de una versión en PDF (Admin)"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario, Materia, User, Horario
+    import json
+    
+    version = VersionHorario.query.get_or_404(version_id)
+    datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
+    
+    dias_orden = {'lunes': 1, 'martes': 2, 'miercoles': 3, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sabado': 6, 'sábado': 6}
+    
+    def get_orden(d):
+        dia = d.get('dia_semana', '').lower()
+        hora_str = '00:00'
+        if d.get('horario_id'):
+            horario = Horario.query.get(d['horario_id'])
+            if horario:
+                hora_str = horario.hora_inicio.strftime('%H:%M')
+        return (dias_orden.get(dia, 99), hora_str)
+    
+    horarios_por_grupo = {}
+    for d in datos_backup:
+        grupo = d.get('grupo', 'Sin grupo')
+        if grupo not in horarios_por_grupo:
+            horarios_por_grupo[grupo] = []
+            
+        horario = Horario.query.get(d.get('horario_id')) if d.get('horario_id') else None
+        materia = Materia.query.get(d.get('materia_id')) if d.get('materia_id') else None
+        profesor = User.query.get(d.get('profesor_id')) if d.get('profesor_id') else None
+        
+        horarios_por_grupo[grupo].append({
+            'dia_semana': d.get('dia_semana', ''),
+            'hora_inicio': horario.hora_inicio.strftime('%H:%M') if horario else '-',
+            'hora_fin': horario.hora_fin.strftime('%H:%M') if horario else '-',
+            'materia': materia.nombre if materia else '-',
+            'profesor': profesor.get_nombre_completo() if profesor else '-',
+            '_orden': get_orden(d)
+        })
+    
+    for grupo in horarios_por_grupo:
+        horarios_por_grupo[grupo] = sorted(horarios_por_grupo[grupo], key=lambda x: x['_orden'])
+    
+    html = render_template('exports/version_horarios_pdf.html', version=version, horarios_por_grupo=horarios_por_grupo, total_horarios=len(datos_backup), from_backup=True)
+    
+    from weasyprint import HTML
+    pdf = HTML(string=html, base_url=request.url_root).write_pdf()
+    
+    filename = f"horarios_{version.nombre_version.replace(' ', '_')}_admin.pdf"
+    return send_file(BytesIO(pdf), mimetype='application/pdf', as_attachment=True, download_name=filename)
+
+
+@app.route('/admin/horarios/versiones/<int:version_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_version_admin(version_id):
+    """Eliminar una versión de horarios (Admin)"""
+    if not current_user.is_admin():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    from models import VersionHorario
+    
+    version = VersionHorario.query.get_or_404(version_id)
+    eliminar_horarios = request.form.get('eliminar_horarios') == 'true'
+    
+    try:
+        if eliminar_horarios:
+            HorarioAcademico.query.filter(HorarioAcademico.version_nombre.like(f"{version.nombre_version}%")).update({'activo': False}, synchronize_session=False)
+        
+        version.activo = False
+        db.session.commit()
+        flash(f"✅ Versión '{version.nombre_version}' eliminada correctamente.", 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f"❌ Error al eliminar: {str(e)}", 'error')
+    
+    return redirect(url_for('listar_versiones_admin'))
+
+
+@app.route('/jefe/horarios/versiones')
+@login_required  
+def listar_versiones_jefe():
+    """Listar versiones/backups de horarios de las carreras del jefe"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario
+    import json
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    
+    versiones = VersionHorario.query.filter(
+        VersionHorario.activo == True,
+        db.or_(
+            VersionHorario.carrera_id.in_(carrera_ids),
+            db.and_(VersionHorario.carrera_id.is_(None), VersionHorario.creado_por == current_user.id)
+        )
+    ).order_by(VersionHorario.fecha_creacion.desc()).limit(50).all()
+    
+    # Obtener grupos de las carreras del jefe para filtrar
+    from models import Grupo
+    grupos_jefe = [g.generar_codigo() for g in Grupo.query.filter(Grupo.carrera_id.in_(carrera_ids)).all()]
+    
+    # Para cada versión, calcular horarios y grupos desde el backup JSON
+    versiones_data = []
+    for v in versiones:
+        # Usar datos del backup JSON
+        datos_backup = json.loads(v.datos_horarios) if v.datos_horarios else []
+        
+        # Filtrar solo los grupos que pertenecen al jefe
+        datos_filtrados = [d for d in datos_backup if d.get('grupo') in grupos_jefe]
+        
+        # Contar horarios filtrados
+        horarios_count = len(datos_filtrados)
+        
+        # Obtener grupos únicos del backup
+        grupos_lista = list(set(d.get('grupo') for d in datos_filtrados if d.get('grupo')))
+        grupos_lista.sort()
+        
+        versiones_data.append({
+            'version': v,
+            'horarios_count': horarios_count,
+            'grupos': grupos_lista
+        })
+    
+    return render_template('jefe/jefe_versiones_horarios.html', versiones_data=versiones_data)
+
+
+@app.route('/admin/horarios/versiones/<int:version_id>/restaurar', methods=['POST'])
+@login_required
+def restaurar_version_admin(version_id):
+    """Restaurar una versión de horarios (admin)"""
+    if not current_user.is_admin():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    from regenerador_parcial import restaurar_version
+    
+    resultado = restaurar_version(version_id, creado_por=current_user.id)
+    
+    if resultado['exito']:
+        flash(f"✅ {resultado['mensaje']}", 'success')
+    else:
+        flash(f"❌ {resultado['mensaje']}", 'error')
+    
+    return redirect(url_for('listar_versiones_admin'))
+
+
+@app.route('/jefe/horarios/versiones/<int:version_id>/restaurar', methods=['POST'])
+@login_required
+def restaurar_version_jefe(version_id):
+    """Restaurar una versión de horarios (jefe)"""
+    if not current_user.is_jefe_carrera():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    from models import VersionHorario
+    from regenerador_parcial import restaurar_version
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    
+    # Verificar que la versión pertenece a las carreras del jefe
+    version = VersionHorario.query.get_or_404(version_id)
+    if version.carrera_id not in carrera_ids:
+        flash('Esta versión no pertenece a tus carreras.', 'error')
+        return redirect(url_for('listar_versiones_jefe'))
+    
+    resultado = restaurar_version(version_id, creado_por=current_user.id)
+    
+    if resultado['exito']:
+        flash(f"✅ {resultado['mensaje']}", 'success')
+    else:
+        flash(f"❌ {resultado['mensaje']}", 'error')
+    
+    return redirect(url_for('listar_versiones_jefe'))
+
+
+@app.route('/api/detectar-conflictos-disponibilidad', methods=['POST'])
+@login_required
+def api_detectar_conflictos():
+    """API para detectar conflictos cuando se cambia disponibilidad"""
+    if not current_user.is_admin() and not current_user.is_jefe_carrera():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    from regenerador_parcial import detectar_conflictos_disponibilidad
+    
+    data = request.get_json()
+    profesor_id = data.get('profesor_id')
+    
+    if not profesor_id:
+        return jsonify({'error': 'Falta profesor_id'}), 400
+    
+    resumen = detectar_conflictos_disponibilidad(profesor_id)
+    
+    return jsonify({
+        'success': True,
+        'tiene_conflictos': resumen['total_horarios_afectados'] > 0,
+        'resumen': resumen
+    })
+
+
+@app.route('/jefe/horarios/versiones/<int:version_id>/descargar/excel')
+@login_required
+def descargar_version_excel_jefe(version_id):
+    """Descargar horarios de una versión en Excel"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario, Grupo, Materia, User, Horario
+    import json
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    version = VersionHorario.query.get_or_404(version_id)
+    
+    if version.carrera_id and version.carrera_id not in carrera_ids:
+        flash('Esta versión no pertenece a tus carreras.', 'error')
+        return redirect(url_for('listar_versiones_jefe'))
+    
+    # Obtener grupos de las carreras del jefe para filtrar
+    grupos_jefe = [g.generar_codigo() for g in Grupo.query.filter(Grupo.carrera_id.in_(carrera_ids)).all()]
+    
+    # Usar datos del backup JSON en lugar de horarios activos
+    datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
+    
+    # Filtrar solo los grupos que pertenecen al jefe
+    datos_filtrados = [d for d in datos_backup if d.get('grupo') in grupos_jefe]
+    
+    # Ordenar: por grupo, día de la semana (L-V), y hora
+    dias_orden = {'lunes': 1, 'martes': 2, 'miercoles': 3, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sabado': 6, 'sábado': 6}
+    
+    def get_orden(d):
+        dia = d.get('dia_semana', '').lower()
+        # Obtener hora del horario_id
+        hora_str = '00:00'
+        if d.get('horario_id'):
+            horario = Horario.query.get(d['horario_id'])
+            if horario:
+                hora_str = horario.hora_inicio.strftime('%H:%M')
+        return (dias_orden.get(dia, 99), hora_str)
+    
+    # Organizar por grupo
+    horarios_por_grupo = {}
+    for d in datos_filtrados:
+        grupo = d.get('grupo', 'Sin grupo')
+        if grupo not in horarios_por_grupo:
+            horarios_por_grupo[grupo] = []
+        horarios_por_grupo[grupo].append(d)
+    
+    # Ordenar dentro de cada grupo
+    for grupo in horarios_por_grupo:
+        horarios_por_grupo[grupo] = sorted(horarios_por_grupo[grupo], key=get_orden)
+    
+    # Crear Excel
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    
+    wb = Workbook()
+    # Eliminar hoja por defecto
+    wb.remove(wb.active)
+    
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1e3c72", end_color="1e3c72", fill_type="solid")
+    grupo_font = Font(bold=True, color="FFFFFF", size=14)
+    grupo_fill = PatternFill(start_color="2a5298", end_color="2a5298", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    headers = ['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor']
+    
+    # Crear una hoja por grupo
+    for grupo in sorted(horarios_por_grupo.keys()):
+        horarios_grupo = horarios_por_grupo[grupo]
+        
+        # Crear hoja con nombre del grupo (máx 31 caracteres para Excel)
+        sheet_name = grupo[:31] if len(grupo) > 31 else grupo
+        ws = wb.create_sheet(title=sheet_name)
+        
+        # Título del grupo
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        grupo_cell = ws.cell(row=1, column=1, value=f"📚 Horarios - Grupo: {grupo}")
+        grupo_cell.font = grupo_font
+        grupo_cell.fill = grupo_fill
+        grupo_cell.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 30
+        
+        # Headers de columnas
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+        
+        # Datos del grupo desde backup
+        row = 4
+        for d in horarios_grupo:
+            # Obtener datos relacionados
+            horario = Horario.query.get(d.get('horario_id')) if d.get('horario_id') else None
+            materia = Materia.query.get(d.get('materia_id')) if d.get('materia_id') else None
+            profesor = User.query.get(d.get('profesor_id')) if d.get('profesor_id') else None
+            
+            ws.cell(row=row, column=1, value=d.get('dia_semana', '').capitalize()).border = thin_border
+            ws.cell(row=row, column=2, value=horario.hora_inicio.strftime('%H:%M') if horario else '').border = thin_border
+            ws.cell(row=row, column=3, value=horario.hora_fin.strftime('%H:%M') if horario else '').border = thin_border
+            ws.cell(row=row, column=4, value=materia.nombre if materia else '').border = thin_border
+            ws.cell(row=row, column=5, value=profesor.get_nombre_completo() if profesor else '').border = thin_border
+            row += 1
+        
+        # Ajustar anchos de columnas en esta hoja
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 12
+        ws.column_dimensions['C'].width = 12
+        ws.column_dimensions['D'].width = 45
+        ws.column_dimensions['E'].width = 35
+    
+    # Guardar en buffer
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"horarios_{version.nombre_version.replace(' ', '_')}.xlsx"
+    return send_file(
+        buffer,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/jefe/horarios/versiones/<int:version_id>/descargar/pdf')
+@login_required
+def descargar_version_pdf_jefe(version_id):
+    """Descargar horarios de una versión en PDF"""
+    if not current_user.is_jefe_carrera():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    from models import VersionHorario, Grupo, Materia, User, Horario
+    import json
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    version = VersionHorario.query.get_or_404(version_id)
+    
+    if version.carrera_id and version.carrera_id not in carrera_ids:
+        flash('Esta versión no pertenece a tus carreras.', 'error')
+        return redirect(url_for('listar_versiones_jefe'))
+    
+    # Obtener grupos de las carreras del jefe para filtrar
+    grupos_jefe = [g.generar_codigo() for g in Grupo.query.filter(Grupo.carrera_id.in_(carrera_ids)).all()]
+    
+    # Usar datos del backup JSON
+    datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
+    
+    # Filtrar solo los grupos que pertenecen al jefe
+    datos_filtrados = [d for d in datos_backup if d.get('grupo') in grupos_jefe]
+    
+    # Ordenar por día de la semana y hora
+    dias_orden = {'lunes': 1, 'martes': 2, 'miercoles': 3, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sabado': 6, 'sábado': 6}
+    
+    def get_orden(d):
+        dia = d.get('dia_semana', '').lower()
+        hora_str = '00:00'
+        if d.get('horario_id'):
+            horario = Horario.query.get(d['horario_id'])
+            if horario:
+                hora_str = horario.hora_inicio.strftime('%H:%M')
+        return (dias_orden.get(dia, 99), hora_str)
+    
+    # Organizar por grupo y convertir a datos formateados
+    horarios_por_grupo = {}
+    for d in datos_filtrados:
+        grupo = d.get('grupo', 'Sin grupo')
+        if grupo not in horarios_por_grupo:
+            horarios_por_grupo[grupo] = []
+        
+        # Obtener datos relacionados
+        horario = Horario.query.get(d.get('horario_id')) if d.get('horario_id') else None
+        materia = Materia.query.get(d.get('materia_id')) if d.get('materia_id') else None
+        profesor = User.query.get(d.get('profesor_id')) if d.get('profesor_id') else None
+        
+        horarios_por_grupo[grupo].append({
+            'dia_semana': d.get('dia_semana', ''),
+            'hora_inicio': horario.hora_inicio.strftime('%H:%M') if horario else '-',
+            'hora_fin': horario.hora_fin.strftime('%H:%M') if horario else '-',
+            'materia': materia.nombre if materia else '-',
+            'profesor': profesor.get_nombre_completo() if profesor else '-',
+            '_orden': get_orden(d)
+        })
+    
+    # Ordenar horarios dentro de cada grupo
+    for grupo in horarios_por_grupo:
+        horarios_por_grupo[grupo] = sorted(horarios_por_grupo[grupo], key=lambda x: x['_orden'])
+    
+    # Renderizar template y generar PDF
+    html = render_template('exports/version_horarios_pdf.html',
+                         version=version,
+                         horarios_por_grupo=horarios_por_grupo,
+                         total_horarios=len(datos_filtrados),
+                         from_backup=True)
+    
+    from weasyprint import HTML
+    pdf = HTML(string=html, base_url=request.url_root).write_pdf()
+    
+    filename = f"horarios_{version.nombre_version.replace(' ', '_')}.pdf"
+    return send_file(
+        BytesIO(pdf),
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/jefe/horarios/versiones/<int:version_id>/eliminar', methods=['POST'])
+@login_required
+def eliminar_version_jefe(version_id):
+    """Eliminar una versión y opcionalmente sus horarios"""
+    if not current_user.is_jefe_carrera():
+        return jsonify({'error': 'No tienes permisos'}), 403
+    
+    from models import VersionHorario, Grupo
+    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    version = VersionHorario.query.get_or_404(version_id)
+    
+    if version.carrera_id and version.carrera_id not in carrera_ids:
+        return jsonify({'error': 'Esta versión no pertenece a tus carreras'}), 403
+    
+    eliminar_horarios = request.form.get('eliminar_horarios') == 'true'
+    
+    try:
+        if eliminar_horarios:
+            # Obtener grupos de las carreras del jefe
+            grupos_jefe = [g.generar_codigo() for g in Grupo.query.filter(Grupo.carrera_id.in_(carrera_ids)).all()]
+            # Eliminar solo horarios de grupos del jefe
+            HorarioAcademico.query.filter(
+                HorarioAcademico.version_nombre.like(f"{version.nombre_version}%"),
+                HorarioAcademico.grupo.in_(grupos_jefe)
+            ).update({'activo': False}, synchronize_session=False)
+        
+        # Marcar versión como inactiva
+        version.activo = False
+        db.session.commit()
+        
+        flash(f"✅ Versión '{version.nombre_version}' eliminada correctamente.", 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f"❌ Error al eliminar: {str(e)}", 'error')
+    
+    return redirect(url_for('listar_versiones_jefe'))
 
 
 with app.app_context():

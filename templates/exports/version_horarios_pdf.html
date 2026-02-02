@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Horarios - {{ version.nombre_version }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 1.5cm;
+        }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 10pt;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #1e3c72;
+            padding-bottom: 10px;
+        }
+        .header h1 {
+            color: #1e3c72;
+            margin: 0;
+            font-size: 18pt;
+        }
+        .header .subtitle {
+            color: #666;
+            font-size: 10pt;
+            margin-top: 5px;
+        }
+        .grupo-section {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+        .grupo-header {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 8px 15px;
+            font-weight: bold;
+            font-size: 12pt;
+            border-radius: 5px 5px 0 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+        }
+        th {
+            background-color: #f0f0f0;
+            color: #333;
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        td {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            font-size: 9pt;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #999;
+            font-size: 8pt;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            text-align: center;
+            padding: 10px 20px;
+            background: #f5f5f5;
+            border-radius: 5px;
+        }
+        .stat-value {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+        .stat-label {
+            font-size: 8pt;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📅 Horarios Académicos</h1>
+        <div class="subtitle">Versión: {{ version.nombre_version }}</div>
+        <div class="subtitle">Generado: {{ version.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-box">
+            <div class="stat-value">{{ total_horarios }}</div>
+            <div class="stat-label">Total Clases</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ horarios_por_grupo|length }}</div>
+            <div class="stat-label">Grupos</div>
+        </div>
+    </div>
+
+    {% for grupo, horarios in horarios_por_grupo.items() | sort %}
+    <div class="grupo-section">
+        <div class="grupo-header">
+            📚 Grupo: {{ grupo }}
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 12%">Día</th>
+                    <th style="width: 10%">Hora Inicio</th>
+                    <th style="width: 10%">Hora Fin</th>
+                    <th style="width: 35%">Materia</th>
+                    <th style="width: 33%">Profesor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for h in horarios %}
+                <tr>
+                    {% if from_backup %}
+                    <td>{{ h.dia_semana | capitalize }}</td>
+                    <td>{{ h.hora_inicio }}</td>
+                    <td>{{ h.hora_fin }}</td>
+                    <td>{{ h.materia }}</td>
+                    <td>{{ h.profesor }}</td>
+                    {% else %}
+                    <td>{{ h.dia_semana | capitalize }}</td>
+                    <td>{{ h.horario.hora_inicio.strftime('%H:%M') if h.horario else '-' }}</td>
+                    <td>{{ h.horario.hora_fin.strftime('%H:%M') if h.horario else '-' }}</td>
+                    <td>{{ h.materia.nombre if h.materia else '-' }}</td>
+                    <td>{{ h.profesor.get_nombre_completo() if h.profesor else '-' }}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    <div class="footer">
+        Sistema de Gestión Académica - {{ version.nombre_version }} - Página 1
+    </div>
+</body>
+</html>

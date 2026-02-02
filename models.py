@@ -1193,3 +1193,117 @@ class BackupHistory(db.Model):
     def get_fecha_formateada(self):
         """Obtener fecha formateada"""
         return self.fecha_creacion.strftime('%Y-%m-%d %H:%M:%S') if self.fecha_creacion else 'N/A'
+
+
+class HistorialCambioDisponibilidad(db.Model):
+    """Registro de cambios en disponibilidad de profesores para detectar impacto en horarios"""
+    __tablename__ = 'historial_cambio_disponibilidad'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    profesor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    tipo_cambio = db.Column(db.String(20))  # 'agregado', 'eliminado', 'modificado'
+    dia_semana = db.Column(db.String(10))
+    horario_id = db.Column(db.Integer, db.ForeignKey('horario.id'))
+    disponibilidad_anterior = db.Column(db.Boolean)
+    disponibilidad_nueva = db.Column(db.Boolean)
+    fecha_cambio = db.Column(db.DateTime, default=datetime.utcnow)
+    procesado = db.Column(db.Boolean, default=False)  # Si ya se regeneraron los horarios
+    creado_por = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relaciones
+    profesor = db.relationship('User', foreign_keys=[profesor_id], backref=db.backref('historial_disponibilidad', lazy=True))
+    horario = db.relationship('Horario', backref=db.backref('historial_cambios', lazy=True))
+    creador = db.relationship('User', foreign_keys=[creado_por])
+    
+    def __init__(self, profesor_id, tipo_cambio, dia_semana, horario_id, 
+                 disponibilidad_anterior, disponibilidad_nueva, creado_por=None):
+        self.profesor_id = profesor_id
+        self.tipo_cambio = tipo_cambio
+        self.dia_semana = dia_semana
+        self.horario_id = horario_id
+        self.disponibilidad_anterior = disponibilidad_anterior
+        self.disponibilidad_nueva = disponibilidad_nueva
+        self.creado_por = creado_por
+    
+    def get_profesor_nombre(self):
+        """Obtener nombre del profesor"""
+        return self.profesor.get_nombre_completo() if self.profesor else 'N/A'
+    
+    def get_horario_info(self):
+        """Obtener información del horario"""
+        if self.horario:
+            return f"{self.dia_semana.title()} {self.horario.get_hora_inicio_str()}-{self.horario.get_hora_fin_str()}"
+        return 'N/A'
+    
+    def __repr__(self):
+        return f'<HistorialCambioDisponibilidad {self.get_profesor_nombre()} - {self.get_horario_info()}>'
+
+
+class VersionHorario(db.Model):
+    """Modelo para guardar copias de seguridad de horarios antes de regenerar"""
+    __tablename__ = 'version_horario'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre_version = db.Column(db.String(100), nullable=False)  # Ej: "Backup pre-regeneración 2026-02-01"
+    descripcion = db.Column(db.Text)  # Motivo del backup
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    creado_por = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # JSON con los datos de los horarios respaldados
+    datos_horarios = db.Column(db.Text, nullable=False)  # JSON serializado
+    
+    # Metadatos del backup
+    total_horarios = db.Column(db.Integer, default=0)
+    grupos_afectados = db.Column(db.String(500))  # Lista de códigos de grupos separados por coma
+    profesor_origen_id = db.Column(db.Integer, db.ForeignKey('user.id'))  # Si fue por cambio de disponibilidad
+    carrera_id = db.Column(db.Integer, db.ForeignKey('carrera.id'))  # Carrera relacionada
+    
+    # Estado
+    activo = db.Column(db.Boolean, default=True)
+    restaurado = db.Column(db.Boolean, default=False)  # Si ya se usó para restaurar
+    fecha_restauracion = db.Column(db.DateTime)
+    
+    # Relaciones
+    creador = db.relationship('User', foreign_keys=[creado_por], backref=db.backref('versiones_horarios_creadas', lazy=True))
+    profesor_origen = db.relationship('User', foreign_keys=[profesor_origen_id], backref=db.backref('versiones_por_cambio', lazy=True))
+    carrera = db.relationship('Carrera', backref=db.backref('versiones_horarios', lazy=True))
+    
+    def __init__(self, nombre_version, datos_horarios, total_horarios=0, grupos_afectados=None,
+                 descripcion=None, profesor_origen_id=None, carrera_id=None, creado_por=None):
+        self.nombre_version = nombre_version
+        self.datos_horarios = datos_horarios
+        self.total_horarios = total_horarios
+        self.grupos_afectados = grupos_afectados
+        self.descripcion = descripcion
+        self.profesor_origen_id = profesor_origen_id
+        self.carrera_id = carrera_id
+        self.creado_por = creado_por
+    
+    def get_grupos_lista(self):
+        """Obtener lista de grupos afectados"""
+        if self.grupos_afectados:
+            return self.grupos_afectados.split(',')
+        return []
+    
+    def get_horarios_data(self):
+        """Deserializar datos de horarios"""
+        import json
+        try:
+            return json.loads(self.datos_horarios)
+        except:
+            return []
+    
+    def get_fecha_formateada(self):
+        """Obtener fecha formateada"""
+        return self.fecha_creacion.strftime('%Y-%m-%d %H:%M') if self.fecha_creacion else 'N/A'
+    
+    def get_creador_nombre(self):
+        """Obtener nombre del creador"""
+        return self.creador.get_nombre_completo() if self.creador else 'Sistema'
+    
+    def get_profesor_origen_nombre(self):
+        """Obtener nombre del profesor que originó el cambio"""
+        return self.profesor_origen.get_nombre_completo() if self.profesor_origen else None
+    
+    def __repr__(self):
+        return f'<VersionHorario {self.nombre_version} - {self.total_horarios} horarios>'

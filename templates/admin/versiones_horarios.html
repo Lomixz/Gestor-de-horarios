@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de Versiones de Horarios - Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+        <div>
+            <h2 class="mb-0 fw-bold">
+                <i class="fas fa-history text-secondary me-2"></i>
+                Historial de Versiones de Horarios
+            </h2>
+            <p class="text-muted mb-0">Backups de generaciones de horarios organizados por carrera</p>
+        </div>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary mt-3 mt-md-0">
+            <i class="fas fa-arrow-left me-1"></i>Volver al Dashboard
+        </a>
+    </div>
+
+    {% if versiones_por_carrera %}
+        {% for carrera_nombre, data in versiones_por_carrera.items() %}
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-graduation-cap me-2"></i>
+                    {{ carrera_nombre }}
+                </h5>
+                <span class="badge bg-light text-primary">{{ data.versiones|length }} versiones</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Versión</th>
+                                <th>Fecha</th>
+                                <th>Creado por</th>
+                                <th class="text-center">Horarios</th>
+                                <th>Grupos</th>
+                                <th class="text-center">Descargar</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in data.versiones %}
+                            {% set version = item.version %}
+                            <tr>
+                                <td>
+                                    <strong>{{ version.nombre_version }}</strong>
+                                    {% if version.descripcion %}
+                                    <br><small class="text-muted">{{ version.descripcion[:40] }}{% if version.descripcion|length > 40 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="text-nowrap">{{ version.get_fecha_formateada() }}</span>
+                                </td>
+                                <td>{{ item.creador_nombre }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-info">{{ item.horarios_count }}</span>
+                                </td>
+                                <td>
+                                    {% for grupo in item.grupos[:3] %}
+                                    <span class="badge bg-secondary me-1">{{ grupo }}</span>
+                                    {% endfor %}
+                                    {% if item.grupos|length > 3 %}
+                                    <span class="text-muted small">+{{ item.grupos|length - 3 }} más</span>
+                                    {% endif %}
+                                    {% if item.grupos|length == 0 %}
+                                    <span class="text-muted small">Sin grupos</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if item.horarios_count > 0 %}
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('descargar_version_excel_admin', version_id=version.id) }}" 
+                                           class="btn btn-outline-success" title="Descargar Excel">
+                                            <i class="fas fa-file-excel"></i>
+                                        </a>
+                                        <a href="{{ url_for('descargar_version_pdf_admin', version_id=version.id) }}" 
+                                           class="btn btn-outline-danger" title="Descargar PDF">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted small">Sin datos</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        {% if item.horarios_count > 0 %}
+                                        <form method="POST" action="{{ url_for('restaurar_version_admin', version_id=version.id) }}"
+                                              style="display: inline;"
+                                              onsubmit="return confirm('¿Restaurar esta versión? Los horarios actuales de los grupos afectados serán reemplazados.')">
+                                            <button type="submit" class="btn btn-outline-primary" title="Restaurar">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        <button type="button" class="btn btn-outline-danger" 
+                                                onclick="confirmarEliminacion({{ version.id }}, '{{ version.nombre_version }}', {{ item.horarios_count }})"
+                                                title="Eliminar">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        No hay versiones de backup registradas.
+    </div>
+    {% endif %}
+
+    <!-- Info Card -->
+    <div class="card shadow-sm border-0 mt-4 bg-light">
+        <div class="card-body">
+            <h6 class="text-muted mb-3">
+                <i class="fas fa-info-circle me-2"></i>
+                Información para Administradores
+            </h6>
+            <ul class="small text-muted mb-0">
+                <li>Como administrador, puedes ver <strong>todas las versiones</strong> de todas las carreras</li>
+                <li>Las versiones se muestran <strong>agrupadas por carrera</strong></li>
+                <li>Se mantienen las últimas <strong>10 versiones por carrera</strong></li>
+                <li>Puedes descargar, restaurar o eliminar cualquier versión</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Eliminación -->
+<div class="modal fade" id="modalEliminar" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Eliminar Versión
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>¡Atención!</strong> Estás a punto de eliminar la versión:
+                </div>
+                
+                <div class="text-center mb-3">
+                    <h5 id="versionNombre" class="text-primary"></h5>
+                    <p class="text-muted">
+                        <span id="totalHorarios"></span> horarios registrados
+                    </p>
+                </div>
+                
+                <div class="border rounded p-3 bg-light">
+                    <h6 class="mb-3">Opciones de eliminación:</h6>
+                    
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="tipoEliminacion" id="soloVersion" value="solo_version" checked>
+                        <label class="form-check-label" for="soloVersion">
+                            <strong>Solo eliminar el registro de versión</strong>
+                            <br><small class="text-muted">Los horarios generados permanecerán activos en el sistema</small>
+                        </label>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tipoEliminacion" id="conHorarios" value="con_horarios">
+                        <label class="form-check-label text-danger" for="conHorarios">
+                            <strong>Eliminar versión Y todos sus horarios</strong>
+                            <br><small class="text-muted">⚠️ Los horarios serán desactivados y no podrán recuperarse</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
+                <form id="formEliminar" method="POST" style="display: inline;">
+                    <input type="hidden" name="eliminar_horarios" id="eliminarHorariosInput" value="false">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmarEliminacion(versionId, nombre, totalHorarios) {
+    document.getElementById('versionNombre').textContent = nombre;
+    document.getElementById('totalHorarios').textContent = totalHorarios;
+    document.getElementById('formEliminar').action = '/admin/horarios/versiones/' + versionId + '/eliminar';
+    
+    // Reset radio buttons
+    document.getElementById('soloVersion').checked = true;
+    document.getElementById('eliminarHorariosInput').value = 'false';
+    
+    // Mostrar modal
+    new bootstrap.Modal(document.getElementById('modalEliminar')).show();
+}
+
+// Actualizar valor cuando cambia la selección
+document.querySelectorAll('input[name="tipoEliminacion"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.getElementById('eliminarHorariosInput').value = this.value === 'con_horarios' ? 'true' : 'false';
+    });
+});
+</script>
+{% endblock %}

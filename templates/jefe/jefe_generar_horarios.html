@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Generar Horario - Jefe de Carrera{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-6">
+            <!-- Header -->
+            <div class="d-flex align-items-center mb-4">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-3">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div>
+                    <h2 class="mb-0 fw-bold">
+                        <i class="fas fa-calendar-plus text-primary me-2"></i>
+                        Generar Horario
+                    </h2>
+                    <p class="text-muted mb-0 small">Generar horario para un grupo individual</p>
+                </div>
+            </div>
+
+            <!-- Form Card -->
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-gradient-primary text-white py-3">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>
+                        Configuración de Generación
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="POST" id="formGenerar">
+                        <!-- Selector de Grupo -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-users me-1 text-primary"></i>
+                                Seleccionar Grupo
+                            </label>
+                            <select name="grupo_id" id="grupo_id" class="form-select form-select-lg" required>
+                                <option value="">-- Seleccione un grupo --</option>
+                                {% for carrera in carreras %}
+                                <optgroup label="{{ carrera.nombre }}">
+                                    {% for grupo in grupos if grupo.carrera_id == carrera.id %}
+                                    <option value="{{ grupo.id }}">
+                                        {{ grupo.codigo }} - Cuatrimestre {{ grupo.cuatrimestre }}
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Nombre de Versión -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-tag me-1 text-primary"></i>
+                                Nombre de la Versión (opcional)
+                            </label>
+                            <input type="text" name="version_nombre" class="form-control" 
+                                   placeholder="Ej: Versión Final 2025">
+                            <div class="form-text">
+                                Si no especifica un nombre, se generará automáticamente
+                            </div>
+                        </div>
+
+                        <!-- Días de la Semana -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-calendar-week me-1 text-primary"></i>
+                                Días de Clase
+                            </label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="dias_semana" 
+                                           id="dias_lv" value="lunes_viernes" checked>
+                                    <label class="form-check-label" for="dias_lv">
+                                        Lunes a Viernes
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="dias_semana" 
+                                           id="dias_ls" value="lunes_sabado">
+                                    <label class="form-check-label" for="dias_ls">
+                                        Lunes a Sábado
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Botón Submit -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="btnGenerar">
+                                <i class="fas fa-magic me-2"></i>
+                                Generar Horario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Resultado (si existe) -->
+            {% if resultado %}
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-header {% if resultado.exito %}bg-success{% else %}bg-danger{% endif %} text-white">
+                    <h5 class="mb-0">
+                        <i class="fas {% if resultado.exito %}fa-check-circle{% else %}fa-times-circle{% endif %} me-2"></i>
+                        Resultado de la Generación
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        <strong>Estado:</strong> 
+                        {% if resultado.exito %}
+                        <span class="badge bg-success">Exitoso</span>
+                        {% else %}
+                        <span class="badge bg-danger">Error</span>
+                        {% endif %}
+                    </p>
+                    <p class="mb-2">
+                        <strong>Mensaje:</strong> {{ resultado.mensaje }}
+                    </p>
+                    {% if resultado.horarios_generados %}
+                    <p class="mb-0">
+                        <strong>Horarios generados:</strong> {{ resultado.horarios_generados }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% if resultado.exito %}
+                <div class="card-footer bg-light">
+                    <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-table me-2"></i>
+                        Ver Horarios por Grupos
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Info Card -->
+            <div class="card shadow-sm border-0 mt-4 bg-light">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Información
+                    </h6>
+                    <ul class="small text-muted mb-0">
+                        <li>Solo puede generar horarios para grupos de su(s) carrera(s) asignada(s)</li>
+                        <li>El algoritmo asigna profesores según su disponibilidad registrada</li>
+                        <li>Los horarios generados pueden exportarse a PDF o Excel</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+}
+.form-select-lg {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+}
+</style>
+
+<script>
+document.getElementById('formGenerar').addEventListener('submit', function(e) {
+    const btn = document.getElementById('btnGenerar');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generando...';
+    btn.disabled = true;
+});
+</script>
+{% endblock %}

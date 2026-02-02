@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Generación Masiva de Horarios - Jefe de Carrera{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
+        <div class="d-flex align-items-center mb-3 mb-md-0">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-3">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div>
+                <h2 class="mb-0 fw-bold">
+                    <i class="fas fa-calendar-alt text-primary me-2"></i>
+                    Generación Masiva de Horarios
+                </h2>
+                <p class="text-muted mb-0 small">Seleccione los grupos para generar sus horarios</p>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary" id="btnSeleccionarTodos">
+                <i class="fas fa-check-square me-1"></i>Todos
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btnDeseleccionarTodos">
+                <i class="fas fa-square me-1"></i>Ninguno
+            </button>
+        </div>
+    </div>
+
+    <form method="POST" id="formGeneracionMasiva">
+        <div class="row">
+            <!-- Lista de Grupos -->
+            <div class="col-lg-8">
+                {% for carrera_nombre, cuatrimestres in grupos_organizados.items() %}
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-gradient-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-graduation-cap me-2"></i>
+                            {{ carrera_nombre }}
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% for cuatri, grupos in cuatrimestres.items() | sort %}
+                        <div class="mb-4">
+                            <h6 class="fw-bold text-primary mb-3">
+                                <i class="fas fa-layer-group me-1"></i>
+                                Cuatrimestre {{ cuatri }}
+                                <button type="button" class="btn btn-sm btn-outline-primary ms-2 btn-seleccionar-cuatri"
+                                        data-cuatri="{{ cuatri }}" data-carrera="{{ carrera_nombre }}">
+                                    <i class="fas fa-check-double me-1"></i>Todos
+                                </button>
+                            </h6>
+                            <div class="row g-2">
+                                {% for grupo in grupos %}
+                                <div class="col-6 col-md-4 col-lg-3">
+                                    <div class="form-check grupo-checkbox-container p-3 border rounded hover-shadow"
+                                         style="transition: all 0.2s ease;">
+                                        <input class="form-check-input grupo-checkbox" type="checkbox" 
+                                               name="grupos_ids[]" value="{{ grupo.id }}" 
+                                               id="grupo_{{ grupo.id }}"
+                                               data-cuatri="{{ cuatri }}" data-carrera="{{ carrera_nombre }}">
+                                        <label class="form-check-label fw-medium" for="grupo_{{ grupo.id }}">
+                                            {{ grupo.codigo }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% if not loop.last %}
+                        <hr class="my-3">
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    No hay grupos disponibles para generar horarios.
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Panel de Configuración -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 position-sticky" style="top: 20px;">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cog me-2"></i>
+                            Configuración
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Contador de selección -->
+                        <div class="alert alert-info mb-4">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong id="contadorSeleccion">0</strong> grupo(s) seleccionado(s)
+                        </div>
+
+                        <!-- Nombre de Versión -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-tag me-1"></i>
+                                Nombre de la Versión
+                            </label>
+                            <input type="text" name="version_nombre" class="form-control" 
+                                   placeholder="Ej: Versión Final 2025">
+                        </div>
+
+                        <!-- Días de la Semana -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-calendar-week me-1"></i>
+                                Días de Clase
+                            </label>
+                            <select name="dias_semana" class="form-select">
+                                <option value="lunes_viernes">Lunes a Viernes</option>
+                                <option value="lunes_sabado">Lunes a Sábado</option>
+                            </select>
+                        </div>
+
+                        <!-- Botón Submit -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg" id="btnGenerar">
+                                <i class="fas fa-magic me-2"></i>
+                                Generar Horarios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Progreso -->
+<div class="modal fade" id="modalProgreso" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-spinner fa-spin me-2"></i>
+                    Generando Horarios...
+                </h5>
+            </div>
+            <div class="modal-body text-center py-5">
+                <div class="progress mb-4" style="height: 25px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         id="progressBar" role="progressbar" style="width: 0%">
+                        0%
+                    </div>
+                </div>
+                <p class="mb-2"><strong>Grupo actual:</strong> <span id="grupoActual">-</span></p>
+                <p class="mb-0"><strong>Procesados:</strong> <span id="procesados">0</span> de <span id="totalGrupos">0</span></p>
+            </div>
+            <div class="modal-footer d-none" id="footerResultado">
+                <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-primary">
+                    <i class="fas fa-table me-2"></i>Ver Horarios Generados
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+}
+.hover-shadow:hover {
+    box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+.grupo-checkbox-container:has(.grupo-checkbox:checked) {
+    background-color: rgba(30, 60, 114, 0.1);
+    border-color: #1e3c72 !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.grupo-checkbox');
+    const contador = document.getElementById('contadorSeleccion');
+    const btnGenerar = document.getElementById('btnGenerar');
+    
+    function actualizarContador() {
+        const seleccionados = document.querySelectorAll('.grupo-checkbox:checked').length;
+        contador.textContent = seleccionados;
+        btnGenerar.disabled = seleccionados === 0;
+    }
+    
+    checkboxes.forEach(cb => cb.addEventListener('change', actualizarContador));
+    
+    // Seleccionar todos
+    document.getElementById('btnSeleccionarTodos').addEventListener('click', function() {
+        checkboxes.forEach(cb => cb.checked = true);
+        actualizarContador();
+    });
+    
+    // Deseleccionar todos
+    document.getElementById('btnDeseleccionarTodos').addEventListener('click', function() {
+        checkboxes.forEach(cb => cb.checked = false);
+        actualizarContador();
+    });
+    
+    // Seleccionar por cuatrimestre
+    document.querySelectorAll('.btn-seleccionar-cuatri').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cuatri = this.dataset.cuatri;
+            const carrera = this.dataset.carrera;
+            const cbs = document.querySelectorAll(
+                `.grupo-checkbox[data-cuatri="${cuatri}"][data-carrera="${carrera}"]`
+            );
+            const allChecked = Array.from(cbs).every(cb => cb.checked);
+            cbs.forEach(cb => cb.checked = !allChecked);
+            actualizarContador();
+        });
+    });
+    
+    // Submit con progreso
+    document.getElementById('formGeneracionMasiva').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const seleccionados = Array.from(document.querySelectorAll('.grupo-checkbox:checked'))
+            .map(cb => cb.value);
+        
+        if (seleccionados.length === 0) {
+            alert('Seleccione al menos un grupo');
+            return;
+        }
+        
+        const modal = new bootstrap.Modal(document.getElementById('modalProgreso'));
+        modal.show();
+        
+        document.getElementById('totalGrupos').textContent = seleccionados.length;
+        
+        // Iniciar generación
+        const formData = {
+            grupos_ids: seleccionados,
+            version_nombre: document.querySelector('[name="version_nombre"]').value,
+            dias_semana: document.querySelector('[name="dias_semana"]').value
+        };
+        
+        fetch('/api/jefe/iniciar-generacion-masiva', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+                modal.hide();
+                return;
+            }
+            // Polling de progreso
+            const interval = setInterval(() => {
+                fetch('/api/generacion-progreso')
+                .then(r => r.json())
+                .then(progreso => {
+                    const pct = Math.round((progreso.grupos_procesados / progreso.total_grupos) * 100);
+                    document.getElementById('progressBar').style.width = pct + '%';
+                    document.getElementById('progressBar').textContent = pct + '%';
+                    document.getElementById('grupoActual').textContent = progreso.codigo_grupo || '-';
+                    document.getElementById('procesados').textContent = progreso.grupos_procesados;
+                    
+                    if (progreso.completado) {
+                        clearInterval(interval);
+                        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+                        document.getElementById('progressBar').style.width = '100%';
+                        document.getElementById('progressBar').textContent = 'Completado';
+                        document.getElementById('footerResultado').classList.remove('d-none');
+                    }
+                });
+            }, 1000);
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al iniciar la generación');
+            modal.hide();
+        });
+    });
+    
+    actualizarContador();
+});
+</script>
+{% endblock %}
