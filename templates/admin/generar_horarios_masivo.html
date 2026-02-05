@@ -433,6 +433,104 @@ function cancelarYConfigurar() {
     window.location.href = '/admin/disponibilidad';
 }
 
+// ============================================
+// FUNCIONES PARA VERIFICAR HORARIOS EXISTENTES
+// ============================================
+
+// Función para verificar si hay horarios existentes
+function verificarHorariosExistentes(gruposIds) {
+    return fetch('/api/verificar-horarios-existentes', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ grupos_ids: gruposIds })
+    })
+    .then(response => response.json());
+}
+
+// Función para mostrar el modal de horarios existentes
+function mostrarModalHorariosExistentes(data, gruposIds) {
+    const gruposConHorarios = data.grupos_con_horarios || [];
+
+    // Construir lista de grupos
+    let listaHTML = '';
+    gruposConHorarios.forEach(grupo => {
+        listaHTML += `
+            <tr>
+                <td><strong>${grupo.codigo}</strong></td>
+                <td>${grupo.carrera}</td>
+                <td class="text-center"><span class="badge bg-warning">${grupo.total_horarios}</span></td>
+            </tr>
+        `;
+    });
+
+    document.getElementById('listaGruposConHorarios').innerHTML = listaHTML;
+    document.getElementById('cantidadConHorarios').textContent = gruposConHorarios.length;
+
+    // Guardar grupos para continuar después
+    window.gruposParaGenerarHorarios = gruposIds;
+
+    // Mostrar modal
+    document.getElementById('horariosExistentesModal').style.display = 'flex';
+}
+
+// Función para cerrar modal de horarios existentes
+function cerrarModalHorariosExistentes() {
+    document.getElementById('horariosExistentesModal').style.display = 'none';
+    // Rehabilitar botón
+    const btnGenerar = document.getElementById('btn-generar');
+    btnGenerar.disabled = false;
+    btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
+}
+
+// Función para continuar después de ver advertencia de horarios existentes
+function continuarConHorariosExistentes() {
+    document.getElementById('horariosExistentesModal').style.display = 'none';
+
+    const gruposIds = window.gruposParaGenerarHorarios;
+
+    // Continuar con la validación de disponibilidad
+    continuarConValidacionDisponibilidad(gruposIds);
+}
+
+// Función intermedia para validar disponibilidad (después de verificar horarios)
+function continuarConValidacionDisponibilidad(gruposIds) {
+    const btnGenerar = document.getElementById('btn-generar');
+    btnGenerar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validando disponibilidad...';
+
+    validarDisponibilidadProfesores(gruposIds)
+        .then(data => {
+            btnGenerar.disabled = false;
+            btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
+
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+
+            const profesoresSinDisp = data.profesores_sin_disponibilidad || [];
+            const versionNombre = document.getElementById('version_nombre').value;
+            const diasSemana = document.getElementById('dias_semana').value;
+
+            if (profesoresSinDisp.length > 0) {
+                // Mostrar modal de advertencia de disponibilidad
+                mostrarModalDisponibilidad(data, gruposIds);
+            } else {
+                // Todos tienen disponibilidad, iniciar generación directamente
+                iniciarGeneracionReal(gruposIds, versionNombre, diasSemana);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            btnGenerar.disabled = false;
+            btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
+            alert('Error al validar disponibilidad: ' + error.message);
+        });
+}
+
+// ============================================
+
 // Función que realmente inicia la generación
 function iniciarGeneracionReal(gruposIds, versionNombre, diasSemana) {
     const btnGenerar = document.getElementById('btn-generar');
@@ -490,50 +588,36 @@ document.getElementById('btn-generar').addEventListener('click', function(e) {
 
     // Recoger IDs de grupos seleccionados
     const gruposIds = Array.from(checkboxes).map(cb => cb.value);
-    const versionNombre = document.getElementById('version_nombre').value;
-    const diasSemana = document.getElementById('dias_semana').value;
 
     // Deshabilitar botón temporalmente
     const btnGenerar = document.getElementById('btn-generar');
     btnGenerar.disabled = true;
-    btnGenerar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validando...';
+    btnGenerar.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Verificando...';
 
-    // PASO 1: Validar disponibilidad de profesores
-    validarDisponibilidadProfesores(gruposIds)
+    // PASO 1: Verificar si hay horarios existentes
+    verificarHorariosExistentes(gruposIds)
         .then(data => {
-            btnGenerar.disabled = false;
-            btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
-
             if (data.error) {
+                btnGenerar.disabled = false;
+                btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
                 alert('Error: ' + data.error);
                 return;
             }
 
-            const profesoresSinDisp = data.profesores_sin_disponibilidad || [];
-
-            if (profesoresSinDisp.length > 0) {
-                // Mostrar modal de advertencia
-                mostrarModalDisponibilidad(data, gruposIds);
+            if (data.tiene_horarios_existentes) {
+                // Mostrar modal de advertencia de horarios existentes
+                mostrarModalHorariosExistentes(data, gruposIds);
             } else {
-                // Todos tienen disponibilidad, preguntar confirmación normal
-                const confirmacion = confirm(
-                    `🚀 ¿Generar horarios para ${seleccionados} grupo(s)?\n\n` +
-                    `✓ Todos los profesores tienen disponibilidad configurada\n` +
-                    `✓ Verás el progreso en tiempo real\n` +
-                    `⚠️ Los horarios anteriores se desactivarán\n\n` +
-                    `Este proceso puede tomar varios minutos.`
-                );
-
-                if (confirmacion) {
-                    iniciarGeneracionReal(gruposIds, versionNombre, diasSemana);
-                }
+                // No hay horarios existentes, continuar con validación de disponibilidad
+                continuarConValidacionDisponibilidad(gruposIds);
             }
         })
         .catch(error => {
             console.error('Error:', error);
             btnGenerar.disabled = false;
             btnGenerar.innerHTML = '<i class="fas fa-rocket me-2"></i>Generar Horarios Masivos';
-            alert('Error al validar disponibilidad de profesores');
+            // En caso de error, continuar con el flujo normal
+            continuarConValidacionDisponibilidad(gruposIds);
         });
 });
 
@@ -673,6 +757,65 @@ actualizarContador();
             <small class="text-muted d-block text-center mt-3">
                 <i class="fas fa-lightbulb me-1"></i>
                 Recomendación: Configura la disponibilidad para mejores resultados
+            </small>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Advertencia de Horarios Existentes -->
+<div id="horariosExistentesModal" class="modal-overlay" style="display: none;">
+    <div class="modal-disponibilidad">
+        <div class="modal-header-disponibilidad" style="background: linear-gradient(135deg, #f39c12 0%, #d35400 100%);">
+            <h4>
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Grupos con Horarios Existentes
+            </h4>
+        </div>
+        <div class="modal-body-disponibilidad">
+            <!-- Resumen -->
+            <div class="alert alert-warning mb-3">
+                <i class="fas fa-calendar-times me-2"></i>
+                <strong id="cantidadConHorarios">0</strong> grupo(s) ya tienen horarios generados.
+                Si continúas, estos serán <strong>reemplazados</strong>.
+            </div>
+
+            <!-- Lista de grupos -->
+            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th>Grupo</th>
+                            <th>Carrera</th>
+                            <th class="text-center">Horarios</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaGruposConHorarios">
+                        <!-- Se llena dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Botones -->
+            <div class="d-flex justify-content-between mt-4">
+                <button onclick="cerrarModalHorariosExistentes()" class="btn btn-secondary">
+                    <i class="fas fa-times me-1"></i>
+                    Cancelar
+                </button>
+                <div>
+                    <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-info me-2">
+                        <i class="fas fa-eye me-1"></i>
+                        Ir a Ver
+                    </a>
+                    <button onclick="continuarConHorariosExistentes()" class="btn btn-warning">
+                        <i class="fas fa-forward me-1"></i>
+                        Continuar
+                    </button>
+                </div>
+            </div>
+
+            <small class="text-muted d-block text-center mt-3">
+                <i class="fas fa-info-circle me-1"></i>
+                Al continuar, los horarios actuales serán reemplazados por los nuevos
             </small>
         </div>
     </div>

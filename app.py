@@ -4119,6 +4119,69 @@ def api_validar_disponibilidad_profesores():
     })
 
 
+@app.route('/api/verificar-horarios-existentes', methods=['POST'])
+@login_required
+def api_verificar_horarios_existentes():
+    """
+    API para verificar si los grupos seleccionados ya tienen horarios generados.
+    Muestra advertencia antes de sobrescribir horarios existentes.
+    """
+    if not current_user.is_admin() and not current_user.is_jefe_carrera():
+        return jsonify({'error': 'No tienes permisos'}), 403
+
+    data = request.get_json()
+    grupos_ids = data.get('grupos_ids', [])
+
+    if not grupos_ids:
+        return jsonify({'error': 'Selecciona al menos un grupo'}), 400
+
+    grupos_ids = [int(gid) for gid in grupos_ids]
+
+    # Si es jefe (y no admin), validar que los grupos sean de sus carreras
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
+        carrera_ids = current_user.get_carreras_jefe_ids()
+        grupos_validos = Grupo.query.filter(
+            Grupo.id.in_(grupos_ids),
+            Grupo.carrera_id.in_(carrera_ids)
+        ).all()
+        grupos_ids = [g.id for g in grupos_validos]
+
+    grupos_con_horarios = []
+    grupos_sin_horarios = []
+
+    for gid in grupos_ids:
+        grupo = Grupo.query.get(gid)
+        if not grupo:
+            continue
+
+        # Contar horarios activos de este grupo
+        total_horarios = HorarioAcademico.query.filter_by(
+            grupo=grupo.codigo, activo=True
+        ).count()
+
+        info_grupo = {
+            'grupo_id': grupo.id,
+            'codigo': grupo.codigo,
+            'carrera': grupo.carrera.nombre if grupo.carrera else 'Sin carrera',
+            'turno': grupo.get_turno_display(),
+            'total_horarios': total_horarios
+        }
+
+        if total_horarios > 0:
+            grupos_con_horarios.append(info_grupo)
+        else:
+            grupos_sin_horarios.append(info_grupo)
+
+    return jsonify({
+        'success': True,
+        'grupos_con_horarios': grupos_con_horarios,
+        'grupos_sin_horarios': grupos_sin_horarios,
+        'tiene_horarios_existentes': len(grupos_con_horarios) > 0,
+        'total_con_horarios': len(grupos_con_horarios),
+        'total_sin_horarios': len(grupos_sin_horarios)
+    })
+
+
 @app.route('/api/iniciar-generacion-masiva', methods=['POST'])
 @login_required
 def api_iniciar_generacion_masiva():
