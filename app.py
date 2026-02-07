@@ -3999,9 +3999,31 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
             else:
                 resultados['grupos_fallidos'] += 1
                 
+                # Guardar error detallado para mostrar en UI
+                with progreso_lock:
+                    if 'errores_detallados' not in generacion_progreso:
+                        generacion_progreso['errores_detallados'] = []
+                    generacion_progreso['errores_detallados'].append({
+                        'grupo': grupo.codigo,
+                        'error': resultado.get('mensaje', 'Error desconocido'),
+                        'errores_validacion': resultado.get('errores_validacion', [])
+                    })
+                    generacion_progreso['mensaje'] = f"❌ Error en {grupo.codigo}: {resultado.get('mensaje', 'Error desconocido')}"
+                
         except Exception as e:
             db.session.rollback()
             resultados['grupos_fallidos'] += 1
+            
+            # Guardar error de excepción en progreso
+            with progreso_lock:
+                if 'errores_detallados' not in generacion_progreso:
+                    generacion_progreso['errores_detallados'] = []
+                generacion_progreso['errores_detallados'].append({
+                    'grupo': grupo.codigo,
+                    'error': str(e),
+                    'errores_validacion': []
+                })
+                generacion_progreso['mensaje'] = f"❌ Error en {grupo.codigo}: {str(e)}"
             print(f"Error en grupo {grupo.codigo}: {e}")
     
     # Resumen final
