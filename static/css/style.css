@@ -101,6 +101,26 @@ body {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
+/* Desactivar TODOS los transform/animaciones cuando hay un modal abierto.
+   Esto evita que .card:hover mueva el DOM y cause parpadeo en el canvas de firma. */
+body.modal-open .card,
+body.modal-open .card:hover,
+.modal .card,
+.modal .card:hover,
+.modal-content,
+.modal-content:hover,
+.modal-dialog,
+.modal-dialog:hover {
+    transform: none !important;
+    animation: none !important;
+}
+
+/* Botones dentro del modal no deben moverse con hover */
+.modal .btn:hover,
+body.modal-open .btn:hover {
+    transform: none !important;
+}
+
 /* Jumbotron personalizado */
 .jumbotron {
     background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
@@ -171,7 +191,7 @@ footer {
     }
 }
 
-.card {
+.card:not(.modal-content) {
     animation: fadeIn 0.5s ease-out;
 }
 
@@ -203,6 +223,20 @@ footer {
 
 .card .btn:hover {
     transform: scale(1.05);
+}
+
+/* Canvas de firma: evitar seleccion, gestos y efectos del navegador */
+#canvasFirma {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    touch-action: none;
+    -ms-touch-action: none;
+}
+
+/* Botones dentro del modal no deben moverse con hover */
+.modal .btn:hover {
+    transform: none !important;
 }
 
 /* Separadores en estadísticas */

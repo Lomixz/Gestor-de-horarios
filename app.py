@@ -20,7 +20,7 @@ import pandas as pd
 from io import BytesIO, StringIO
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RlImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import csv
@@ -28,6 +28,7 @@ import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XlImage
 from reportlab.lib.pagesizes import letter, A4, landscape 
 import threading
 import time
@@ -5603,6 +5604,246 @@ def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# ========== RUTAS PARA FIRMAS DIGITALES ==========
+
+# Guardar firma dibujada en canvas (base64)
+@app.route('/guardar_firma_dibujada', methods=['POST'])
+@login_required
+def guardar_firma_dibujada():
+    """Guardar firma dibujada en canvas como imagen"""
+    import base64
+
+    try:
+        data = request.get_json()
+        if not data or 'firma' not in data:
+            return jsonify({'success': False, 'message': 'No se recibió la firma'}), 400
+
+        firma_base64 = data['firma']
+
+        # Validar que sea una imagen PNG en base64
+        if not firma_base64.startswith('data:image/png;base64,'):
+            return jsonify({'success': False, 'message': 'Formato de imagen inválido'}), 400
+
+        # Extraer datos base64
+        imagen_data = firma_base64.split(',')[1]
+        imagen_bytes = base64.b64decode(imagen_data)
+
+        # Generar nombre de archivo
+        filename = f"firma_{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+        # Crear directorio si no existe
+        upload_dir = os.path.join('static', 'uploads', 'firmas')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Guardar archivo
+        file_path = os.path.join(upload_dir, filename)
+        with open(file_path, 'wb') as f:
+            f.write(imagen_bytes)
+
+        # Eliminar firma anterior si existe
+        if current_user.firma:
+            old_file_path = os.path.join('static', 'uploads', 'firmas', current_user.firma)
+            if os.path.exists(old_file_path):
+                os.remove(old_file_path)
+
+        # Actualizar usuario
+        current_user.firma = filename
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Firma guardada exitosamente'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Subir firma del usuario actual
+@app.route('/subir_firma', methods=['POST'])
+@login_required
+def subir_firma():
+    """Subir firma digital del usuario actual"""
+    if 'firma' not in request.files:
+        flash('No se encontró el archivo de firma.', 'error')
+        return redirect(url_for('dashboard'))
+
+    file = request.files['firma']
+
+    if file.filename == '':
+        flash('No se seleccionó ningún archivo.', 'error')
+        return redirect(url_for('dashboard'))
+
+    if file and allowed_file(file.filename):
+        # Generar nombre único para el archivo
+        filename = secure_filename(f"firma_{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
+
+        # Crear directorio si no existe
+        upload_dir = os.path.join('static', 'uploads', 'firmas')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Guardar archivo
+        file_path = os.path.join(upload_dir, filename)
+        file.save(file_path)
+
+        # Eliminar firma anterior si existe
+        if current_user.firma:
+            old_file_path = os.path.join('static', 'uploads', 'firmas', current_user.firma)
+            if os.path.exists(old_file_path):
+                os.remove(old_file_path)
+
+        # Actualizar con nueva firma
+        current_user.firma = filename
+        db.session.commit()
+
+        flash('Firma digital actualizada exitosamente.', 'success')
+    else:
+        flash('Tipo de archivo no permitido. Solo se permiten imágenes (PNG, JPG, JPEG, GIF).', 'error')
+
+    return redirect(url_for('dashboard'))
+
+# Eliminar firma del usuario actual
+@app.route('/eliminar_firma', methods=['POST'])
+@login_required
+def eliminar_firma():
+    """Eliminar firma digital del usuario actual"""
+    if current_user.firma:
+        # Eliminar archivo físico
+        file_path = os.path.join('static', 'uploads', 'firmas', current_user.firma)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        # Actualizar base de datos
+        current_user.firma = None
+        db.session.commit()
+
+        flash('Firma digital eliminada exitosamente.', 'success')
+    else:
+        flash('No hay firma digital para eliminar.', 'warning')
+
+    return redirect(url_for('dashboard'))
+
+# Admin: Guardar firma dibujada de cualquier usuario
+@app.route('/admin/usuario/<int:id>/guardar_firma_dibujada', methods=['POST'])
+@login_required
+def admin_guardar_firma_dibujada(id):
+    """Admin guarda firma dibujada en canvas para un usuario"""
+    import base64
+
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos'}), 403
+
+    usuario = User.query.get_or_404(id)
+
+    try:
+        data = request.get_json()
+        if not data or 'firma' not in data:
+            return jsonify({'success': False, 'message': 'No se recibió la firma'}), 400
+
+        firma_base64 = data['firma']
+
+        if not firma_base64.startswith('data:image/png;base64,'):
+            return jsonify({'success': False, 'message': 'Formato de imagen inválido'}), 400
+
+        imagen_data = firma_base64.split(',')[1]
+        imagen_bytes = base64.b64decode(imagen_data)
+
+        filename = f"firma_{usuario.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+
+        upload_dir = os.path.join('static', 'uploads', 'firmas')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        file_path = os.path.join(upload_dir, filename)
+        with open(file_path, 'wb') as f:
+            f.write(imagen_bytes)
+
+        if usuario.firma:
+            old_file_path = os.path.join('static', 'uploads', 'firmas', usuario.firma)
+            if os.path.exists(old_file_path):
+                os.remove(old_file_path)
+
+        usuario.firma = filename
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Firma guardada exitosamente'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Admin: Subir firma de cualquier usuario
+@app.route('/admin/usuario/<int:id>/subir_firma', methods=['POST'])
+@login_required
+def admin_subir_firma_usuario(id):
+    """Admin sube/reemplaza firma de un usuario"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para realizar esta acción.', 'error')
+        return redirect(url_for('dashboard'))
+
+    usuario = User.query.get_or_404(id)
+
+    if 'firma' not in request.files:
+        flash('No se encontró el archivo de firma.', 'error')
+        return redirect(url_for('editar_usuario', id=id))
+
+    file = request.files['firma']
+
+    if file.filename == '':
+        flash('No se seleccionó ningún archivo.', 'error')
+        return redirect(url_for('editar_usuario', id=id))
+
+    if file and allowed_file(file.filename):
+        # Generar nombre único para el archivo
+        filename = secure_filename(f"firma_{usuario.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
+
+        # Crear directorio si no existe
+        upload_dir = os.path.join('static', 'uploads', 'firmas')
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Guardar archivo
+        file_path = os.path.join(upload_dir, filename)
+        file.save(file_path)
+
+        # Eliminar firma anterior si existe
+        if usuario.firma:
+            old_file_path = os.path.join('static', 'uploads', 'firmas', usuario.firma)
+            if os.path.exists(old_file_path):
+                os.remove(old_file_path)
+
+        # Actualizar con nueva firma
+        usuario.firma = filename
+        db.session.commit()
+
+        flash(f'Firma de {usuario.get_nombre_completo()} actualizada exitosamente.', 'success')
+    else:
+        flash('Tipo de archivo no permitido. Solo se permiten imágenes (PNG, JPG, JPEG, GIF).', 'error')
+
+    return redirect(url_for('editar_usuario', id=id))
+
+# Admin: Eliminar firma de cualquier usuario
+@app.route('/admin/usuario/<int:id>/eliminar_firma', methods=['POST'])
+@login_required
+def admin_eliminar_firma_usuario(id):
+    """Admin elimina firma de un usuario"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para realizar esta acción.', 'error')
+        return redirect(url_for('dashboard'))
+
+    usuario = User.query.get_or_404(id)
+
+    if usuario.firma:
+        # Eliminar archivo físico
+        file_path = os.path.join('static', 'uploads', 'firmas', usuario.firma)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        # Actualizar base de datos
+        usuario.firma = None
+        db.session.commit()
+
+        flash(f'Firma de {usuario.get_nombre_completo()} eliminada exitosamente.', 'success')
+    else:
+        flash('El usuario no tiene firma digital para eliminar.', 'warning')
+
+    return redirect(url_for('editar_usuario', id=id))
+
+# ========== FIN RUTAS PARA FIRMAS DIGITALES ==========
+
 # Exportar Reportes - PDF
 @app.route('/admin/reportes/exportar/pdf')
 @login_required
@@ -7074,93 +7315,192 @@ def exportar_jefe_fda_profesor(profesor_nombre):
 
 def _generar_excel_horario_profesor(profesor_nombre):
     """
-    Función auxiliar interna que genera y retorna el archivo Excel del horario
-    con formato de cuadrícula donde cada hora tiene su propia fila.
+    Genera el archivo Excel del horario del profesor con formato de plantilla FDA (Carga Horaria).
     """
     try:
         # =====================================================================
-        # 1. OBTENER DATOS REALES DEL PROFESOR
+        # 1. OBTENER DATOS
         # =====================================================================
         profesor = User.query.filter(
-            (User.nombre + ' ' + User.apellido_paterno + ' ' + func.coalesce(User.apellido_materno, '')) == profesor_nombre
+            (User.nombre + ' ' + User.apellido) == profesor_nombre
         ).first()
-        
-        if not profesor:
-            # Intentar buscar solo con nombre y apellido paterno
-            profesor = User.query.filter(
-                (User.nombre + ' ' + User.apellido_paterno) == profesor_nombre
-            ).first()
-        
+
         if not profesor:
             return "Profesor no encontrado", 404
 
-        # Obtener horarios reales del profesor
         asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
-        
-        # Determinar si tiene sábado
-        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-        
-        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-        if tiene_sabado:
-            dias_semana.append('Sábado')
-        
-        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+        admin = User.query.filter_by(rol='admin').first()
+
+        # Periodo académico
+        periodo_academico = asignaciones[0].periodo_academico if asignaciones and asignaciones[0].periodo_academico else ''
+        anio_plan = str(datetime.now().year)
+
+        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                     'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
+        es_asignatura = profesor.rol == 'profesor_asignatura'
+        es_tc = profesor.rol == 'profesor_completo'
+
+        # Firmas
+        firma_profesor_path = None
+        if profesor.firma:
+            path = os.path.join('static', 'uploads', 'firmas', profesor.firma)
+            if os.path.exists(path):
+                firma_profesor_path = path
+
+        firma_admin_path = None
+        if admin and admin.firma:
+            path = os.path.join('static', 'uploads', 'firmas', admin.firma)
+            if os.path.exists(path):
+                firma_admin_path = path
+
         # =====================================================================
-        # 2. CREACIÓN DEL EXCEL CON FORMATO DE CUADRÍCULA
+        # 2. CREACIÓN DEL EXCEL CON FORMATO FDA
         # =====================================================================
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Horario Profesor"
-        
-        # Estilos
-        header_fill = PatternFill(start_color='1e3c72', end_color='1e3c72', fill_type='solid')
-        header_font = Font(bold=True, color='FFFFFF', size=11)
-        title_font = Font(bold=True, size=16)
-        hora_fill = PatternFill(start_color='f8f9fa', end_color='f8f9fa', fill_type='solid')
-        hora_font = Font(bold=True, size=10)
-        cell_border = Border(
-            left=Side(style='thin', color='dee2e6'),
-            right=Side(style='thin', color='dee2e6'),
-            top=Side(style='thin', color='dee2e6'),
-            bottom=Side(style='thin', color='dee2e6')
+        ws.title = "Carga Horaria"
+
+        # --- Estilos ---
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin')
         )
+        header_fill = PatternFill(start_color='4a4a4a', end_color='4a4a4a', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF', size=9, name='Century Gothic')
+        title_font = Font(bold=True, size=14, name='Century Gothic')
+        label_font = Font(bold=True, size=9, name='Century Gothic')
+        normal_font = Font(size=9, name='Century Gothic')
+        small_font = Font(size=8, name='Century Gothic')
         center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        
-        # Título
-        ws.merge_cells('A1:G1')
-        title_cell = ws['A1']
-        title_cell.value = f'Horario de {profesor_nombre}'
-        title_cell.font = title_font
-        title_cell.alignment = center_align
-        
-        # Información del profesor
-        ws['A3'] = 'Tipo:'
-        ws['B3'] = profesor.tipo_profesor or 'No especificado'
-        
-        # Encabezados de la cuadrícula (fila 5)
-        headers = ['Hora'] + dias_semana
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=5, column=col, value=header)
+        left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
+
+        # --- Anchos de columna ---
+        ws.column_dimensions['A'].width = 14
+        for col_letter in ['B', 'C', 'D', 'E', 'F', 'G', 'H']:
+            ws.column_dimensions[col_letter].width = 16
+        for col_letter in ['I', 'J', 'K']:
+            ws.column_dimensions[col_letter].width = 14
+
+        # =====================================================================
+        # ENCABEZADO (Filas 1-8)
+        # =====================================================================
+        # Fila 1: Título "Carga Horaria"
+        ws.merge_cells('D1:H1')
+        cell = ws['D1']
+        cell.value = 'Carga Horaria'
+        cell.font = title_font
+        cell.alignment = center_align
+
+        # Fila 2: Área, Vigencia, Código
+        ws.merge_cells('B2:C2')
+        ws['B2'].value = 'Área: Dirección Académica'
+        ws['B2'].font = label_font
+        ws['B2'].alignment = center_align
+        ws['B2'].border = thin_border
+        ws['C2'].border = thin_border
+
+        ws.merge_cells('D2:E2')
+        ws['D2'].value = 'Vigencia:'
+        ws['D2'].font = label_font
+        ws['D2'].alignment = center_align
+        ws['D2'].border = thin_border
+        ws['E2'].border = thin_border
+
+        ws.merge_cells('I2:K2')
+        ws['I2'].value = 'Código: FDA-02.5'
+        ws['I2'].font = label_font
+        ws['I2'].alignment = center_align
+        ws['I2'].border = thin_border
+        ws['J2'].border = thin_border
+        ws['K2'].border = thin_border
+
+        # Fila 4: Nombre del profesor y tipo
+        ws.merge_cells('B4:E4')
+        ws['B4'].value = profesor_nombre.upper()
+        ws['B4'].font = Font(bold=True, size=10, name='Century Gothic')
+        ws['B4'].alignment = left_align
+
+        ws['F4'].value = 'Prof. Asignatura'
+        ws['F4'].font = label_font
+        ws['F4'].alignment = center_align
+        ws['F4'].border = thin_border
+
+        ws['G4'].value = 'X' if es_asignatura else ''
+        ws['G4'].font = label_font
+        ws['G4'].alignment = center_align
+        ws['G4'].border = thin_border
+
+        ws['I4'].value = 'Prof. Tiempo Completo'
+        ws['I4'].font = label_font
+        ws['I4'].alignment = center_align
+        ws['I4'].border = thin_border
+
+        ws['J4'].value = 'X' if es_tc else ''
+        ws['J4'].font = label_font
+        ws['J4'].alignment = center_align
+        ws['J4'].border = thin_border
+
+        # Fila 6: Periodo, Fecha de Inicio, Plan de Estudios
+        ws['A6'].value = 'Periodo:'
+        ws['A6'].font = label_font
+        ws.merge_cells('B6:C6')
+        ws['B6'].value = periodo_academico
+        ws['B6'].font = normal_font
+        ws['B6'].alignment = center_align
+        ws['B6'].border = thin_border
+        ws['C6'].border = thin_border
+
+        ws['D6'].value = 'Fecha de Inicio:'
+        ws['D6'].font = label_font
+        ws['D6'].border = thin_border
+        ws['E6'].value = ''
+        ws['E6'].border = thin_border
+
+        ws.merge_cells('F6:G6')
+        ws['F6'].value = 'Plan de Estudios:'
+        ws['F6'].font = label_font
+        ws['F6'].border = thin_border
+        ws['G6'].border = thin_border
+
+        ws['H6'].value = anio_plan
+        ws['H6'].font = normal_font
+        ws['H6'].alignment = center_align
+        ws['H6'].border = thin_border
+
+        # Fila 8: Instrucciones
+        ws.merge_cells('A8:K8')
+        ws['A8'].value = 'Instrucciones: Introducir nombre de la Asignatura, Salón y Grupo dentro de la celda correspondiente al día y la hora que será impartida.'
+        ws['A8'].font = Font(bold=True, size=8, name='Century Gothic')
+        ws['A8'].alignment = left_align
+
+        # =====================================================================
+        # CUADRÍCULA DE HORARIOS (Filas 11-67)
+        # =====================================================================
+        # Fila 11: Headers
+        grid_headers = ['Horario'] + dias_semana
+        for col, header in enumerate(grid_headers, 1):
+            cell = ws.cell(row=11, column=col, value=header)
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = center_align
-            cell.border = cell_border
-        
-        # Filas por hora (7:00 a 21:00)
-        row_num = 6
-        for hora in range(7, 21):
-            hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
-            
-            # Celda de hora
+            cell.border = thin_border
+
+        # Filas 12-67: 2 filas por hora (7:00 a 21:00)
+        row_num = 12
+        for hora in range(7, 22):
+            hora_str = f"{hora}:00"
+
+            # Primera fila del bloque horario
+            ws.merge_cells(start_row=row_num, start_column=1, end_row=row_num + 1, end_column=1)
             cell = ws.cell(row=row_num, column=1, value=hora_str)
-            cell.fill = hora_fill
-            cell.font = hora_font
+            cell.font = label_font
             cell.alignment = center_align
-            cell.border = cell_border
-            
-            # Celdas de cada día
+            cell.border = thin_border
+            ws.cell(row=row_num + 1, column=1).border = thin_border
+
+            # Celdas de cada día (merge 2 filas por día)
             for col, dia in enumerate(dias_semana, 2):
                 # Buscar clase para esta hora y día
                 clase_encontrada = None
@@ -7169,37 +7509,213 @@ def _generar_excel_horario_profesor(profesor_nombre):
                     if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
                         clase_encontrada = a
                         break
-                
+
+                ws.merge_cells(start_row=row_num, start_column=col, end_row=row_num + 1, end_column=col)
+
                 if clase_encontrada:
-                    contenido = f"{clase_encontrada.materia.nombre}\nGrupo: {clase_encontrada.grupo}"
+                    contenido = f"{clase_encontrada.materia.nombre} {clase_encontrada.grupo}"
                 else:
                     contenido = ""
-                
+
                 cell = ws.cell(row=row_num, column=col, value=contenido)
+                cell.font = small_font
                 cell.alignment = center_align
-                cell.border = cell_border
-            
-            row_num += 1
-        
-        # Ajustar anchos de columna
-        ws.column_dimensions['A'].width = 15
-        for col_letter in ['B', 'C', 'D', 'E', 'F', 'G']:
-            ws.column_dimensions[col_letter].width = 25
-        
-        # Ajustar altura de filas
-        for row in range(6, row_num):
-            ws.row_dimensions[row].height = 45
-        
-        # Calcular total de horas
+                cell.border = thin_border
+                ws.cell(row=row_num + 1, column=col).border = thin_border
+
+            ws.row_dimensions[row_num].height = 15
+            ws.row_dimensions[row_num + 1].height = 15
+            row_num += 2
+
+        # =====================================================================
+        # TABLA DE TIPOS DE HORAS
+        # =====================================================================
         total_horas = len(asignaciones)
-        ws.cell(row=row_num + 1, column=1, value='Total de horas:').font = Font(bold=True)
-        ws.cell(row=row_num + 1, column=2, value=total_horas).font = Font(bold=True)
-        
+        r = row_num + 1  # Fila de inicio de la tabla de horas
+
+        # Header
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
+        cell = ws.cell(row=r, column=1, value='Tipo de Horas')
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        ws.cell(row=r, column=2).border = thin_border
+
+        ws.cell(row=r, column=3, value='Horas')
+        ws.cell(row=r, column=3).fill = header_fill
+        ws.cell(row=r, column=3).font = header_font
+        ws.cell(row=r, column=3).alignment = center_align
+        ws.cell(row=r, column=3).border = thin_border
+
+        tipos_horas = [
+            ('Impartición de Curso', total_horas),
+            ('Asesoría', ''),
+            ('Tutoría', ''),
+            ('Apoyo a la Gestión', ''),
+            ('Dual', ''),
+            ('Investigación', ''),
+        ]
+
+        for i, (tipo, horas) in enumerate(tipos_horas, 1):
+            ws.merge_cells(start_row=r + i, start_column=1, end_row=r + i, end_column=2)
+            ws.cell(row=r + i, column=1, value=tipo).font = normal_font
+            ws.cell(row=r + i, column=1).alignment = left_align
+            ws.cell(row=r + i, column=1).border = thin_border
+            ws.cell(row=r + i, column=2).border = thin_border
+            cell_h = ws.cell(row=r + i, column=3, value=horas)
+            cell_h.font = normal_font
+            cell_h.alignment = center_align
+            cell_h.border = thin_border
+
+        # Total de horas
+        r_total = r + len(tipos_horas) + 1
+        ws.merge_cells(start_row=r_total, start_column=1, end_row=r_total, end_column=2)
+        ws.cell(row=r_total, column=1, value='Total de Horas').font = label_font
+        ws.cell(row=r_total, column=1).alignment = Alignment(horizontal='right', vertical='center')
+        ws.cell(row=r_total, column=1).border = thin_border
+        ws.cell(row=r_total, column=2).border = thin_border
+        ws.cell(row=r_total, column=3, value=total_horas).font = label_font
+        ws.cell(row=r_total, column=3).alignment = center_align
+        ws.cell(row=r_total, column=3).border = thin_border
+
+        # Nota
+        r_nota = r_total + 1
+        ws.merge_cells(start_row=r_nota, start_column=1, end_row=r_nota, end_column=4)
+        ws.cell(row=r_nota, column=1, value='*Solo llenar en caso de ser Profesor de Tiempo Completo').font = Font(italic=True, size=7, name='Century Gothic')
+
+        # =====================================================================
+        # SECCIÓN DE FIRMAS
+        # =====================================================================
+        r_firma = r_nota + 2
+
+        # Encabezados: Elaboró / Autorizó / Recibió
+        ws.merge_cells(start_row=r_firma, start_column=1, end_row=r_firma, end_column=3)
+        cell = ws.cell(row=r_firma, column=1, value='Elaboró:')
+        cell.fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+        cell.font = label_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        for c in range(2, 4):
+            ws.cell(row=r_firma, column=c).fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+            ws.cell(row=r_firma, column=c).border = thin_border
+
+        ws.merge_cells(start_row=r_firma, start_column=4, end_row=r_firma, end_column=6)
+        cell = ws.cell(row=r_firma, column=4, value='Autorizó:')
+        cell.fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+        cell.font = label_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        for c in range(5, 7):
+            ws.cell(row=r_firma, column=c).fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+            ws.cell(row=r_firma, column=c).border = thin_border
+
+        ws.merge_cells(start_row=r_firma, start_column=8, end_row=r_firma, end_column=11)
+        cell = ws.cell(row=r_firma, column=8, value='Recibió:')
+        cell.fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+        cell.font = label_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        for c in range(9, 12):
+            ws.cell(row=r_firma, column=c).fill = PatternFill(start_color='d9d9d9', end_color='d9d9d9', fill_type='solid')
+            ws.cell(row=r_firma, column=c).border = thin_border
+
+        # Nombres
+        r_nombre = r_firma + 1
+        ws.merge_cells(start_row=r_nombre, start_column=1, end_row=r_nombre, end_column=3)
+        ws.cell(row=r_nombre, column=1, value=profesor_nombre.upper()).font = label_font
+        ws.cell(row=r_nombre, column=1).alignment = center_align
+        ws.cell(row=r_nombre, column=1).border = thin_border
+        for c in range(2, 4):
+            ws.cell(row=r_nombre, column=c).border = thin_border
+
+        ws.merge_cells(start_row=r_nombre, start_column=4, end_row=r_nombre, end_column=6)
+        ws.cell(row=r_nombre, column=4, value='M. en E. Héctor Manuel Gómez Martínez').font = label_font
+        ws.cell(row=r_nombre, column=4).alignment = center_align
+        ws.cell(row=r_nombre, column=4).border = thin_border
+        for c in range(5, 7):
+            ws.cell(row=r_nombre, column=c).border = thin_border
+
+        admin_nombre = admin.get_nombre_completo().upper() if admin else ''
+        ws.merge_cells(start_row=r_nombre, start_column=8, end_row=r_nombre, end_column=11)
+        ws.cell(row=r_nombre, column=8, value=admin_nombre).font = label_font
+        ws.cell(row=r_nombre, column=8).alignment = center_align
+        ws.cell(row=r_nombre, column=8).border = thin_border
+        for c in range(9, 12):
+            ws.cell(row=r_nombre, column=c).border = thin_border
+
+        # Cargos
+        r_cargo = r_nombre + 1
+        tipo_prof_display = profesor.get_tipo_profesor_display().upper()
+        ws.merge_cells(start_row=r_cargo, start_column=1, end_row=r_cargo, end_column=3)
+        ws.cell(row=r_cargo, column=1, value=f'PROFESOR DE {tipo_prof_display}' if 'ASIGNATURA' in tipo_prof_display else f'PROFESOR {tipo_prof_display}').font = normal_font
+        ws.cell(row=r_cargo, column=1).alignment = center_align
+        ws.cell(row=r_cargo, column=1).border = thin_border
+        for c in range(2, 4):
+            ws.cell(row=r_cargo, column=c).border = thin_border
+
+        ws.merge_cells(start_row=r_cargo, start_column=4, end_row=r_cargo, end_column=6)
+        ws.cell(row=r_cargo, column=4, value='Director Académico').font = normal_font
+        ws.cell(row=r_cargo, column=4).alignment = center_align
+        ws.cell(row=r_cargo, column=4).border = thin_border
+        for c in range(5, 7):
+            ws.cell(row=r_cargo, column=c).border = thin_border
+
+        ws.merge_cells(start_row=r_cargo, start_column=8, end_row=r_cargo, end_column=11)
+        ws.cell(row=r_cargo, column=8, value='ADMINISTRADOR').font = normal_font
+        ws.cell(row=r_cargo, column=8).alignment = center_align
+        ws.cell(row=r_cargo, column=8).border = thin_border
+        for c in range(9, 12):
+            ws.cell(row=r_cargo, column=c).border = thin_border
+
+        # Espacio para firmas (imágenes)
+        r_espacio = r_cargo + 1
+        ws.row_dimensions[r_espacio].height = 60
+        for c in range(1, 12):
+            ws.cell(row=r_espacio, column=c).border = thin_border
+
+        # Insertar imagen de firma del profesor
+        if firma_profesor_path:
+            try:
+                img = XlImage(firma_profesor_path)
+                img.width = 150
+                img.height = 50
+                ws.add_image(img, f'A{r_espacio}')
+            except Exception:
+                pass
+
+        # Insertar imagen de firma del admin
+        if firma_admin_path:
+            try:
+                img = XlImage(firma_admin_path)
+                img.width = 150
+                img.height = 50
+                ws.add_image(img, f'H{r_espacio}')
+            except Exception:
+                pass
+
+        # Etiqueta "Firma"
+        r_label_firma = r_espacio + 1
+        ws.merge_cells(start_row=r_label_firma, start_column=1, end_row=r_label_firma, end_column=3)
+        ws.cell(row=r_label_firma, column=1, value='Firma').font = label_font
+        ws.cell(row=r_label_firma, column=1).alignment = center_align
+
+        ws.merge_cells(start_row=r_label_firma, start_column=4, end_row=r_label_firma, end_column=6)
+        ws.cell(row=r_label_firma, column=4, value='Firma').font = label_font
+        ws.cell(row=r_label_firma, column=4).alignment = center_align
+
+        ws.merge_cells(start_row=r_label_firma, start_column=8, end_row=r_label_firma, end_column=11)
+        ws.cell(row=r_label_firma, column=8, value='Firma').font = label_font
+        ws.cell(row=r_label_firma, column=8).alignment = center_align
+
+        # =====================================================================
+        # 3. GUARDAR Y ENVIAR
+        # =====================================================================
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido_paterno.replace(' ','_')}.xlsx"
+
+        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.xlsx"
         return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
     except Exception as e:
@@ -7230,98 +7746,223 @@ def exportar_jefe_excel_profesor(profesor_nombre):
 # =====================================================================
 def _generar_pdf_horario_profesor(profesor_nombre):
     """
-    Función auxiliar interna que genera y retorna el archivo PDF del horario
-    con formato de cuadrícula donde cada hora tiene su propia fila.
+    Genera el archivo PDF del horario del profesor con formato de plantilla FDA (Carga Horaria).
     """
     try:
-        # 1. OBTENER DATOS REALES DEL PROFESOR
+        # =====================================================================
+        # 1. OBTENER DATOS
+        # =====================================================================
         profesor = User.query.filter(
-            (User.nombre + ' ' + User.apellido_paterno + ' ' + func.coalesce(User.apellido_materno, '')) == profesor_nombre
+            (User.nombre + ' ' + User.apellido) == profesor_nombre
         ).first()
-        
-        if not profesor:
-            profesor = User.query.filter(
-                (User.nombre + ' ' + User.apellido_paterno) == profesor_nombre
-            ).first()
-        
+
         if not profesor:
             return "Profesor no encontrado", 404
 
-        # Obtener horarios reales del profesor
         asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
-        
-        # Determinar si tiene sábado
-        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-        
-        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
-        if tiene_sabado:
-            dias_semana.append('Sábado')
-        
-        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+        admin = User.query.filter_by(rol='admin').first()
+
+        periodo_academico = asignaciones[0].periodo_academico if asignaciones and asignaciones[0].periodo_academico else ''
+        anio_plan = str(datetime.now().year)
+
+        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                     'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
+        es_asignatura = profesor.rol == 'profesor_asignatura'
+        es_tc = profesor.rol == 'profesor_completo'
+        total_horas = len(asignaciones)
+
+        # Firmas
+        firma_profesor_path = None
+        if profesor.firma:
+            path = os.path.join('static', 'uploads', 'firmas', profesor.firma)
+            if os.path.exists(path):
+                firma_profesor_path = path
+
+        firma_admin_path = None
+        if admin and admin.firma:
+            path = os.path.join('static', 'uploads', 'firmas', admin.firma)
+            if os.path.exists(path):
+                firma_admin_path = path
+
+        # =====================================================================
         # 2. CREAR PDF
+        # =====================================================================
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=20, bottomMargin=20, leftMargin=30, rightMargin=30)
         elements = []
         styles = getSampleStyleSheet()
-        
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=18, alignment=1, spaceAfter=20)
-        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, alignment=1, spaceAfter=15)
-        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=10, alignment=1)
-        
-        # Título
-        elements.append(Paragraph(f"Horario de: {profesor_nombre}", title_style))
-        
-        tipo_profesor = profesor.tipo_profesor or 'No especificado'
-        elements.append(Paragraph(f"Tipo: {tipo_profesor}", subtitle_style))
-        
-        # Crear tabla de cuadrícula
-        data = [['Hora'] + dias_semana]
-        
-        for hora in range(7, 21):
-            hora_str = f"{hora:02d}:00 - {hora+1:02d}:00"
-            row = [hora_str]
-            
+
+        # Estilos personalizados
+        title_style = ParagraphStyle('FDATitle', parent=styles['Heading1'], fontSize=14, alignment=1, spaceAfter=5, fontName='Helvetica-Bold')
+        label_style = ParagraphStyle('FDALabel', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=1)
+        normal_style = ParagraphStyle('FDANormal', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=1)
+        cell_style = ParagraphStyle('FDACell', parent=styles['Normal'], fontSize=7, leading=9, alignment=1, fontName='Helvetica')
+        small_style = ParagraphStyle('FDASmall', parent=styles['Normal'], fontSize=6, fontName='Helvetica', alignment=1)
+        left_style = ParagraphStyle('FDALeft', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=0)
+        note_style = ParagraphStyle('FDANote', parent=styles['Normal'], fontSize=6, fontName='Helvetica-Oblique', alignment=0)
+
+        # =====================================================================
+        # ENCABEZADO
+        # =====================================================================
+        elements.append(Paragraph('Carga Horaria', title_style))
+
+        # Info row: Área | Vigencia | Código
+        tipo_check = f"Prof. Asignatura: {'X' if es_asignatura else '  '}    |    Prof. Tiempo Completo: {'X' if es_tc else '  '}"
+        header_data = [
+            [Paragraph('<b>Área:</b> Dirección Académica', label_style),
+             Paragraph('<b>Vigencia:</b>', label_style),
+             Paragraph('<b>Código:</b> FDA-02.5', label_style)],
+            ['', '', ''],
+            [Paragraph(f'<b>{profesor_nombre.upper()}</b>', ParagraphStyle('Name', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=0)),
+             '',
+             Paragraph(tipo_check, label_style)],
+            ['', '', ''],
+            [Paragraph(f'<b>Periodo:</b> {periodo_academico}', label_style),
+             Paragraph('<b>Fecha de Inicio:</b>', label_style),
+             Paragraph(f'<b>Plan de Estudios:</b> {anio_plan}', label_style)],
+        ]
+
+        header_table = Table(header_data, colWidths=[3.5*inch, 3.5*inch, 3.5*inch])
+        header_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, 0), 0.5, colors.grey),
+            ('BOX', (0, 2), (-1, 2), 0.5, colors.grey),
+            ('BOX', (0, 4), (-1, 4), 0.5, colors.grey),
+            ('ROWHEIGHTS', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(header_table)
+        elements.append(Spacer(1, 3))
+
+        elements.append(Paragraph('<b>Instrucciones:</b> Introducir nombre de la Asignatura, Salón y Grupo dentro de la celda correspondiente al día y la hora que será impartida.', ParagraphStyle('Inst', parent=styles['Normal'], fontSize=7, fontName='Helvetica', spaceAfter=5)))
+
+        # =====================================================================
+        # CUADRÍCULA DE HORARIOS
+        # =====================================================================
+        grid_data = [[Paragraph('<b>Horario</b>', label_style)] + [Paragraph(f'<b>{d}</b>', label_style) for d in dias_semana]]
+
+        for hora in range(7, 22):
+            hora_str = f"{hora}:00"
+            row = [Paragraph(f'<b>{hora_str}</b>', label_style)]
+
             for dia in dias_semana:
                 contenido = ""
                 for a in asignaciones:
                     dia_correcto = dias_map.get(a.dia_semana.lower(), '')
                     if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
-                        contenido = f"{a.materia.nombre}<br/><font size='7'>Grupo: {a.grupo}</font>"
+                        contenido = f"{a.materia.nombre} {a.grupo}"
                         break
                 row.append(Paragraph(contenido, cell_style))
-            
-            data.append(row)
-        
-        # Calcular anchos de columna
-        col_widths = [1.0*inch] + [1.4*inch] * len(dias_semana)
-        
-        table = Table(data, colWidths=col_widths)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.118, 0.235, 0.447)),
+
+            grid_data.append(row)
+
+        col_widths = [0.8*inch] + [1.5*inch] * 6
+        grid_table = Table(grid_data, colWidths=col_widths)
+
+        dark_bg = colors.Color(0.29, 0.29, 0.29)
+        grid_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), dark_bg),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.97, 0.97, 0.98)),
-            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 1), (0, -1), 8),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.95, 0.95, 0.95)),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.87, 0.89, 0.90)),
-            ('ROWHEIGHTS', (0, 1), (-1, -1), 45),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.75, 0.75, 0.75)),
+            ('ROWHEIGHTS', (0, 0), (-1, -1), 22),
         ]))
-        
-        elements.append(table)
-        
-        # Total de horas
-        total_horas = len(asignaciones)
-        elements.append(Paragraph(f"<br/><b>Total de horas asignadas: {total_horas}</b>", styles['Normal']))
-        
+        elements.append(grid_table)
+        elements.append(Spacer(1, 8))
+
+        # =====================================================================
+        # TABLA DE TIPOS DE HORAS
+        # =====================================================================
+        horas_data = [
+            [Paragraph('<b>Tipo de Horas</b>', label_style), Paragraph('<b>Horas</b>', label_style)],
+            [Paragraph('Impartición de Curso', left_style), Paragraph(str(total_horas), normal_style)],
+            [Paragraph('Asesoría', left_style), ''],
+            [Paragraph('Tutoría', left_style), ''],
+            [Paragraph('Apoyo a la Gestión', left_style), ''],
+            [Paragraph('Dual', left_style), ''],
+            [Paragraph('Investigación', left_style), ''],
+            [Paragraph('<b>Total de Horas</b>', ParagraphStyle('R', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=2)), Paragraph(f'<b>{total_horas}</b>', label_style)],
+        ]
+
+        horas_table = Table(horas_data, colWidths=[2.5*inch, 1.0*inch])
+        horas_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), dark_bg),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.75, 0.75, 0.75)),
+            ('ROWHEIGHTS', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(horas_table)
+        elements.append(Paragraph('*Solo llenar en caso de ser Profesor de Tiempo Completo', note_style))
+        elements.append(Spacer(1, 10))
+
+        # =====================================================================
+        # SECCIÓN DE FIRMAS
+        # =====================================================================
+        tipo_prof_display = profesor.get_tipo_profesor_display().upper()
+        cargo_profesor = f'PROFESOR DE {tipo_prof_display}' if 'ASIGNATURA' in tipo_prof_display else f'PROFESOR {tipo_prof_display}'
+        admin_nombre = admin.get_nombre_completo().upper() if admin else ''
+
+        # Preparar imágenes de firma
+        firma_prof_elem = ''
+        if firma_profesor_path:
+            try:
+                firma_prof_elem = RlImage(firma_profesor_path, width=1.3*inch, height=0.5*inch)
+            except Exception:
+                firma_prof_elem = ''
+
+        firma_admin_elem = ''
+        if firma_admin_path:
+            try:
+                firma_admin_elem = RlImage(firma_admin_path, width=1.3*inch, height=0.5*inch)
+            except Exception:
+                firma_admin_elem = ''
+
+        firma_data = [
+            [Paragraph('<b>Elaboró:</b>', label_style),
+             Paragraph('<b>Autorizó:</b>', label_style),
+             Paragraph('<b>Recibió:</b>', label_style)],
+            [Paragraph(f'<b>{profesor_nombre.upper()}</b>', label_style),
+             Paragraph('<b>M. en E. Héctor Manuel Gómez Martínez</b>', label_style),
+             Paragraph(f'<b>{admin_nombre}</b>', label_style)],
+            [Paragraph(cargo_profesor, small_style),
+             Paragraph('Director Académico', small_style),
+             Paragraph('ADMINISTRADOR', small_style)],
+            [firma_prof_elem if firma_prof_elem else '',
+             '',
+             firma_admin_elem if firma_admin_elem else ''],
+            [Paragraph('Firma', label_style),
+             Paragraph('Firma', label_style),
+             Paragraph('Firma', label_style)],
+        ]
+
+        firma_table = Table(firma_data, colWidths=[3.3*inch, 3.3*inch, 3.3*inch])
+        firma_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.85, 0.85, 0.85)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (0, -1), 0.5, colors.grey),
+            ('BOX', (1, 0), (1, -1), 0.5, colors.grey),
+            ('BOX', (2, 0), (2, -1), 0.5, colors.grey),
+            ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.grey),
+            ('ROWHEIGHTS', (0, 3), (-1, 3), 45),
+        ]))
+        elements.append(firma_table)
+
+        # =====================================================================
+        # 3. GUARDAR Y ENVIAR
+        # =====================================================================
         doc.build(elements)
         buffer.seek(0)
-        
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido_paterno.replace(' ','_')}.pdf"
+
+        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.pdf"
         return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
     except Exception as e:

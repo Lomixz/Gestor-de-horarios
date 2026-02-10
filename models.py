@@ -189,7 +189,8 @@ class User(UserMixin, db.Model):
     apellido = db.Column(db.String(100), nullable=False)
     telefono = db.Column(db.String(20))
     imagen_perfil = db.Column(db.String(200))  # Ruta de la imagen de perfil
-    
+    firma = db.Column(db.String(200))  # Ruta de la firma digital
+
     # Rol del usuario (campo legacy - se mantendrá para compatibilidad)
     rol = db.Column(db.String(20), nullable=False)
     # Para profesores: especifica si es de tiempo completo o por asignatura
@@ -260,7 +261,7 @@ class User(UserMixin, db.Model):
     
     # ==========================================================
     
-    def __init__(self, username, email, password, nombre, apellido, rol, telefono=None, tipo_profesor=None, carreras=None, imagen_perfil=None, carrera_id=None, requiere_cambio_password=False, password_temporal=None):
+    def __init__(self, username, email, password, nombre, apellido, rol, telefono=None, tipo_profesor=None, carreras=None, imagen_perfil=None, firma=None, carrera_id=None, requiere_cambio_password=False, password_temporal=None):
         self.username = username
         self.email = email
         self.set_password(password)
@@ -272,6 +273,7 @@ class User(UserMixin, db.Model):
         if carreras:
             self.carreras = carreras
         self.imagen_perfil = imagen_perfil
+        self.firma = firma
         self.carrera_id = carrera_id
         self.requiere_cambio_password = requiere_cambio_password
         self.password_temporal = password_temporal
@@ -343,7 +345,13 @@ class User(UserMixin, db.Model):
         if self.imagen_perfil and os.path.exists(os.path.join('static', 'uploads', 'perfiles', self.imagen_perfil)):
             return f'/static/uploads/perfiles/{self.imagen_perfil}'
         return None  # Retornar None para usar ícono por defecto
-    
+
+    def get_firma_url(self):
+        """Obtener URL de la firma digital o None si no existe"""
+        if self.firma and os.path.exists(os.path.join('static', 'uploads', 'firmas', self.firma)):
+            return f'/static/uploads/firmas/{self.firma}'
+        return None
+
     def get_carrera_nombre(self):
         """Obtener nombre de la(s) carrera(s)"""
         if not self.carreras:

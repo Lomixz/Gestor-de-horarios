@@ -100,6 +100,50 @@
                         {% endif %}
                     </div>
                 </div>
+
+                <!-- Sección Firma Digital -->
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="text-center mb-3">
+                        <i class="fas fa-signature me-1"></i>Mi Firma Digital
+                    </h6>
+                    <div class="text-center">
+                        {% if current_user.get_firma_url() %}
+                            <img src="{{ current_user.get_firma_url() }}"
+                                 alt="Firma digital"
+                                 class="img-fluid mb-2"
+                                 style="max-height: 80px; border: 1px solid #dee2e6; padding: 5px; background: #fff;">
+                        {% else %}
+                            <p class="text-muted small mb-2">
+                                <i class="fas fa-pen-fancy me-1"></i>Sin firma registrada
+                            </p>
+                        {% endif %}
+
+                        <div class="mt-2">
+                            <!-- Botón para abrir modal de dibujar firma -->
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="abrirModalFirma()">
+                                <i class="fas fa-pen me-1"></i>
+                                Dibujar Firma
+                            </button>
+
+                            <!-- Botón para subir imagen de firma -->
+                            <form action="{{ url_for('subir_firma') }}" method="post" enctype="multipart/form-data" class="d-inline">
+                                <input type="file" class="form-control form-control-sm" id="firma" name="firma"
+                                       accept="image/*" style="display: none;" onchange="this.form.submit()">
+                                <label for="firma" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fas fa-upload me-1"></i>
+                                    Subir Imagen
+                                </label>
+                            </form>
+                            {% if current_user.get_firma_url() %}
+                                <button class="btn btn-outline-danger btn-sm ms-1" onclick="eliminarFirma()">
+                                    <i class="fas fa-trash me-1"></i>
+                                    Eliminar
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
                 <table class="table table-borderless">
                     <tr>
                         <td><strong>Nombre:</strong></td>
@@ -520,6 +564,9 @@
     </div>
 </div>
 
+<!-- Modal para Dibujar Firma - Se crea dinámicamente -->
+<div id="modalFirmaContainer"></div>
+
 <script>
 // Función para eliminar imagen de perfil
 function eliminarImagenPerfil() {
@@ -527,7 +574,7 @@ function eliminarImagenPerfil() {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/eliminar_imagen_perfil';
-        
+
         // Agregar token CSRF si es necesario
         const csrfToken = document.querySelector('input[name="csrf_token"]');
         if (csrfToken) {
@@ -537,11 +584,253 @@ function eliminarImagenPerfil() {
             csrfInput.value = csrfToken.value;
             form.appendChild(csrfInput);
         }
-        
+
         document.body.appendChild(form);
         form.submit();
     }
 }
+
+// Función para eliminar firma digital
+function eliminarFirma() {
+    if (confirm('¿Estás seguro de que quieres eliminar tu firma digital?')) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/eliminar_firma';
+
+        // Agregar token CSRF si es necesario
+        const csrfToken = document.querySelector('input[name="csrf_token"]');
+        if (csrfToken) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfToken.value;
+            form.appendChild(csrfInput);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// ========== CANVAS PARA DIBUJAR FIRMA (Versión con modal dinámico) ==========
+var firmaCanvas = null;
+var firmaCtx = null;
+var firmaDrawing = false;
+var firmaLastX = 0, firmaLastY = 0;
+var firmaModal = null;
+
+function abrirModalFirma() {
+    // Crear modal HTML dinámicamente
+    var modalHTML = `
+        <div class="modal fade" id="modalDibujarFirma" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title"><i class="fas fa-pen-fancy me-2"></i>Dibujar Mi Firma</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small text-center mb-2">
+                            <i class="fas fa-info-circle me-1"></i>Dibuja tu firma con el mouse o dedo
+                        </p>
+                        <div id="canvasWrapper" style="background:#fff; border:1px solid #ccc; border-radius:4px; padding:8px;">
+                            <canvas id="canvasFirma" style="display:block; width:100%; height:150px; cursor:crosshair; border:1px dashed #999; touch-action:none; background:#fff;" draggable="false"></canvas>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div>
+                                <label class="small me-1">Grosor:</label>
+                                <input type="range" id="grosorFirma" min="1" max="5" value="2" style="width:60px; vertical-align:middle;">
+                            </div>
+                            <div>
+                                <label class="small me-1">Color:</label>
+                                <input type="color" id="colorFirma" value="#000000" style="width:30px; height:20px; vertical-align:middle;">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-warning btn-sm" id="btnLimpiarFirma">
+                            <i class="fas fa-eraser me-1"></i>Borrar
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarFirma">
+                            <i class="fas fa-save me-1"></i>Guardar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insertar modal en el body
+    var container = document.getElementById('modalFirmaContainer');
+    container.innerHTML = modalHTML;
+
+    // Obtener referencia al modal
+    var modalEl = document.getElementById('modalDibujarFirma');
+
+    // Configurar canvas cuando el modal esté completamente visible
+    modalEl.addEventListener('shown.bs.modal', function() {
+        inicializarCanvasFirmaLocal();
+    });
+
+    // Limpiar cuando se cierre
+    modalEl.addEventListener('hidden.bs.modal', function() {
+        container.innerHTML = '';
+        firmaCanvas = null;
+        firmaCtx = null;
+    });
+
+    // Mostrar modal
+    firmaModal = new bootstrap.Modal(modalEl);
+    firmaModal.show();
+}
+
+function inicializarCanvasFirmaLocal() {
+    var wrapper = document.getElementById('canvasWrapper');
+    firmaCanvas = document.getElementById('canvasFirma');
+
+    // Configurar tamaño
+    firmaCanvas.width = wrapper.clientWidth - 16;
+    firmaCanvas.height = 150;
+
+    firmaCtx = firmaCanvas.getContext('2d');
+
+    // Fondo blanco
+    firmaCtx.fillStyle = '#ffffff';
+    firmaCtx.fillRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+
+    // Estilo de línea
+    firmaCtx.strokeStyle = '#000000';
+    firmaCtx.lineWidth = 2;
+    firmaCtx.lineCap = 'round';
+    firmaCtx.lineJoin = 'round';
+
+    function obtenerPuntoCanvas(e) {
+        var rect = firmaCanvas.getBoundingClientRect();
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    }
+
+    function iniciarDibujo(e) {
+        e.preventDefault();
+        firmaDrawing = true;
+        var punto = obtenerPuntoCanvas(e);
+        firmaLastX = punto.x;
+        firmaLastY = punto.y;
+        if (firmaCanvas.setPointerCapture) {
+            firmaCanvas.setPointerCapture(e.pointerId);
+        }
+    }
+
+    function dibujar(e) {
+        if (!firmaDrawing) return;
+        e.preventDefault();
+        var punto = obtenerPuntoCanvas(e);
+
+        firmaCtx.beginPath();
+        firmaCtx.moveTo(firmaLastX, firmaLastY);
+        firmaCtx.lineTo(punto.x, punto.y);
+        firmaCtx.stroke();
+
+        firmaLastX = punto.x;
+        firmaLastY = punto.y;
+    }
+
+    function finalizarDibujo(e) {
+        if (!firmaDrawing) return;
+        e.preventDefault();
+        firmaDrawing = false;
+        if (firmaCanvas.releasePointerCapture) {
+            try {
+                firmaCanvas.releasePointerCapture(e.pointerId);
+            } catch (error) {
+                // Ignorar si el puntero ya no esta capturado
+            }
+        }
+    }
+
+    firmaCanvas.addEventListener('pointerdown', iniciarDibujo);
+    firmaCanvas.addEventListener('pointermove', dibujar);
+    firmaCanvas.addEventListener('pointerup', finalizarDibujo);
+    firmaCanvas.addEventListener('pointercancel', finalizarDibujo);
+    window.addEventListener('pointerup', finalizarDibujo);
+    firmaCanvas.addEventListener('dragstart', function(e) {
+        e.preventDefault();
+    });
+
+    // Controles
+    document.getElementById('colorFirma').onchange = function() {
+        firmaCtx.strokeStyle = this.value;
+    };
+
+    document.getElementById('grosorFirma').oninput = function() {
+        firmaCtx.lineWidth = this.value;
+    };
+
+    // Botones
+    document.getElementById('btnLimpiarFirma').onclick = function() {
+        firmaCtx.fillStyle = '#ffffff';
+        firmaCtx.fillRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+        firmaCtx.strokeStyle = document.getElementById('colorFirma').value;
+        firmaCtx.lineWidth = document.getElementById('grosorFirma').value;
+    };
+
+    document.getElementById('btnGuardarFirma').onclick = function() {
+        // Verificar si está vacío
+        var imageData = firmaCtx.getImageData(0, 0, firmaCanvas.width, firmaCanvas.height);
+        var pixels = imageData.data;
+        var isEmpty = true;
+
+        for (var i = 0; i < pixels.length; i += 4) {
+            if (pixels[i] !== 255 || pixels[i+1] !== 255 || pixels[i+2] !== 255) {
+                isEmpty = false;
+                break;
+            }
+        }
+
+        if (isEmpty) {
+            alert('Por favor, dibuja tu firma antes de guardar.');
+            return;
+        }
+
+        var firmaBase64 = firmaCanvas.toDataURL('image/png');
+
+        fetch('/guardar_firma_dibujada', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ firma: firmaBase64 })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.success) {
+                firmaModal.hide();
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(function(error) {
+            console.error('Error:', error);
+            alert('Error al guardar la firma.');
+        });
+    };
+}
+
+// Funciones legacy para compatibilidad (por si se llaman desde otro lugar)
+function limpiarCanvasFirma() {
+    if (firmaCtx && firmaCanvas) {
+        firmaCtx.fillStyle = '#ffffff';
+        firmaCtx.fillRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+    }
+}
+
+function guardarFirmaDibujada() {
+    var btn = document.getElementById('btnGuardarFirma');
+    if (btn) btn.click();
+}
+// ========== FIN CANVAS PARA DIBUJAR FIRMA ==========
 
 // Función para previsualizar imagen antes de subir
 document.getElementById('imagen_perfil').addEventListener('change', function(e) {
