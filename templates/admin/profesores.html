@@ -316,6 +316,17 @@
                                                            title="Cambiar Contraseña del Profesor">
                                                             <i class="fas fa-key me-1"></i>Cambiar Contraseña
                                                         </a>
+                                                        <button type="button" class="btn btn-sm btn-danger me-1"
+                                                                data-bs-toggle="tooltip" 
+                                                                data-bs-placement="top" 
+                                                                title="Eliminar Profesor"
+                                                                onclick="confirmarEliminarProfesor({{ profesor.id }}, '{{ profesor.get_nombre_completo() }}')">
+                                                            <i class="fas fa-trash-alt me-1"></i>Eliminar
+                                                        </button>
+                                                        <form id="form-eliminar-profesor-{{ profesor.id }}" 
+                                                              method="POST" 
+                                                              action="{{ url_for('eliminar_profesor_admin', id=profesor.id) }}" 
+                                                              style="display: none;"></form>
                                                     </div>
                                                     <button class="btn btn-sm btn-secondary" 
                                                             data-bs-toggle="collapse" 
@@ -376,6 +387,72 @@
     </div>
 </div>
 
+<!-- Modal personalizado para confirmar eliminación -->
+<div class="modal fade" id="modalEliminarProfesor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+            <!-- Header con fondo rojo degradado -->
+            <div class="modal-header border-0 text-white py-4" style="background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);">
+                <div class="d-flex align-items-center w-100">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center me-3" 
+                         style="width: 50px; height: 50px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                        <i class="fas fa-user-times fa-lg"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title mb-0 fw-bold">Eliminar Profesor</h5>
+                        <small class="opacity-75">Esta acción es permanente</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <!-- Body -->
+            <div class="modal-body px-4 py-4">
+                <div class="text-center mb-3">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
+                         style="width: 70px; height: 70px; background: #fff3f3;">
+                        <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                    </div>
+                    <h5 class="fw-bold mb-1">¿Eliminar a <span id="nombreProfesorEliminar" class="text-danger"></span>?</h5>
+                    <p class="text-muted mb-0">Se eliminarán permanentemente todos sus datos asociados</p>
+                </div>
+                
+                <div class="rounded-3 p-3 mb-3" style="background: #fff8f8; border: 1px solid #fecdd3;">
+                    <div class="d-flex align-items-start mb-2">
+                        <i class="fas fa-calendar-times text-danger me-2 mt-1"></i>
+                        <span class="small">Todos sus <strong>horarios académicos</strong> asignados</span>
+                    </div>
+                    <div class="d-flex align-items-start mb-2">
+                        <i class="fas fa-link text-danger me-2 mt-1"></i>
+                        <span class="small">Sus <strong>asignaciones a grupos</strong> y materias</span>
+                    </div>
+                    <div class="d-flex align-items-start mb-2">
+                        <i class="fas fa-clock text-danger me-2 mt-1"></i>
+                        <span class="small">Toda su <strong>disponibilidad</strong> registrada</span>
+                    </div>
+                    <div class="d-flex align-items-start">
+                        <i class="fas fa-database text-danger me-2 mt-1"></i>
+                        <span class="small">Su <strong>información personal</strong> y cuenta de acceso</span>
+                    </div>
+                </div>
+                
+                <div class="alert alert-danger d-flex align-items-center py-2 mb-0" role="alert" style="border-radius: 10px;">
+                    <i class="fas fa-ban me-2"></i>
+                    <small class="fw-bold">Esta acción NO se puede deshacer</small>
+                </div>
+            </div>
+            <!-- Footer -->
+            <div class="modal-footer border-0 px-4 pb-4 pt-0">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal" style="border-radius: 10px;">
+                    <i class="fas fa-arrow-left me-1"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-danger px-4 fw-bold" id="btnConfirmarEliminar" style="border-radius: 10px;">
+                    <i class="fas fa-trash-alt me-1"></i> Sí, Eliminar Profesor
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- CSS adicional -->
 <style>
 .avatar-circle {
@@ -395,6 +472,22 @@
 
 .card-body.bg-light {
     border-left: 3px solid #0d6efd;
+}
+
+/* Animación del modal de eliminación */
+#modalEliminarProfesor .modal-content {
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: scale(0.9) translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
 }
 </style>
 {% endblock %}
@@ -573,6 +666,30 @@ document.addEventListener('DOMContentLoaded', function() {
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
+});
+
+// Confirmar eliminación de profesor con modal personalizado
+let profesorIdEliminar = null;
+
+function confirmarEliminarProfesor(id, nombre) {
+    profesorIdEliminar = id;
+    document.getElementById('nombreProfesorEliminar').textContent = nombre;
+    const modal = new bootstrap.Modal(document.getElementById('modalEliminarProfesor'));
+    modal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const btnConfirmar = document.getElementById('btnConfirmarEliminar');
+    if (btnConfirmar) {
+        btnConfirmar.addEventListener('click', function() {
+            if (profesorIdEliminar) {
+                const btn = this;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Eliminando...';
+                document.getElementById('form-eliminar-profesor-' + profesorIdEliminar).submit();
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

@@ -255,6 +255,145 @@
         </div>
     </div>
 
+    <!-- Configuración de Exportación de Carga Horaria (Excel) -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-excel me-2"></i>
+                        Configuración de Exportación de Carga Horaria
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Nota:</strong> Estas configuraciones se utilizarán al exportar los horarios de profesores en formato Excel (FDA).
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Autorizó:</strong> Nombre y firma que aparecerá en la sección "Autorizó" del documento</li>
+                            <li><strong>Recibió:</strong> Nombre y firma que aparecerá en la sección "Recibió" del documento</li>
+                        </ul>
+                    </div>
+                    <form id="exportacionExcelForm">
+                        <div class="row g-3">
+                            <!-- Fecha de Inicio del Periodo -->
+                            <div class="col-12">
+                                <h6 class="text-warning mb-3">
+                                    <i class="fas fa-calendar-alt me-2"></i>
+                                    Fecha de Inicio del Periodo
+                                </h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="fecha_inicio_periodo" class="form-label">
+                                    Fecha de Inicio
+                                </label>
+                                <input type="text" class="form-control" id="fecha_inicio_periodo"
+                                       value="{{ config_excel.fecha_inicio_periodo or '' }}"
+                                       placeholder="Ej: 12 DE ENERO">
+                                <div class="form-text">Fecha que aparecerá en el campo "Fecha de Inicio" del documento exportado (Ej: 12 DE ENERO)</div>
+                            </div>
+
+                            <hr class="my-3">
+
+                            <!-- Director Académico (Autorizó) -->
+                            <div class="col-12">
+                                <h6 class="text-primary mb-3">
+                                    <i class="fas fa-user-tie me-2"></i>
+                                    Director Académico (Autorizó)
+                                </h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="director_academico_nombre" class="form-label">
+                                    Nombre del Director Académico
+                                </label>
+                                <input type="text" class="form-control" id="director_academico_nombre"
+                                       value="{{ config_excel.director_academico_nombre or '' }}"
+                                       placeholder="Ej: Dr. Juan Pérez García">
+                                <div class="form-text">Nombre completo que aparecerá en los documentos exportados</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="director_academico_firma" class="form-label">
+                                    Firma Digital del Director
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="director_academico_firma_file"
+                                           accept="image/*" onchange="previewFirmaDirector(this)">
+                                    <button type="button" class="btn btn-outline-danger" onclick="eliminarFirmaDirector()">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">Imagen de la firma (PNG, JPG). Se recomienda fondo transparente.</div>
+                                <div id="preview_firma_director" class="mt-2">
+                                    {% if config_excel.director_academico_firma %}
+                                    <img src="{{ url_for('static', filename='uploads/firmas/' + config_excel.director_academico_firma) }}"
+                                         alt="Firma Director" class="img-thumbnail" style="max-height: 60px;">
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <hr class="my-3">
+
+                            <!-- Responsable del PA (Recibió) -->
+                            <div class="col-12">
+                                <h6 class="text-success mb-3">
+                                    <i class="fas fa-user-check me-2"></i>
+                                    Responsable del PA (Recibió)
+                                </h6>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="responsable_pa_nombre" class="form-label">
+                                    Nombre del Responsable del PA
+                                </label>
+                                <input type="text" class="form-control" id="responsable_pa_nombre"
+                                       value="{{ config_excel.responsable_pa_nombre or '' }}"
+                                       placeholder="Ej: Lic. María López Hernández">
+                                <div class="form-text">Nombre completo que aparecerá en los documentos exportados</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="responsable_pa_firma" class="form-label">
+                                    Firma Digital del Responsable
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="responsable_pa_firma_file"
+                                           accept="image/*" onchange="previewFirmaResponsable(this)">
+                                    <button type="button" class="btn btn-outline-danger" onclick="eliminarFirmaResponsable()">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">Imagen de la firma (PNG, JPG). Se recomienda fondo transparente.</div>
+                                <div id="preview_firma_responsable" class="mt-2">
+                                    {% if config_excel.responsable_pa_firma %}
+                                    <img src="{{ url_for('static', filename='uploads/firmas/' + config_excel.responsable_pa_firma) }}"
+                                         alt="Firma Responsable" class="img-thumbnail" style="max-height: 60px;">
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Los cambios se aplicarán a las nuevas exportaciones de Excel
+                                        </small>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary" onclick="guardarConfigExcel()">
+                                        <i class="fas fa-save me-1"></i>
+                                        Guardar Configuración
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Configuración de Seguridad -->
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
@@ -971,6 +1110,105 @@ function cargarConfiguracionHorarios() {
         .catch(error => {
             console.error('Error al cargar configuración de horarios:', error);
         });
+}
+
+// ============================================
+// Funciones para Configuración de Exportación Excel
+// ============================================
+
+function previewFirmaDirector(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('preview_firma_director').innerHTML =
+                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail" style="max-height: 60px;">`;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function previewFirmaResponsable(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('preview_firma_responsable').innerHTML =
+                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail" style="max-height: 60px;">`;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function eliminarFirmaDirector() {
+    document.getElementById('director_academico_firma_file').value = '';
+    document.getElementById('preview_firma_director').innerHTML = '';
+
+    // Marcar para eliminar en el servidor
+    fetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'director_academico' })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarMensaje('Firma del director eliminada', 'success');
+        }
+    });
+}
+
+function eliminarFirmaResponsable() {
+    document.getElementById('responsable_pa_firma_file').value = '';
+    document.getElementById('preview_firma_responsable').innerHTML = '';
+
+    // Marcar para eliminar en el servidor
+    fetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'responsable_pa' })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarMensaje('Firma del responsable eliminada', 'success');
+        }
+    });
+}
+
+function guardarConfigExcel() {
+    const formData = new FormData();
+
+    // Agregar nombres
+    formData.append('director_academico_nombre', document.getElementById('director_academico_nombre').value);
+    formData.append('responsable_pa_nombre', document.getElementById('responsable_pa_nombre').value);
+    formData.append('fecha_inicio_periodo', document.getElementById('fecha_inicio_periodo').value);
+
+    // Agregar archivos de firma si existen
+    const firmaDirectorInput = document.getElementById('director_academico_firma_file');
+    if (firmaDirectorInput.files.length > 0) {
+        formData.append('director_academico_firma', firmaDirectorInput.files[0]);
+    }
+
+    const firmaResponsableInput = document.getElementById('responsable_pa_firma_file');
+    if (firmaResponsableInput.files.length > 0) {
+        formData.append('responsable_pa_firma', firmaResponsableInput.files[0]);
+    }
+
+    fetch('/admin/configuracion/exportacion-excel', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarMensaje(data.message, 'success');
+        } else {
+            mostrarMensaje(data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('Error al guardar la configuración de exportación Excel', 'danger');
+    });
 }
 
 // Cargar configuración al iniciar

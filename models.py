@@ -706,6 +706,31 @@ def init_db():
         db.session.commit()
         print("Materias por defecto creadas")
 
+    # Inicializar configuraciones de exportación Excel si no existen
+    if not ConfiguracionSistema.query.filter_by(clave='director_academico_nombre').first():
+        ConfiguracionSistema.set_config(
+            'director_academico_nombre', '',
+            tipo='string', descripcion='Nombre del Director Académico para exportación Excel',
+            categoria='exportacion'
+        )
+        ConfiguracionSistema.set_config(
+            'director_academico_firma', '',
+            tipo='string', descripcion='Archivo de firma del Director Académico',
+            categoria='exportacion'
+        )
+        ConfiguracionSistema.set_config(
+            'responsable_pa_nombre', '',
+            tipo='string', descripcion='Nombre del Responsable del PA para exportación Excel',
+            categoria='exportacion'
+        )
+        ConfiguracionSistema.set_config(
+            'responsable_pa_firma', '',
+            tipo='string', descripcion='Archivo de firma del Responsable del PA',
+            categoria='exportacion'
+        )
+        print("Configuraciones de exportación Excel inicializadas")
+
+
 class Materia(db.Model):
     """Modelo para gestionar materias académicas"""
     id = db.Column(db.Integer, primary_key=True)

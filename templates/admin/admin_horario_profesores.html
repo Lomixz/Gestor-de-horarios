@@ -230,10 +230,11 @@
                     {{ profesor }}
                 </h4>
                 <div class="acciones-profesor">
-                    <a href="{{ url_for('exportar_admin_fda_profesor', profesor_nombre=profesor) }}"
-                       class="btn-accion-profesor btn-fda" title="Exportar FDA">
-                        <i class="fas fa-file-invoice"></i> FDA
-                    </a>
+                    <button type="button" class="btn-accion-profesor btn-warning" 
+                            onclick="abrirModalHorasTC('{{ profesor }}')" 
+                            title="Configurar Horas TC">
+                        <i class="fas fa-clock"></i> Horas TC
+                    </button>
                     <a href="{{ url_for('exportar_excel_profesor', profesor_nombre=profesor) }}"
                        class="btn-accion-profesor btn-excel" title="Exportar Excel">
                         <i class="fas fa-file-excel"></i> Excel
@@ -331,5 +332,107 @@ document.addEventListener('DOMContentLoaded', function() {
         contador.textContent = visibleCount;
     });
 });
+</script>
+
+<!-- Modal de Horas TC -->
+<div class="modal fade" id="modalHorasTC" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-clock me-2"></i>Horas de Tiempo Completo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">Profesor: <strong id="modalProfesorNombre"></strong></p>
+                <div class="alert alert-info py-2">
+                    <small><i class="fas fa-info-circle me-1"></i>Solo aplica para profesores de Tiempo Completo. Las horas de Impartición de Curso se calculan automáticamente.</small>
+                </div>
+                <input type="hidden" id="modalProfesorId">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Asesoría</label>
+                        <input type="number" class="form-control" id="horasAsesoria" min="0" max="40" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Tutoría</label>
+                        <input type="number" class="form-control" id="horasTutoria" min="0" max="40" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Apoyo a la Gestión</label>
+                        <input type="number" class="form-control" id="horasGestion" min="0" max="40" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Dual</label>
+                        <input type="number" class="form-control" id="horasDual" min="0" max="40" value="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Investigación</label>
+                        <input type="number" class="form-control" id="horasInvestigacion" min="0" max="40" value="0">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" onclick="guardarHorasTC()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirModalHorasTC(profesorNombre) {
+    document.getElementById('modalProfesorNombre').textContent = profesorNombre;
+    
+    // Buscar ID del profesor por nombre
+    fetch(`/admin/profesor/buscar-por-nombre?nombre=${encodeURIComponent(profesorNombre)}`)
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            alert('No se encontró el profesor');
+            return;
+        }
+        document.getElementById('modalProfesorId').value = data.id;
+        
+        // Cargar horas actuales
+        fetch(`/admin/profesor/${data.id}/horas-tc`)
+        .then(r => r.json())
+        .then(hData => {
+            if (hData.success) {
+                document.getElementById('horasAsesoria').value = hData.horas.asesoria;
+                document.getElementById('horasTutoria').value = hData.horas.tutoria;
+                document.getElementById('horasGestion').value = hData.horas.gestion;
+                document.getElementById('horasDual').value = hData.horas.dual;
+                document.getElementById('horasInvestigacion').value = hData.horas.investigacion;
+            }
+            new bootstrap.Modal(document.getElementById('modalHorasTC')).show();
+        });
+    });
+}
+
+function guardarHorasTC() {
+    const profesorId = document.getElementById('modalProfesorId').value;
+    const data = {
+        asesoria: parseInt(document.getElementById('horasAsesoria').value) || 0,
+        tutoria: parseInt(document.getElementById('horasTutoria').value) || 0,
+        gestion: parseInt(document.getElementById('horasGestion').value) || 0,
+        dual: parseInt(document.getElementById('horasDual').value) || 0,
+        investigacion: parseInt(document.getElementById('horasInvestigacion').value) || 0
+    };
+    
+    fetch(`/admin/profesor/${profesorId}/horas-tc`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('modalHorasTC')).hide();
+            alert(result.message);
+        } else {
+            alert('Error: ' + result.message);
+        }
+    });
+}
 </script>
 {% endblock %}
