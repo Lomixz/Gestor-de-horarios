@@ -115,10 +115,15 @@
         }
 
         /* Tabla de horario */
+        .horario-table-wrap {
+            width: 100%;
+            text-align: center;
+        }
         .horario-table {
             width: 88%;
             border-collapse: collapse;
-            margin: 0 6% 0 6%;
+            margin: 0 auto;
+            display: inline-table;
         }
         .horario-table th {
             background-color: #1e3c72;
@@ -228,7 +233,8 @@
             </tr>
         </table>
 
-        <table class="horario-table">
+        <div class="horario-table-wrap">
+        <table class="horario-table" align="center">
             <thead>
                 <tr>
                     <th style="width: 10%;">Hora</th>
@@ -255,6 +261,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
 
         <div class="page-footer">
             Sistema de Gestion Academica | {{ version.nombre_version }} | Grupo: {{ grupo }}
