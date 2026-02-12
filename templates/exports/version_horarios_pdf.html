@@ -5,136 +5,235 @@
     <title>Horarios - {{ version.nombre_version }}</title>
     <style>
         @page {
-            size: A4 landscape;
-            margin: 1.5cm;
+            size: landscape;
+            margin: 0.8cm 0.8cm 1cm 0.8cm;
         }
         body {
-            font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 10pt;
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 8pt;
             color: #333;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #1e3c72;
-            padding-bottom: 10px;
-        }
-        .header h1 {
-            color: #1e3c72;
             margin: 0;
-            font-size: 18pt;
+            padding: 0;
         }
-        .header .subtitle {
-            color: #666;
-            font-size: 10pt;
-            margin-top: 5px;
+
+        /* --- Portada --- */
+        .portada {
+            text-align: center;
+            padding-top: 20px;
         }
-        .grupo-section {
-            margin-bottom: 25px;
-            page-break-inside: avoid;
+        .portada-wrap {
+            width: 86%;
+            margin: 0 auto;
+            border: 1px solid #d9e1f2;
+            background-color: #f9fbff;
+            padding: 16px 20px 18px 20px;
         }
-        .grupo-header {
-            background: linear-gradient(135deg, #1e3c72, #2a5298);
-            color: white;
-            padding: 8px 15px;
-            font-weight: bold;
-            font-size: 12pt;
-            border-radius: 5px 5px 0 0;
-        }
-        table {
+        .portada-header {
             width: 100%;
-            border-collapse: collapse;
-            margin-top: 0;
+            margin: 0 auto 10px auto;
+            border: none;
         }
-        th {
-            background-color: #1e3c72;
-            color: white;
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-            font-size: 9pt;
+        .portada-header td {
+            border: none;
+            vertical-align: top;
+            padding: 0;
         }
-        td {
-            padding: 6px 8px;
-            border: 1px solid #ddd;
-            font-size: 8pt;
-            text-align: center;
-            vertical-align: middle;
+        .logo-cell {
+            width: 80px;
+            text-align: left;
         }
-        td.hora-cell {
-            background-color: #e8f4fd;
-            font-weight: bold;
-            font-size: 8pt;
-            white-space: nowrap;
+        .logo-pdf {
+            width: 58px;
+            height: auto;
         }
-        td .materia-nombre {
-            font-weight: bold;
-            font-size: 8pt;
+        .portada h1 {
+            color: #1e3c72;
+            font-size: 21pt;
+            margin: 0;
         }
-        td .profesor-nombre {
-            font-size: 7pt;
+        .portada .subtitle {
             color: #555;
+            font-size: 10pt;
+            margin: 3px 0;
         }
-        .footer {
-            margin-top: 30px;
+        .portada-stats {
+            margin: 16px auto 0 auto;
+            width: 78%;
+        }
+        .portada-stats td {
+            border: 1px solid #d6deef;
             text-align: center;
-            color: #999;
-            font-size: 8pt;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
-        }
-        .stats {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-bottom: 20px;
-        }
-        .stat-box {
-            text-align: center;
-            padding: 10px 20px;
-            background: #f5f5f5;
-            border-radius: 5px;
+            padding: 10px 14px;
+            background-color: #ffffff;
         }
         .stat-value {
-            font-size: 18pt;
+            font-size: 20pt;
             font-weight: bold;
             color: #1e3c72;
         }
         .stat-label {
-            font-size: 8pt;
+            font-size: 9pt;
             color: #666;
+        }
+        .grupos-list {
+            margin-top: 14px;
+            font-size: 8.5pt;
+            color: #1e3c72;
+            font-weight: bold;
+            line-height: 1.7;
+        }
+
+        /* --- Paginas de grupo --- */
+        .grupo-page {
+            page-break-before: always;
+            padding: 0;
+            margin: 0;
+        }
+        .grupo-page-header {
+            width: 88%;
+            margin: 0 6% 4px 6%;
+            margin-bottom: 4px;
+        }
+        .grupo-page-header td {
+            border: none;
+            padding: 0;
+            vertical-align: middle;
+        }
+        .grupo-title {
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+        .grupo-version {
+            font-size: 7pt;
+            color: #888;
+            text-align: right;
+        }
+        .grupo-logo {
+            width: 80px;
+            text-align: left;
+        }
+
+        /* Tabla de horario */
+        .horario-table {
+            width: 88%;
+            border-collapse: collapse;
+            margin: 0 6% 0 6%;
+        }
+        .horario-table th {
+            background-color: #1e3c72;
+            color: white;
+            padding: 5px 3px;
+            text-align: center;
+            border: 1px solid #1e3c72;
+            font-size: 7.5pt;
+            font-weight: bold;
+        }
+        .horario-table td {
+            padding: 4px 3px;
+            border: 1px solid #ccc;
+            font-size: 7pt;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .hora-cell {
+            background-color: #e8f0fa;
+            font-weight: bold;
+            font-size: 7pt;
+            color: #1e3c72;
+        }
+        .materia-nombre {
+            font-weight: bold;
+            font-size: 7pt;
+            color: #222;
+        }
+        .profesor-nombre {
+            font-size: 6pt;
+            color: #666;
+        }
+        .vacia {
+            background-color: #fafafa;
+        }
+
+        .page-footer {
+            text-align: center;
+            color: #aaa;
+            font-size: 6pt;
+            margin-top: 6px;
+            border-top: 1px solid #ddd;
+            padding-top: 3px;
+            width: 88%;
+            margin-left: 6%;
+            margin-right: 6%;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📅 Horarios Académicos</h1>
-        <div class="subtitle">Versión: {{ version.nombre_version }}</div>
-        <div class="subtitle">Generado: {{ version.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</div>
+
+    <!-- PORTADA -->
+    <div class="portada">
+        <div class="portada-wrap">
+            <table class="portada-header">
+                <tr>
+                    <td class="logo-cell">
+                        {% if logo_data_uri %}
+                        <img src="{{ logo_data_uri }}" class="logo-pdf" alt="Logo Escuela" />
+                        {% endif %}
+                    </td>
+                    <td>
+                        <h1>Horarios Academicos</h1>
+                    </td>
+                    <td class="logo-cell"></td>
+                </tr>
+            </table>
+
+            <hr style="border: 1px solid #1e3c72; width: 92%;" />
+            <div class="subtitle"><b>{{ version.nombre_version }}</b></div>
+            <div class="subtitle" style="color: #888; font-size: 9pt;">Generado: {{ version.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</div>
+
+            <table class="portada-stats">
+                <tr>
+                    <td>
+                        <div class="stat-value">{{ total_horarios }}</div>
+                        <div class="stat-label">Total Clases</div>
+                    </td>
+                    <td>
+                        <div class="stat-value">{{ horarios_por_grupo|length }}</div>
+                        <div class="stat-label">Grupos</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="grupos-list">
+                {% for grupo in horarios_por_grupo.keys()|sort %}
+                {{ grupo }}{% if not loop.last %} | {% endif %}
+                {% endfor %}
+            </div>
+        </div>
     </div>
 
-    <div class="stats">
-        <div class="stat-box">
-            <div class="stat-value">{{ total_horarios }}</div>
-            <div class="stat-label">Total Clases</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-value">{{ horarios_por_grupo|length }}</div>
-            <div class="stat-label">Grupos</div>
-        </div>
-    </div>
-
+    <!-- UNA PAGINA POR GRUPO -->
     {% for grupo, filas in horarios_por_grupo.items() | sort %}
-    <div class="grupo-section">
-        <div class="grupo-header">
-            📚 Grupo: {{ grupo }}
-        </div>
-        <table>
+    <div class="grupo-page">
+
+        <table class="grupo-page-header">
+            <tr>
+                <td class="grupo-logo">
+                    {% if logo_data_uri %}
+                    <img src="{{ logo_data_uri }}" class="logo-pdf" alt="Logo Escuela" />
+                    {% endif %}
+                </td>
+                <td class="grupo-title">Grupo: {{ grupo }}</td>
+                <td class="grupo-version">{{ version.nombre_version }} | {{ version.fecha_creacion.strftime('%d/%m/%Y') }}</td>
+            </tr>
+        </table>
+
+        <table class="horario-table">
             <thead>
                 <tr>
-                    <th style="width: 12%">Hora</th>
+                    <th style="width: 10%;">Hora</th>
                     {% for dia in dias_display %}
-                    <th>{{ dia }}</th>
+                    <th style="width: 15%;">{{ dia }}</th>
                     {% endfor %}
                 </tr>
             </thead>
@@ -143,22 +242,25 @@
                 <tr>
                     <td class="hora-cell">{{ fila.hora }}</td>
                     {% for celda in fila.celdas %}
+                    {% if celda %}
                     <td>
-                        {% if celda %}
-                        <div class="materia-nombre">{{ celda.materia }}</div>
-                        <div class="profesor-nombre">{{ celda.profesor }}</div>
-                        {% endif %}
+                        <span class="materia-nombre">{{ celda.materia }}</span><br/>
+                        <span class="profesor-nombre">{{ celda.profesor }}</span>
                     </td>
+                    {% else %}
+                    <td class="vacia">&nbsp;</td>
+                    {% endif %}
                     {% endfor %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+
+        <div class="page-footer">
+            Sistema de Gestion Academica | {{ version.nombre_version }} | Grupo: {{ grupo }}
+        </div>
     </div>
     {% endfor %}
 
-    <div class="footer">
-        Sistema de Gestión Académica - {{ version.nombre_version }}
-    </div>
 </body>
 </html>

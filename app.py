@@ -9160,9 +9160,16 @@ def descargar_version_excel_admin(version_id):
     # Usar datos del backup JSON
     datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
     
-    # Días de la semana en orden
-    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    # Días de la semana en orden (ocultar sábado si no tiene clases)
+    tiene_sabado = any(
+        (d.get('dia_semana', '').strip().lower() in ['sabado', 'sábado'])
+        for d in datos_backup
+    )
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('sabado')
+        dias_display.append('Sábado')
     
     # Organizar por grupo
     horarios_por_grupo = {}
@@ -9188,6 +9195,10 @@ def descargar_version_excel_admin(version_id):
     hora_fill = PatternFill(start_color="e8f4fd", end_color="e8f4fd", fill_type="solid")
     cell_font = Font(size=9)
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+
+    logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+    total_columnas = len(dias_semana) + 1
     
     for grupo in sorted(horarios_por_grupo.keys()):
         horarios_grupo = horarios_por_grupo[grupo]
@@ -9197,20 +9208,32 @@ def descargar_version_excel_admin(version_id):
         except ValueError:
             ws = wb.create_sheet(title=f"{sheet_name}_")
         
+        title_start_col = 2 if logo_exists else 1
+        if logo_exists:
+            # Ajustar celda A1 para que el logo encaje visualmente en la celda
+            ws.column_dimensions['A'].width = 9.5
+            ws.row_dimensions[1].height = 52
+            logo_img = convertir_imagen_para_excel(logo_path)
+            if logo_img:
+                logo_img.width = 98
+                logo_img.height = 70
+                ws.add_image(logo_img, 'A1')
+
         # Título del grupo
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=7)
-        grupo_cell = ws.cell(row=1, column=1, value=f"📚 Horarios - Grupo: {grupo}")
+        ws.merge_cells(start_row=1, start_column=title_start_col, end_row=1, end_column=total_columnas)
+        grupo_cell = ws.cell(row=1, column=title_start_col, value=f"📚 Horarios - Grupo: {grupo}")
         grupo_cell.font = grupo_font
         grupo_cell.fill = grupo_fill
         grupo_cell.alignment = Alignment(horizontal='center', vertical='center')
-        ws.row_dimensions[1].height = 30
+        if not logo_exists:
+            ws.row_dimensions[1].height = 45
         
         # Obtener todas las horas únicas de este grupo
         horas_dict = {}  # {horario_id: (hora_inicio, hora_fin)}
         for d in horarios_grupo:
             if d.get('horario_id'):
                 horario = Horario.query.get(d['horario_id'])
-                if horario:
+                if horario and horario.hora_inicio is not None and horario.hora_fin is not None:
                     horas_dict[d['horario_id']] = (horario.hora_inicio, horario.hora_fin)
         
         # Ordenar horas por hora_inicio
@@ -9272,7 +9295,7 @@ def descargar_version_excel_admin(version_id):
         
         # Ajustar anchos de columnas
         ws.column_dimensions['A'].width = 18  # Hora
-        for col_idx in range(2, 8):
+        for col_idx in range(2, len(headers) + 1):
             ws.column_dimensions[chr(64 + col_idx)].width = 25  # Días
     
     buffer = BytesIO()
@@ -9297,8 +9320,15 @@ def descargar_version_pdf_admin(version_id):
     version = VersionHorario.query.get_or_404(version_id)
     datos_backup = json.loads(version.datos_horarios) if version.datos_horarios else []
     
-    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    tiene_sabado = any(
+        (d.get('dia_semana', '').strip().lower() in ['sabado', 'sábado'])
+        for d in datos_backup
+    )
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('sabado')
+        dias_display.append('Sábado')
     
     # Organizar por grupo
     datos_por_grupo = {}
@@ -9311,12 +9341,12 @@ def descargar_version_pdf_admin(version_id):
     # Construir estructura de cuadrícula para cada grupo
     horarios_por_grupo = {}
     for grupo, datos in datos_por_grupo.items():
-        # Obtener horas únicas
+        # Obtener horas únicas (filtrar None)
         horas_dict = {}
         for d in datos:
             if d.get('horario_id'):
                 horario = Horario.query.get(d['horario_id'])
-                if horario:
+                if horario and horario.hora_inicio is not None and horario.hora_fin is not None:
                     horas_dict[d['horario_id']] = (horario.hora_inicio, horario.hora_fin)
         
         horas_ordenadas = sorted(horas_dict.items(), key=lambda x: x[1][0])
@@ -9353,18 +9383,32 @@ def descargar_version_pdf_admin(version_id):
         
         horarios_por_grupo[grupo] = filas
     
+    logo_data_uri = None
+    logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        import base64
+        with open(logo_path, 'rb') as img_file:
+            logo_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            logo_data_uri = f"data:image/png;base64,{logo_b64}"
+
     html = render_template('exports/version_horarios_pdf.html',
                          version=version,
                          horarios_por_grupo=horarios_por_grupo,
                          dias_display=dias_display,
                          total_horarios=len(datos_backup),
+                         logo_data_uri=logo_data_uri,
                          formato_tabla=True)
     
-    from weasyprint import HTML
-    pdf = HTML(string=html, base_url=request.url_root).write_pdf()
+    from xhtml2pdf import pisa
+    result_buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=result_buffer, encoding='utf-8')
+    if pisa_status.err:
+        flash('Error al generar el PDF.', 'error')
+        return redirect(url_for('listar_versiones_admin'))
+    result_buffer.seek(0)
     
     filename = f"horarios_{version.nombre_version.replace(' ', '_')}_admin.pdf"
-    return send_file(BytesIO(pdf), mimetype='application/pdf', as_attachment=True, download_name=filename)
+    return send_file(result_buffer, mimetype='application/pdf', as_attachment=True, download_name=filename)
 
 
 @app.route('/admin/horarios/versiones/<int:version_id>/eliminar', methods=['POST'])
@@ -9541,9 +9585,16 @@ def descargar_version_excel_jefe(version_id):
     # Filtrar solo los grupos que pertenecen al jefe
     datos_filtrados = [d for d in datos_backup if d.get('grupo') in grupos_jefe]
     
-    # Días de la semana en orden
-    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    # Días de la semana en orden (ocultar sábado si no tiene clases)
+    tiene_sabado = any(
+        (d.get('dia_semana', '').strip().lower() in ['sabado', 'sábado'])
+        for d in datos_filtrados
+    )
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('sabado')
+        dias_display.append('Sábado')
     
     # Organizar por grupo
     horarios_por_grupo = {}
@@ -9572,6 +9623,10 @@ def descargar_version_excel_jefe(version_id):
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin')
     )
+
+    logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+    total_columnas = len(dias_semana) + 1
     
     # Crear una hoja por grupo
     for grupo in sorted(horarios_por_grupo.keys()):
@@ -9584,20 +9639,32 @@ def descargar_version_excel_jefe(version_id):
         except ValueError:
             ws = wb.create_sheet(title=f"{sheet_name}_")
         
+        title_start_col = 2 if logo_exists else 1
+        if logo_exists:
+            # Ajustar celda A1 para que el logo encaje visualmente en la celda
+            ws.column_dimensions['A'].width = 9.5
+            ws.row_dimensions[1].height = 52
+            logo_img = convertir_imagen_para_excel(logo_path)
+            if logo_img:
+                logo_img.width = 98
+                logo_img.height = 70
+                ws.add_image(logo_img, 'A1')
+
         # Título del grupo
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=7)
-        grupo_cell = ws.cell(row=1, column=1, value=f"📚 Horarios - Grupo: {grupo}")
+        ws.merge_cells(start_row=1, start_column=title_start_col, end_row=1, end_column=total_columnas)
+        grupo_cell = ws.cell(row=1, column=title_start_col, value=f"📚 Horarios - Grupo: {grupo}")
         grupo_cell.font = grupo_font
         grupo_cell.fill = grupo_fill
         grupo_cell.alignment = Alignment(horizontal='center', vertical='center')
-        ws.row_dimensions[1].height = 30
+        if not logo_exists:
+            ws.row_dimensions[1].height = 45
         
         # Obtener todas las horas únicas de este grupo
         horas_dict = {}  # {horario_id: (hora_inicio, hora_fin)}
         for d in horarios_grupo:
             if d.get('horario_id'):
                 horario = Horario.query.get(d['horario_id'])
-                if horario:
+                if horario and horario.hora_inicio is not None and horario.hora_fin is not None:
                     horas_dict[d['horario_id']] = (horario.hora_inicio, horario.hora_fin)
         
         # Ordenar horas por hora_inicio
@@ -9659,7 +9726,7 @@ def descargar_version_excel_jefe(version_id):
         
         # Ajustar anchos de columnas
         ws.column_dimensions['A'].width = 18  # Hora
-        for col_idx in range(2, 8):
+        for col_idx in range(2, len(headers) + 1):
             ws.column_dimensions[chr(64 + col_idx)].width = 25  # Días
     
     # Guardar en buffer
@@ -9703,8 +9770,15 @@ def descargar_version_pdf_jefe(version_id):
     # Filtrar solo los grupos que pertenecen al jefe
     datos_filtrados = [d for d in datos_backup if d.get('grupo') in grupos_jefe]
     
-    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    tiene_sabado = any(
+        (d.get('dia_semana', '').strip().lower() in ['sabado', 'sábado'])
+        for d in datos_filtrados
+    )
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    dias_display = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+    if tiene_sabado:
+        dias_semana.append('sabado')
+        dias_display.append('Sábado')
     
     # Organizar por grupo
     datos_por_grupo = {}
@@ -9717,12 +9791,12 @@ def descargar_version_pdf_jefe(version_id):
     # Construir estructura de cuadrícula para cada grupo
     horarios_por_grupo = {}
     for grupo, datos in datos_por_grupo.items():
-        # Obtener horas únicas
+        # Obtener horas únicas (filtrar None)
         horas_dict = {}
         for d in datos:
             if d.get('horario_id'):
                 horario = Horario.query.get(d['horario_id'])
-                if horario:
+                if horario and horario.hora_inicio is not None and horario.hora_fin is not None:
                     horas_dict[d['horario_id']] = (horario.hora_inicio, horario.hora_fin)
         
         horas_ordenadas = sorted(horas_dict.items(), key=lambda x: x[1][0])
@@ -9760,19 +9834,33 @@ def descargar_version_pdf_jefe(version_id):
         horarios_por_grupo[grupo] = filas
     
     # Renderizar template y generar PDF
+    logo_data_uri = None
+    logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        import base64
+        with open(logo_path, 'rb') as img_file:
+            logo_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            logo_data_uri = f"data:image/png;base64,{logo_b64}"
+
     html = render_template('exports/version_horarios_pdf.html',
                          version=version,
                          horarios_por_grupo=horarios_por_grupo,
                          dias_display=dias_display,
                          total_horarios=len(datos_filtrados),
+                         logo_data_uri=logo_data_uri,
                          formato_tabla=True)
     
-    from weasyprint import HTML
-    pdf = HTML(string=html, base_url=request.url_root).write_pdf()
+    from xhtml2pdf import pisa
+    result_buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=result_buffer, encoding='utf-8')
+    if pisa_status.err:
+        flash('Error al generar el PDF.', 'error')
+        return redirect(url_for('listar_versiones_jefe'))
+    result_buffer.seek(0)
     
     filename = f"horarios_{version.nombre_version.replace(' ', '_')}.pdf"
     return send_file(
-        BytesIO(pdf),
+        result_buffer,
         mimetype='application/pdf',
         as_attachment=True,
         download_name=filename
