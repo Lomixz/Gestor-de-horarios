@@ -680,11 +680,11 @@ def init_db():
         
         if ing_sis:
             materias_ingenieria = [
-                Materia('Introducción a la Programación', 'ISI-101', 1, ing_sis.id, 4, 3, 2, 'Fundamentos de programación', admin.id),
-                Materia('Matemáticas Discretas', 'MAT-101', 1, ing_sis.id, 3, 3, 0, 'Lógica y matemáticas básicas', admin.id),
-                Materia('Estructuras de Datos', 'ISI-201', 2, ing_sis.id, 4, 3, 2, 'Algoritmos y estructuras de datos', admin.id),
-                Materia('Base de Datos', 'ISI-301', 3, ing_sis.id, 4, 3, 2, 'Sistemas de gestión de bases de datos', admin.id),
-                Materia('Ingeniería de Software', 'ISI-401', 4, ing_sis.id, 4, 3, 2, 'Metodologías de desarrollo de software', admin.id),
+                Materia('Introducción a la Programación', 'ISI-101', 1, ing_sis.id, 4, 5, 'Fundamentos de programación', admin.id),
+                Materia('Matemáticas Discretas', 'MAT-101', 1, ing_sis.id, 3, 3, 'Lógica y matemáticas básicas', admin.id),
+                Materia('Estructuras de Datos', 'ISI-201', 2, ing_sis.id, 4, 5, 'Algoritmos y estructuras de datos', admin.id),
+                Materia('Base de Datos', 'ISI-301', 3, ing_sis.id, 4, 5, 'Sistemas de gestión de bases de datos', admin.id),
+                Materia('Ingeniería de Software', 'ISI-401', 4, ing_sis.id, 4, 5, 'Metodologías de desarrollo de software', admin.id),
             ]
             
             for materia in materias_ingenieria:
@@ -692,10 +692,10 @@ def init_db():
         
         if med:
             materias_medicina = [
-                Materia('Anatomía Humana', 'MED-101', 1, med.id, 5, 4, 2, 'Estudio del cuerpo humano', admin.id),
-                Materia('Bioquímica', 'MED-102', 1, med.id, 4, 3, 2, 'Química de los procesos biológicos', admin.id),
-                Materia('Fisiología', 'MED-201', 2, med.id, 5, 4, 2, 'Funcionamiento de los sistemas del cuerpo', admin.id),
-                Materia('Patología General', 'MED-301', 3, med.id, 4, 3, 1, 'Estudio de las enfermedades', admin.id),
+                Materia('Anatomía Humana', 'MED-101', 1, med.id, 5, 6, 'Estudio del cuerpo humano', admin.id),
+                Materia('Bioquímica', 'MED-102', 1, med.id, 4, 5, 'Química de los procesos biológicos', admin.id),
+                Materia('Fisiología', 'MED-201', 2, med.id, 5, 6, 'Funcionamiento de los sistemas del cuerpo', admin.id),
+                Materia('Patología General', 'MED-301', 3, med.id, 4, 4, 'Estudio de las enfermedades', admin.id),
             ]
             
             for materia in materias_medicina:
