@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
 {% block title %}{{ titulo }} - Sistema Académico{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white admin-section-header">
                     <h4 class="mb-0">
                         <i class="fas fa-user-plus me-2"></i>
                         {{ titulo }}
@@ -309,11 +310,11 @@
                                     </button>
                                     <button type="button" class="btn btn-outline-success btn-sm" id="select-todo">
                                         <i class="fas fa-check-square me-1"></i>
-                                        Seleccionar Todo
+                                        Seleccionar todo
                                     </button>
                                     <button type="button" class="btn btn-outline-danger btn-sm" id="deselect-todo">
                                         <i class="fas fa-square me-1"></i>
-                                        Deseleccionar Todo
+                                        Deseleccionar todo
                                     </button>
                                 </div>
                                 <small class="text-muted">
@@ -324,10 +325,10 @@
 
                             <!-- Tabla de horarios -->
                             <div class="table-responsive mb-4">
-                                <table class="table table-bordered table-sm" id="horarios-table">
-                                    <thead class="table-light">
+                                <table class="table table-bordered table-sm table-schedule" id="horarios-table">
+                                    <thead class="table-dark">
                                         <tr>
-                                            <th class="text-center" style="width: 120px;">Horario</th>
+                                            <th class="text-center col-horario">Horario</th>
                                             <th class="text-center">Lunes</th>
                                             <th class="text-center">Martes</th>
                                             <th class="text-center">Miércoles</th>

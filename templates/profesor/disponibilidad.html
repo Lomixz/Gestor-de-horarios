@@ -10,18 +10,11 @@
                 <i class="fas fa-calendar-check me-2"></i>
                 Mi Disponibilidad Horaria
             </h2>
-            <div>
-                {% if current_user.is_admin() or current_user.is_jefe_carrera() %}
-                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
-                    <i class="fas fa-home me-1"></i>
+            <div class="page-actions">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>
                     Volver al Dashboard
                 </a>
-                {% else %}
-                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
-                    <i class="fas fa-home me-1"></i>
-                    Volver al Dashboard
-                </a>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -63,13 +56,13 @@
                     
                     <!-- Botones de selección rápida -->
                     <div class="mb-4 d-flex gap-2 flex-wrap">
-                        <button type="button" class="btn btn-success btn-sm" onclick="seleccionarTodo()">
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="seleccionarTodo()">
                             <i class="fas fa-check-double me-1"></i>
-                            Seleccionar Todo
+                            Seleccionar todo
                         </button>
-                        <button type="button" class="btn btn-warning btn-sm" onclick="deseleccionarTodo()">
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deseleccionarTodo()">
                             <i class="fas fa-times me-1"></i>
-                            Deseleccionar Todo
+                            Deseleccionar todo
                         </button>
                         <button type="button" class="btn btn-info btn-sm" onclick="seleccionarDia('lunes')">
                             Lunes Completo
@@ -90,7 +83,7 @@
 
                     <!-- Tabla de disponibilidad -->
                     <div class="table-responsive">
-                        <table class="table table-bordered table-hover">
+                        <table class="table table-bordered table-hover availability-table">
                             <thead class="table-dark">
                                 <tr>
                                     <th width="15%">Horario</th>
@@ -119,7 +112,7 @@
                                                 name="{{ checkbox_name }}" 
                                                 id="{{ checkbox_name }}"
                                                 {% if is_checked %}checked{% endif %}
-                                                style="width: 25px; height: 25px; cursor: pointer;">
+                                                >
                                         </div>
                                     </td>
                                     {% endfor %}
@@ -140,21 +133,14 @@
                     </div>
 
                     <!-- Botones de acción -->
-                    <div class="d-flex gap-2 justify-content-end">
-                        {% if current_user.is_admin() or current_user.is_jefe_carrera() %}
-                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                             <i class="fas fa-times me-1"></i>
                             Cancelar
                         </a>
-                        {% else %}
-                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
-                            <i class="fas fa-times me-1"></i>
-                            Cancelar
-                        </a>
-                        {% endif %}
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-1"></i>
-                            Guardar Disponibilidad
+                            Guardar
                         </button>
                     </div>
                 </form>
@@ -255,20 +241,5 @@ document.getElementById('disponibilidadForm').addEventListener('submit', functio
 });
 </script>
 
-<style>
-.checkbox-disponibilidad:checked {
-    background-color: #198754;
-    border-color: #198754;
-}
-
-.form-check-input:hover {
-    transform: scale(1.1);
-    transition: transform 0.2s;
-}
-
-.table td {
-    vertical-align: middle;
-}
-</style>
 
 {% endblock %}

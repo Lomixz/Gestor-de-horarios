@@ -194,11 +194,11 @@
                         <div class="btn-group me-2" role="group">
                             <button type="button" class="btn btn-outline-success" onclick="seleccionarTodo()">
                                 <i class="fas fa-check-square me-1"></i>
-                                Seleccionar Todo
+                                Seleccionar todo
                             </button>
                             <button type="button" class="btn btn-outline-danger" onclick="deseleccionarTodo()">
                                 <i class="fas fa-square me-1"></i>
-                                Deseleccionar Todo
+                                Deseleccionar todo
                             </button>
                         </div>
                         
@@ -227,15 +227,15 @@
                                     <i class="fas fa-table me-2"></i>
                                     Matriz de Asignación
                                 </h5>
-                                <button type="submit" class="btn btn-success" id="btn-guardar">
+                                <button type="submit" class="btn btn-primary" id="btn-guardar">
                                     <i class="fas fa-save me-2"></i>
-                                    Guardar Cambios
+                                    Guardar
                                 </button>
                             </div>
                             <div class="card-body p-0">
-                                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                                    <table class="table table-bordered table-hover mb-0" style="font-size: 0.9rem;">
-                                        <thead class="table-light sticky-top">
+                                <div class="table-responsive scroll-container-md">
+                                    <table class="table table-bordered table-hover mb-0 fs-base">
+                                        <thead class="table-dark sticky-top">
                                             <tr>
                                                 <th class="sticky-column" style="min-width: 200px; z-index: 3;">
                                                     Grupo
@@ -303,12 +303,12 @@
 
                 <div class="row mb-4">
                     <div class="col-12 text-center">
-                        <button type="submit" class="btn btn-success btn-lg">
+                        <button type="submit" class="btn btn-primary btn-lg">
                             <i class="fas fa-save me-2"></i>
                             Guardar Todas las Asignaciones
                         </button>
-                        <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-secondary btn-lg">
-                            <i class="fas fa-times me-2"></i>
+                        <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="fas fa-times me-1"></i>
                             Cancelar
                         </a>
                     </div>

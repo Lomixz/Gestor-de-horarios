@@ -66,8 +66,8 @@
                         <i class="fas fa-book"></i> Materias de {{ carrera.nombre }}
                     </h3>
                     <div class="card-tools">
-                        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-sm">
-                            <i class="fas fa-arrow-left"></i> Volver al Dashboard
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-arrow-left me-1"></i>Volver al Dashboard
                         </a>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                     {% if materias %}
                         <div class="table-responsive">
                             <table class="table table-bordered table-striped">
-                                <thead>
+                                <thead class="table-dark">
                                     <tr>
                                         <th>Código</th>
                                         <th>Nombre</th>

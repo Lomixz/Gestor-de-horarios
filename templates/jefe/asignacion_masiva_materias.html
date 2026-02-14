@@ -20,7 +20,7 @@
                 </div>
                 <div class="d-flex gap-2">
                     <a href="{{ url_for('dashboard') }}" class="btn btn-light text-primary fw-bold shadow-sm">
-                        <i class="fas fa-arrow-left me-1"></i> Volver al Panel
+                        <i class="fas fa-arrow-left me-1"></i> Volver al Dashboard
                     </a>
                 </div>
             </div>
@@ -59,7 +59,7 @@
                     </button>
                     {% if filtro_cuatrimestre %}
                     <a href="{{ url_for('asignacion_masiva_materias_jefe') }}" class="btn btn-link btn-sm text-muted text-decoration-none">
-                        Limpiar filtros
+                            Limpiar Filtros
                     </a>
                     {% endif %}
                 </div>
@@ -77,7 +77,7 @@
                     </div>
                     <div>
                         <h4 class="mb-0 fw-bold text-dark">{{ profesores|length }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Profesores</small>
+                        <small class="text-muted text-uppercase fw-bold fs-xs">Profesores</small>
                     </div>
                 </div>
             </div>
@@ -90,7 +90,7 @@
                     </div>
                     <div>
                         <h4 class="mb-0 fw-bold text-dark">{{ materias|length }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Materias</small>
+                        <small class="text-muted text-uppercase fw-bold fs-xs">Materias</small>
                     </div>
                 </div>
             </div>
@@ -103,7 +103,7 @@
                     </div>
                     <div>
                         <h4 class="mb-0 fw-bold text-dark" id="contadorCambios">0</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Cambios</small>
+                        <small class="text-muted text-uppercase fw-bold fs-xs">Cambios</small>
                     </div>
                 </div>
             </div>
@@ -116,7 +116,7 @@
                     </div>
                     <div>
                         <h4 class="mb-0 fw-bold text-dark">{{ asignaciones_actuales.values() | map('length') | sum }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total Asignado</small>
+                        <small class="text-muted text-uppercase fw-bold fs-xs">Total Asignado</small>
                     </div>
                 </div>
             </div>
@@ -135,7 +135,7 @@
                     </h5>
                     <div class="d-flex gap-2">
                         <div class="btn-group shadow-sm">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="seleccionarTodas()" title="Seleccionar Todo">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="seleccionarTodas()" title="Seleccionar todo">
                                 <i class="fas fa-check-double"></i>
                             </button>
                             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarSeleccion()" title="Limpiar">
@@ -143,7 +143,7 @@
                             </button>
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4 fw-bold" id="btnGuardar">
-                            <i class="fas fa-save me-1"></i> GUARDAR CAMBIOS
+                            <i class="fas fa-save me-1"></i> Guardar
                         </button>
                     </div>
                 </div>
@@ -151,9 +151,9 @@
 
             <!-- Matriz -->
             <div class="card-body p-0">
-                <div class="table-responsive bg-white" style="max-height: 70vh; overflow: auto;">
+                <div class="table-responsive bg-white scroll-container-lg">
                     <table class="table table-hover table-bordered mb-0">
-                        <thead class="bg-dark text-white shadow-sm" style="position: sticky; top: 0; z-index: 10;">
+                        <thead class="table-dark sticky-top">
                             <tr>
                                 <th class="p-3 border-0 bg-dark" style="position: sticky; left: 0; z-index: 11; min-width: 300px; width: 300px;">
                                     <div class="d-flex align-items-center justify-content-between">
@@ -164,8 +164,8 @@
                                 {% for materia in materias %}
                                 <th class="text-center p-2 border-secondary align-middle bg-dark" style="min-width: 140px;">
                                     <div class="d-flex flex-column align-items-center cursor-pointer group-hover-target" onclick="seleccionarColumna({{ loop.index0 }})">
-                                        <span class="badge bg-secondary mb-1" style="font-size: 0.7rem;">C{{ materia.cuatrimestre }}</span>
-                                        <small class="d-block lh-sm text-truncate w-100" title="{{ materia.nombre }}" style="font-size: 0.75rem;">
+                                        <span class="badge bg-secondary mb-1 fs-xs">C{{ materia.cuatrimestre }}</span>
+                                        <small class="d-block lh-sm text-truncate w-100 fs-xs" title="{{ materia.nombre }}">
                                             {{ materia.codigo }}<br>
                                             {{ materia.nombre }}
                                         </small>
@@ -180,7 +180,7 @@
                             {% set carga = cargas_profesores[profesor.id] %}
                             <tr class="align-middle">
                                 <!-- Columna Sticky Profesor -->
-                                <th class="bg-white p-3 border-end" style="position: sticky; left: 0; z-index: 5;">
+                                <th class="bg-white p-3 border-end sticky-col">
                                     <div class="d-flex align-items-center">
                                         <div class="me-3 position-relative">
                                             {% if profesor.imagen_perfil %}
@@ -189,7 +189,7 @@
                                                 <div class="avatar-circle-sm bg-light text-primary fw-bold">{{ profesor.nombre[0] }}{{ profesor.apellido[0] }}</div>
                                             {% endif %}
                                         </div>
-                                        <div class="flex-grow-1" style="overflow: hidden;">
+                                        <div class="flex-grow-1 overflow-hidden">
                                             <div class="d-flex justify-content-between align-items-center cursor-pointer" onclick="seleccionarFila({{ profesor.id }})">
                                                 <h6 class="mb-0 text-truncate text-dark" title="{{ profesor.get_nombre_completo() }}">
                                                     {{ profesor.nombre }} {{ profesor.apellido }}
@@ -197,14 +197,14 @@
                                             </div>
                                             <div class="mt-1">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                                    <small class="text-muted" style="font-size: 0.7rem;">
+                                                    <small class="text-muted fs-xs">
                                                         {{ profesor.get_tipo_profesor_display() }}
                                                     </small>
                                                     <span class="badge bg-{{ carga.color }}" style="font-size: 0.65rem; padding: 0.25em 0.4em;">
                                                         {{ carga.total_horas }}h / {{ carga.limite_maximo }}h
                                                     </span>
                                                 </div>
-                                                <div class="progress" style="height: 4px;">
+                                                <div class="progress progress-xs">
                                                     <div class="progress-bar bg-{{ carga.color }}" role="progressbar" 
                                                          style="width: {{ carga.porcentaje }}%" 
                                                          aria-valuenow="{{ carga.porcentaje }}" aria-valuemin="0" aria-valuemax="100"></div>

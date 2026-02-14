@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
 {% block title %}Importar Asignaciones de Materias a Grupos - Sistema Académico{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-lg-8">
-            <div class="card shadow">
-                <div class="card-header bg-success text-white">
+            <div class="card">
+                <div class="card-header bg-success text-white admin-section-header">
                     <h4 class="mb-0">
                         <i class="fas fa-file-upload me-2"></i>
                         Importar Asignaciones de Materias a Grupos
@@ -89,7 +90,7 @@
                         {{ form.hidden_tag() }}
                         
                         <div class="card border-primary">
-                            <div class="card-header bg-primary text-white">
+                            <div class="card-header bg-primary text-white admin-section-header">
                                 <h6 class="mb-0">
                                     <i class="fas fa-upload me-2"></i>
                                     Subir Archivo CSV
@@ -112,9 +113,9 @@
                                 </div>
 
                                 <div class="d-grid gap-2">
-                                    {{ form.submit(class="btn btn-success btn-lg") }}
-                                    <a href="{{ url_for('asignacion_masiva_materias_grupos') }}" class="btn btn-secondary">
-                                        <i class="fas fa-arrow-left me-2"></i>
+                                    {{ form.submit(class="btn btn-primary btn-lg") }}
+                                    <a href="{{ url_for('asignacion_masiva_materias_grupos') }}" class="btn btn-outline-secondary">
+                                        <i class="fas fa-arrow-left me-1"></i>
                                         Volver
                                     </a>
                                 </div>
@@ -124,7 +125,7 @@
 
                     <!-- Tips -->
                     <div class="card mt-4 border-info">
-                        <div class="card-header bg-info text-white">
+                        <div class="card-header bg-info text-white admin-section-header">
                             <h6 class="mb-0">
                                 <i class="fas fa-lightbulb me-2"></i>
                                 Tips y Recomendaciones

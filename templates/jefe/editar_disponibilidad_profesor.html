@@ -14,8 +14,8 @@
                         Carrera: <strong>{{ carrera.nombre }}</strong>
                     </p>
                 </div>
-                <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-secondary">
-                    <i class="bi bi-arrow-left"></i> Volver al Listado
+                <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Volver
                 </a>
             </div>
         </div>
@@ -93,10 +93,10 @@
                             <i class="bi bi-check-square"></i> Sábado
                         </button>
                         <button type="button" class="btn btn-outline-success" onclick="selectAll()">
-                            <i class="bi bi-check-all"></i> Seleccionar Todo
+                            <i class="bi bi-check-all"></i> Seleccionar todo
                         </button>
                         <button type="button" class="btn btn-outline-danger" onclick="deselectAll()">
-                            <i class="bi bi-x-square"></i> Deseleccionar Todo
+                            <i class="bi bi-x-square"></i> Deseleccionar todo
                         </button>
                     </div>
                 </div>
@@ -106,7 +106,7 @@
                     <h6>Selección rápida por turno:</h6>
                     <div class="btn-group btn-group-sm flex-wrap" role="group">
                         <button type="button" class="btn btn-outline-warning" onclick="toggleTurno('matutino')">
-                            <i class="bi bi-sunrise"></i> Turno Matutino
+                            <table class="table table-bordered table-hover availability-table">
                         </button>
                         <button type="button" class="btn btn-outline-info" onclick="toggleTurno('vespertino')">
                             <i class="bi bi-sunset"></i> Turno Vespertino
@@ -191,7 +191,7 @@
                                     </button>
                                 </td>
                             </tr>
-                            {% endfor %}
+                    .availability-table td, .availability-table th {
                         </tbody>
                     </table>
                     {% else %}
@@ -203,11 +203,11 @@
 
                 <!-- Botones de acción -->
                 <div class="d-flex justify-content-between mt-4">
-                    <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-secondary">
+                    <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-x-circle"></i> Cancelar
                     </a>
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-save"></i> Guardar Disponibilidad
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Guardar
                     </button>
                 </div>
             </div>
@@ -262,7 +262,7 @@ function toggleTurno(turno) {
 </script>
 
 <style>
-.table td, .table th {
+.availability-table td, .availability-table th {
     vertical-align: middle;
 }
 

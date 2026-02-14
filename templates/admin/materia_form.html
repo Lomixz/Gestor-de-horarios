@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
 {% block title %}{{ titulo }} - Sistema Académico{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white admin-section-header">
                     <h4 class="mb-0">
                         <i class="fas fa-book me-2"></i>
                         {{ titulo }}
@@ -131,14 +132,14 @@
                             {% endif %}
                         </div>
 
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-end gap-2 mt-4">
                             <a href="{{ url_for('gestionar_materias') }}" class="btn btn-outline-secondary">
-                                <i class="fas fa-arrow-left me-1"></i>
+                                <i class="fas fa-times me-1"></i>
                                 Cancelar
                             </a>
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save me-1"></i>
-                                {% if materia %}Actualizar{% else %}Crear{% endif %} Materia
+                                Guardar
                             </button>
                         </div>
                     </form>

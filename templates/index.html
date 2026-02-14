@@ -10,7 +10,7 @@
             Sistema de Gestión Académica
         </h1>
         <p class="lead">Plataforma integral para la administración educativa</p>
-        <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
+        <hr class="my-4">
         <p>Gestiona usuarios, profesores, materias y más desde una interfaz moderna y fácil de usar.</p>
         {% if not current_user.is_authenticated %}
             <a class="btn btn-light btn-lg me-3" href="{{ url_for('register') }}" role="button">

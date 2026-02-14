@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block title %}Ver Disponibilidad - {{ profesor.get_nombre_completo() }}{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
@@ -8,7 +9,7 @@
         <div class="col-md-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="bi bi-eye"></i> Disponibilidad Horaria</h2>
+                    <h2 class="admin-page-title"><i class="bi bi-eye"></i> Disponibilidad Horaria</h2>
                     <p class="text-muted mb-0">
                         Profesor: <strong>{{ profesor.get_nombre_completo() }}</strong> | 
                         Panel de Administrador
@@ -18,8 +19,8 @@
                     <a href="{{ url_for('admin_editar_disponibilidad_profesor', id=profesor.id) }}" class="btn btn-primary me-2">
                         <i class="bi bi-pencil"></i> Editar Disponibilidad
                     </a>
-                    <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-secondary">
-                        <i class="bi bi-arrow-left"></i> Volver al Listado
+                    <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Volver
                     </a>
                 </div>
             </div>
@@ -59,7 +60,7 @@
                         <div class="col-md-3">
                             <p class="mb-1"><strong>Horas Disponibles:</strong></p>
                             <p class="mb-0">
-                                <span class="badge bg-info" style="font-size: 1rem;">
+                                <span class="badge bg-info admin-badge-lg">
                                     {{ total_horas_disponibles }} horas/semana
                                 </span>
                             </p>
@@ -84,7 +85,7 @@
 
     <!-- Tabla de disponibilidad (solo lectura) -->
     <div class="card">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header bg-primary text-white admin-section-header">
             <h5 class="mb-0"><i class="bi bi-calendar3"></i> Horario de Disponibilidad</h5>
         </div>
         <div class="card-body">
@@ -96,7 +97,7 @@
             </div>
 
             <div class="table-responsive">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover admin-table">
                     <thead class="table-dark">
                         <tr>
                             <th class="text-center">Turno</th>
@@ -177,8 +178,8 @@
         </div>
         <div class="card-footer">
             <div class="d-flex justify-content-between">
-                <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-secondary">
-                    <i class="bi bi-arrow-left"></i> Volver al Listado
+                <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Volver
                 </a>
                 <a href="{{ url_for('admin_editar_disponibilidad_profesor', id=profesor.id) }}" class="btn btn-primary">
                     <i class="bi bi-pencil"></i> Editar Disponibilidad
@@ -191,7 +192,7 @@
     <div class="row mt-4">
         <div class="col-md-12">
             <div class="card">
-                <div class="card-header bg-info text-white">
+                <div class="card-header bg-info text-white admin-section-header">
                     <h6 class="mb-0"><i class="bi bi-lightbulb"></i> Información Útil</h6>
                 </div>
                 <div class="card-body">
@@ -208,17 +209,4 @@
     </div>
 </div>
 
-<style>
-.table td, .table th {
-    vertical-align: middle;
-}
-
-.table-success {
-    background-color: rgba(25, 135, 84, 0.1) !important;
-}
-
-.card {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-</style>
 {% endblock %}

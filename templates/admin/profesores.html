@@ -1,17 +1,18 @@
 {% extends "base.html" %}
 
 {% block title %}Gestión de Profesores - Administración{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>
+            <h2 class="admin-page-title">
                 <i class="fas fa-chalkboard-teacher me-2"></i>
                 Gestión de Profesores
             </h2>
-            <div>
-                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary me-2">
+            <div class="admin-page-actions">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-1"></i>
                     Volver al Dashboard
                 </a>
@@ -41,7 +42,7 @@
 <!-- Estadísticas generales -->
 <div class="row mb-4">
     <div class="col-md-3">
-        <div class="card bg-primary text-white">
+        <div class="card bg-primary text-white admin-stat-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -56,7 +57,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-success text-white">
+        <div class="card bg-success text-white admin-stat-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -71,7 +72,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-warning text-dark">
+        <div class="card bg-warning text-dark admin-stat-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -86,7 +87,7 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card bg-info text-white">
+        <div class="card bg-info text-white admin-stat-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
@@ -106,7 +107,7 @@
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header admin-section-header">
                 <h5 class="mb-0">
                     <i class="fas fa-filter me-2"></i>
                     Filtros de Búsqueda
@@ -170,7 +171,7 @@
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header bg-primary text-white admin-section-header">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="fas fa-chalkboard-teacher me-2"></i>
@@ -182,22 +183,22 @@
             <div class="card-body p-0">
                 {% if profesores %}
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
+                        <table class="table table-hover admin-table mb-0">
+                            <thead class="table-dark">
                                 <tr>
                                     <th>NOMBRE</th>
                                     <th>EMAIL</th>
-                                    <th>CARRERA</th>
-                                    <th>TELÉFONO</th>
-                                    <th>TIPO</th>
-                                    <th>FECHA REGISTRO</th>
-                                    <th>ESTADO</th>
-                                    <th>ACCIONES</th>
+                                    <th class="admin-col-career">CARRERA</th>
+                                    <th class="admin-col-phone">TELÉFONO</th>
+                                    <th class="admin-col-type">TIPO</th>
+                                    <th class="admin-col-date">FECHA REGISTRO</th>
+                                    <th class="admin-col-status">ESTADO</th>
+                                    <th class="admin-col-actions">ACCIONES</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for profesor in profesores %}
-                                <tr class="align-middle" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#detalles{{ profesor.id }}" aria-expanded="false">
+                                <tr class="align-middle admin-click-row" data-bs-toggle="collapse" data-bs-target="#detalles{{ profesor.id }}" aria-expanded="false">
                                     <td>
                                         <div class="d-flex align-items-center">
                                             <div class="avatar-circle bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2">
@@ -215,38 +216,38 @@
                                         </div>
                                     </td>
                                     <td>{{ profesor.email }}</td>
-                                    <td>
+                                    <td class="admin-col-career">
                                         {% if profesor.is_profesor() %}
                                             {% if profesor.carreras %}
                                                 {% for carrera in profesor.carreras %}
-                                                    <span class="badge bg-info mb-1">{{ carrera.nombre }}</span>
+                                                    <span class="badge badge-nowrap bg-info mb-1">{{ carrera.nombre }}</span>
                                                 {% endfor %}
                                             {% else %}
                                                 <span class="text-muted">Sin carrera</span>
                                             {% endif %}
                                         {% elif profesor.carrera %}
-                                            <span class="badge bg-info">{{ profesor.carrera.nombre }}</span>
+                                            <span class="badge badge-nowrap bg-info">{{ profesor.carrera.nombre }}</span>
                                         {% else %}
                                             <span class="text-muted">Sin carrera</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ profesor.telefono or 'N/A' }}</td>
-                                    <td>
+                                    <td class="admin-col-phone">{{ profesor.telefono or 'N/A' }}</td>
+                                    <td class="admin-col-type">
                                         {% if profesor.is_profesor_completo() %}
-                                            <span class="badge bg-success">Tiempo Completo</span>
+                                            <span class="badge badge-nowrap bg-success">Tiempo Completo</span>
                                         {% else %}
-                                            <span class="badge bg-warning text-dark">Por Asignatura</span>
+                                            <span class="badge badge-nowrap bg-warning text-dark">Por Asignatura</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ profesor.fecha_registro.strftime('%d/%m/%Y') }}</td>
-                                    <td>
+                                    <td class="admin-col-date">{{ profesor.fecha_registro.strftime('%d/%m/%Y') }}</td>
+                                    <td class="admin-col-status">
                                         {% if profesor.activo %}
-                                            <span class="badge bg-success">Activo</span>
+                                            <span class="badge badge-nowrap bg-success">Activo</span>
                                         {% else %}
-                                            <span class="badge bg-danger">Inactivo</span>
+                                            <span class="badge badge-nowrap bg-danger">Inactivo</span>
                                         {% endif %}
                                     </td>
-                                    <td onclick="event.stopPropagation();">
+                                    <td class="admin-col-actions" onclick="event.stopPropagation();">
                                         <button class="btn btn-sm btn-outline-primary" 
                                                 data-bs-toggle="collapse" 
                                                 data-bs-target="#detalles{{ profesor.id }}"
@@ -323,10 +324,10 @@
                                                                 onclick="confirmarEliminarProfesor({{ profesor.id }}, '{{ profesor.get_nombre_completo() }}')">
                                                             <i class="fas fa-trash-alt me-1"></i>Eliminar
                                                         </button>
-                                                        <form id="form-eliminar-profesor-{{ profesor.id }}" 
+                                                          <form id="form-eliminar-profesor-{{ profesor.id }}" 
                                                               method="POST" 
                                                               action="{{ url_for('eliminar_profesor_admin', id=profesor.id) }}" 
-                                                              style="display: none;"></form>
+                                                              class="d-none"></form>
                                                     </div>
                                                     <button class="btn btn-sm btn-secondary" 
                                                             data-bs-toggle="collapse" 
@@ -390,12 +391,11 @@
 <!-- Modal personalizado para confirmar eliminación -->
 <div class="modal fade" id="modalEliminarProfesor" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+        <div class="modal-content border-0 shadow-lg admin-danger-modal">
             <!-- Header con fondo rojo degradado -->
-            <div class="modal-header border-0 text-white py-4" style="background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);">
+            <div class="modal-header border-0 text-white py-4 admin-danger-header">
                 <div class="d-flex align-items-center w-100">
-                    <div class="rounded-circle d-flex align-items-center justify-content-center me-3" 
-                         style="width: 50px; height: 50px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center me-3 admin-danger-icon-sm">
                         <i class="fas fa-user-times fa-lg"></i>
                     </div>
                     <div>
@@ -408,15 +408,14 @@
             <!-- Body -->
             <div class="modal-body px-4 py-4">
                 <div class="text-center mb-3">
-                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" 
-                         style="width: 70px; height: 70px; background: #fff3f3;">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 admin-danger-icon-lg">
                         <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
                     </div>
                     <h5 class="fw-bold mb-1">¿Eliminar a <span id="nombreProfesorEliminar" class="text-danger"></span>?</h5>
                     <p class="text-muted mb-0">Se eliminarán permanentemente todos sus datos asociados</p>
                 </div>
                 
-                <div class="rounded-3 p-3 mb-3" style="background: #fff8f8; border: 1px solid #fecdd3;">
+                <div class="rounded-3 p-3 mb-3 admin-danger-note">
                     <div class="d-flex align-items-start mb-2">
                         <i class="fas fa-calendar-times text-danger me-2 mt-1"></i>
                         <span class="small">Todos sus <strong>horarios académicos</strong> asignados</span>
@@ -435,61 +434,23 @@
                     </div>
                 </div>
                 
-                <div class="alert alert-danger d-flex align-items-center py-2 mb-0" role="alert" style="border-radius: 10px;">
+                <div class="alert alert-danger d-flex align-items-center py-2 mb-0 admin-rounded-10" role="alert">
                     <i class="fas fa-ban me-2"></i>
                     <small class="fw-bold">Esta acción NO se puede deshacer</small>
                 </div>
             </div>
             <!-- Footer -->
             <div class="modal-footer border-0 px-4 pb-4 pt-0">
-                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal" style="border-radius: 10px;">
+                <button type="button" class="btn btn-light px-4 admin-rounded-10" data-bs-dismiss="modal">
                     <i class="fas fa-arrow-left me-1"></i> Cancelar
                 </button>
-                <button type="button" class="btn btn-danger px-4 fw-bold" id="btnConfirmarEliminar" style="border-radius: 10px;">
+                <button type="button" class="btn btn-danger px-4 fw-bold admin-rounded-10" id="btnConfirmarEliminar">
                     <i class="fas fa-trash-alt me-1"></i> Sí, Eliminar Profesor
                 </button>
             </div>
         </div>
     </div>
 </div>
-
-<!-- CSS adicional -->
-<style>
-.avatar-circle {
-    width: 40px;
-    height: 40px;
-    font-size: 14px;
-    font-weight: bold;
-}
-
-.table-hover tbody tr:hover {
-    background-color: rgba(0, 123, 255, 0.05);
-}
-
-.collapse {
-    transition: height 0.3s ease;
-}
-
-.card-body.bg-light {
-    border-left: 3px solid #0d6efd;
-}
-
-/* Animación del modal de eliminación */
-#modalEliminarProfesor .modal-content {
-    animation: modalSlideIn 0.3s ease;
-}
-
-@keyframes modalSlideIn {
-    from {
-        transform: scale(0.9) translateY(-20px);
-        opacity: 0;
-    }
-    to {
-        transform: scale(1) translateY(0);
-        opacity: 1;
-    }
-}
-</style>
 {% endblock %}
 
 

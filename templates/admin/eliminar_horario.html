@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}Eliminar Horario - Administración{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <div class="card shadow border-danger">
-            <div class="card-header bg-danger text-white">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white admin-section-header">
                 <h5 class="mb-0">
                     <i class="fas fa-exclamation-triangle me-2"></i>
                     Confirmar Eliminación
@@ -65,7 +66,7 @@
                 <form method="POST">
                     {{ form.hidden_tag() }}
                     <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                        <a href="{{ url_for('gestionar_horarios') }}" class="btn btn-secondary me-md-2">
+                        <a href="{{ url_for('gestionar_horarios') }}" class="btn btn-outline-secondary me-md-2">
                             <i class="fas fa-arrow-left me-1"></i>
                             Cancelar
                         </a>

@@ -11,10 +11,10 @@
     <!-- CSS personalizado -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary app-navbar">
+        <div class="container-fluid px-3 px-md-4 px-xxl-5">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="fas fa-graduation-cap me-2"></i>
                 Sistema Académico
@@ -60,8 +60,8 @@
     </nav>
 
     <!-- Contenido principal -->
-    <main class="py-4">
-        <div class="{% block container_class %}container{% endblock %}">
+    <main class="py-4 app-main">
+        <div class="{% block container_class %}container-fluid px-3 px-md-4 px-xxl-5{% endblock %}">
             <!-- Mensajes flash -->
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -79,14 +79,111 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-light text-center py-3 mt-5">
-        <div class="container">
+    <footer class="footer-soft text-center py-3 mt-5">
+        <div class="container-fluid px-3 px-md-4 px-xxl-5">
             <p class="text-muted mb-0">&copy; <script>document.write(new Date().getFullYear())</script> Sistema de Gestión Académica. Todos los derechos reservados.</p>
         </div>
     </footer>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            function ensureResponsiveTables(scope) {
+                const root = scope || document;
+                const tables = root.querySelectorAll('main table');
+
+                tables.forEach(function (table) {
+                    const firstRow = table.querySelector('thead tr, tbody tr, tr');
+                    const columnCount = firstRow ? firstRow.children.length : 0;
+
+                    table.classList.remove('table-narrow', 'table-wide', 'table-xwide');
+                    if (columnCount >= 8) {
+                        table.classList.add('table-xwide');
+                    } else if (columnCount >= 6) {
+                        table.classList.add('table-wide');
+                    } else {
+                        table.classList.add('table-narrow');
+                    }
+
+                    if (table.closest('.table-responsive, .table-responsive-auto')) {
+                        return;
+                    }
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'table-responsive-auto';
+                    table.parentNode.insertBefore(wrapper, table);
+                    wrapper.appendChild(table);
+                });
+            }
+
+            function ensureResponsiveWideBlocks(scope) {
+                const root = scope || document;
+                const grids = root.querySelectorAll('main .horario-grid');
+
+                grids.forEach(function (grid) {
+                    if (grid.closest('.responsive-scroll-x')) {
+                        return;
+                    }
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'responsive-scroll-x';
+                    grid.parentNode.insertBefore(wrapper, grid);
+                    wrapper.appendChild(grid);
+                });
+            }
+
+            function applyResponsiveEnhancements(scope) {
+                ensureResponsiveTables(scope);
+                ensureResponsiveWideBlocks(scope);
+                ensureResponsiveTitles(scope);
+            }
+
+            function ensureResponsiveTitles(scope) {
+                const root = scope || document;
+
+                const badges = root.querySelectorAll('main .badge');
+                badges.forEach(function (badge) {
+                    badge.classList.add('badge-responsive');
+                });
+
+                const headingWithBadge = root.querySelectorAll('main h1, main h2, main h3, main h4, main h5, main h6');
+                headingWithBadge.forEach(function (heading) {
+                    if (heading.querySelector('.badge')) {
+                        heading.classList.add('panel-role-title');
+                    }
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    applyResponsiveEnhancements(document);
+                });
+            } else {
+                applyResponsiveEnhancements(document);
+            }
+
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    mutation.addedNodes.forEach(function (node) {
+                        if (!(node instanceof HTMLElement)) {
+                            return;
+                        }
+
+                        if (node.matches && node.matches('table')) {
+                            applyResponsiveEnhancements(node.parentElement || document);
+                        } else if (node.matches && node.matches('.horario-grid')) {
+                            applyResponsiveEnhancements(node.parentElement || document);
+                        } else if (node.querySelector && (node.querySelector('table') || node.querySelector('.horario-grid'))) {
+                            applyResponsiveEnhancements(node);
+                        }
+                    });
+                });
+            });
+
+            observer.observe(document.body, { childList: true, subtree: true });
+        })();
+    </script>
     <!-- JavaScript personalizado -->
     {% block scripts %}{% endblock %}
 </body>

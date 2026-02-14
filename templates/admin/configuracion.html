@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Configuración del Sistema{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -9,15 +10,15 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h1 class="h3 mb-0">
+                    <h2 class="admin-page-title">
                         <i class="fas fa-cog me-2"></i>
                         Configuración del Sistema
-                    </h1>
+                    </h2>
                     <p class="text-muted mt-1">Configurar parámetros generales del sistema académico</p>
                 </div>
                 <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-1"></i>
-                    Regresar al Dashboard
+                    Volver al Dashboard
                 </a>
             </div>
         </div>
@@ -27,7 +28,7 @@
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-sliders-h me-2"></i>
                         Configuración General
@@ -85,7 +86,7 @@
                         <div class="d-flex justify-content-end mt-4">
                             <button type="button" class="btn btn-primary" onclick="guardarConfiguracion()">
                                 <i class="fas fa-save me-1"></i>
-                                Guardar Cambios
+                                Guardar
                             </button>
                         </div>
                     </form>
@@ -98,7 +99,7 @@
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
             <div class="card">
-                <div class="card-header bg-success text-white">
+                <div class="card-header bg-success text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-clock me-2"></i>
                         Configuración de Horarios
@@ -141,9 +142,9 @@
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
-                            <button type="button" class="btn btn-success" onclick="guardarHorarios()">
+                            <button type="button" class="btn btn-primary" onclick="guardarHorarios()">
                                 <i class="fas fa-save me-1"></i>
-                                Guardar Configuración
+                                Guardar
                             </button>
                         </div>
                     </form>
@@ -156,7 +157,7 @@
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
             <div class="card">
-                <div class="card-header bg-info text-white">
+                <div class="card-header bg-info text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-user-clock me-2"></i>
                         Límites de Carga Horaria por Tipo de Profesor
@@ -242,9 +243,9 @@
                                             Los cambios se aplicarán a las nuevas asignaciones de horario
                                         </small>
                                     </div>
-                                    <button type="button" class="btn btn-info" onclick="guardarCargaHoraria()">
+                                    <button type="button" class="btn btn-primary" onclick="guardarCargaHoraria()">
                                         <i class="fas fa-save me-1"></i>
-                                        Guardar Límites
+                                        Guardar
                                     </button>
                                 </div>
                             </div>
@@ -326,7 +327,7 @@
                                 <div id="preview_firma_director" class="mt-2">
                                     {% if config_excel.director_academico_firma %}
                                     <img src="{{ url_for('static', filename='uploads/firmas/' + config_excel.director_academico_firma) }}"
-                                         alt="Firma Director" class="img-thumbnail" style="max-height: 60px;">
+                                         alt="Firma Director" class="img-thumbnail admin-signature-preview-sm">
                                     {% endif %}
                                 </div>
                             </div>
@@ -364,7 +365,7 @@
                                 <div id="preview_firma_responsable" class="mt-2">
                                     {% if config_excel.responsable_pa_firma %}
                                     <img src="{{ url_for('static', filename='uploads/firmas/' + config_excel.responsable_pa_firma) }}"
-                                         alt="Firma Responsable" class="img-thumbnail" style="max-height: 60px;">
+                                         alt="Firma Responsable" class="img-thumbnail admin-signature-preview-sm">
                                     {% endif %}
                                 </div>
                             </div>
@@ -381,9 +382,9 @@
                                             Los cambios se aplicarán a las nuevas exportaciones de Excel
                                         </small>
                                     </div>
-                                    <button type="button" class="btn btn-secondary" onclick="guardarConfigExcel()">
+                                    <button type="button" class="btn btn-primary" onclick="guardarConfigExcel()">
                                         <i class="fas fa-save me-1"></i>
-                                        Guardar Configuración
+                                        Guardar
                                     </button>
                                 </div>
                             </div>
@@ -398,7 +399,7 @@
     <div class="row mb-4">
         <div class="col-lg-8 mx-auto">
             <div class="card">
-                <div class="card-header bg-warning text-white">
+                <div class="card-header bg-warning text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-shield-alt me-2"></i>
                         Configuración de Seguridad
@@ -438,9 +439,9 @@
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
-                            <button type="button" class="btn btn-warning" onclick="guardarSeguridad()">
+                            <button type="button" class="btn btn-primary" onclick="guardarSeguridad()">
                                 <i class="fas fa-save me-1"></i>
-                                Guardar Configuración
+                                Guardar
                             </button>
                         </div>
                     </form>
@@ -453,7 +454,7 @@
     <div class="row mb-4">
         <div class="col-lg-10 mx-auto">
             <div class="card">
-                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-database me-2"></i>
                         Configuración de Base de Datos
@@ -683,7 +684,7 @@
                                 </h6>
                                 <div class="table-responsive">
                                     <table class="table table-sm table-striped" id="backup-history">
-                                        <thead>
+                                        <thead class="table-dark">
                                             <tr>
                                                 <th>Fecha</th>
                                                 <th>Tipo</th>
@@ -714,9 +715,9 @@
                                 </button>
                             </div>
                             <div>
-                                <button type="button" class="btn btn-success me-2" onclick="guardarDatabase()">
+                                <button type="button" class="btn btn-primary me-2" onclick="guardarDatabase()">
                                     <i class="fas fa-save me-1"></i>
-                                    Guardar Configuración
+                                    Guardar
                                 </button>
                                 <button type="button" class="btn btn-warning" onclick="reiniciarSistema()">
                                     <i class="fas fa-sync me-1"></i>
@@ -1078,8 +1079,7 @@ function reiniciarSistema() {
 function mostrarMensaje(mensaje, tipo) {
     // Crear elemento de alerta
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${tipo} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.className = `alert alert-${tipo} alert-dismissible fade show position-fixed admin-toast-message`;
     alertDiv.innerHTML = `
         ${mensaje}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -1121,7 +1121,7 @@ function previewFirmaDirector(input) {
         const reader = new FileReader();
         reader.onload = function(e) {
             document.getElementById('preview_firma_director').innerHTML =
-                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail" style="max-height: 60px;">`;
+                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail admin-signature-preview-sm">`;
         };
         reader.readAsDataURL(input.files[0]);
     }
@@ -1132,7 +1132,7 @@ function previewFirmaResponsable(input) {
         const reader = new FileReader();
         reader.onload = function(e) {
             document.getElementById('preview_firma_responsable').innerHTML =
-                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail" style="max-height: 60px;">`;
+                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail admin-signature-preview-sm">`;
         };
         reader.readAsDataURL(input.files[0]);
     }

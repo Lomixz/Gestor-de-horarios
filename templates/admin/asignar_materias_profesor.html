@@ -2,19 +2,21 @@
 
 {% block title %}{{ titulo }}{% endblock %}
 
+{% block body_class %}admin-ui{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-4 mb-5">
     
     <!-- Encabezado Gradient Prominente -->
     <div class="card border-0 shadow-sm mb-4 overflow-hidden">
-        <div class="card-header py-4 position-relative" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <div class="d-flex justify-content-between align-items-center position-relative" style="z-index: 2;">
+        <div class="card-header py-4 position-relative admin-primary-gradient-header">
+            <div class="d-flex justify-content-between align-items-center position-relative admin-z-2">
                 <div class="d-flex align-items-center text-white">
-                    <div class="bg-white bg-opacity-25 rounded-circle p-3 me-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                    <div class="bg-white bg-opacity-25 rounded-circle p-3 me-3 d-flex align-items-center justify-content-center admin-icon-circle-60">
                         <i class="fas fa-chalkboard-teacher fa-2x"></i>
                     </div>
                     <div>
-                        <h6 class="text-uppercase text-white-50 mb-1 ls-1" style="letter-spacing: 2px; font-size: 0.75rem;">Asignación de Materias</h6>
+                        <h6 class="text-uppercase text-white-50 mb-1 ls-1 admin-heading-kicker">Asignación de Materias</h6>
                         <h2 class="mb-0 fw-bold">{{ profesor.nombre }} {{ profesor.apellido }}</h2>
                         <div class="mt-2">
                              <span class="badge bg-white text-primary bg-opacity-90 rounded-pill px-3 py-1">
@@ -30,19 +32,19 @@
                 </div>
             </div>
             <!-- Elemento decorativo de fondo -->
-            <div class="position-absolute bottom-0 end-0 opacity-10 me-5 mb-n4" style="transform: rotate(15deg);">
+            <div class="position-absolute bottom-0 end-0 opacity-10 me-5 mb-n4 admin-rotate-15">
                <i class="fas fa-book-open fa-10x text-white"></i>
             </div>
         </div>
     </div>
 
     <!-- Barra de Herramientas y Filtros -->
-    <div class="card border-0 shadow-sm mb-4 sticky-top" style="top: 10px; z-index: 900; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
+    <div class="card border-0 shadow-sm mb-4 sticky-top admin-sticky-toolbar">
         <div class="card-body py-3">
             <div class="row g-3 align-items-center">
                 <!-- Filtro Carrera -->
                 <div class="col-md-auto">
-                    <label class="d-block text-uppercase text-muted fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Carrera</label>
+                    <label class="d-block text-uppercase text-muted fw-bold mb-1 admin-filter-label">Carrera</label>
                     <div class="btn-group shadow-sm" role="group" id="filtro-carreras">
                         <button type="button" class="btn btn-sm btn-outline-primary active fw-bold px-3 rounded-start-pill" data-carrera="todas" onclick="filtrar('carrera', 'todas')">
                             Todas
@@ -59,11 +61,11 @@
 
                 <!-- Filtro Cuatrimestre -->
                 <div class="col-md border-start border-light ps-md-3">
-                    <label class="d-block text-uppercase text-muted fw-bold mb-1" style="font-size: 0.65rem; letter-spacing: 1px;">Cuatrimestres</label>
+                    <label class="d-block text-uppercase text-muted fw-bold mb-1 admin-filter-label">Cuatrimestres</label>
                     <div class="d-flex gap-1 flex-wrap" id="filtro-cuatris">
                         <button type="button" class="btn btn-xs btn-outline-secondary active rounded-pill px-2" data-cuatri="todos" onclick="filtrar('cuatrimestre', 'todos')">All</button>
                         {% for i in range(0, 11) %}
-                        <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2" style="width: 28px;" data-cuatri="{{ i }}" onclick="filtrar('cuatrimestre', '{{ i }}')">{{ i }}</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill px-2 admin-btn-cuatri" data-cuatri="{{ i }}" onclick="filtrar('cuatrimestre', '{{ i }}')">{{ i }}</button>
                         {% endfor %}
                     </div>
                 </div>
@@ -98,12 +100,12 @@
 </div>
 
 <!-- Barra Flotante de Acción Inferior -->
-<div class="fixed-bottom p-3 d-flex justify-content-center" style="pointer-events: none; z-index: 1050;">
-    <div class="bg-dark text-white shadow-lg rounded-pill px-4 py-2 d-flex align-items-center gap-4" style="pointer-events: auto; backdrop-filter: blur(5px); background-color: rgba(33, 37, 41, 0.95) !important;">
+<div class="fixed-bottom p-3 d-flex justify-content-center admin-fixed-actions">
+    <div class="bg-dark text-white shadow-lg rounded-pill px-4 py-2 d-flex align-items-center gap-4 admin-fixed-actions-inner">
         <div class="d-flex align-items-center border-end border-secondary pe-4">
             <div class="position-relative me-2">
                 <i class="fas fa-book fa-lg text-warning"></i>
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="footer-badge-count" style="font-size: 0.5rem; display: none;">0</span>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger admin-footer-badge-count" id="footer-badge-count">0</span>
             </div>
             <div>
                 <span class="h4 mb-0 fw-bold" id="footer-count">0</span>
@@ -119,88 +121,11 @@
                 <i class="fas fa-times me-1"></i> Nada
             </button>
             <button type="submit" form="form-asignar-materias" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm ms-2">
-                <i class="fas fa-save me-2"></i> Guardar Cambios
+                <i class="fas fa-save me-2"></i> Guardar
             </button>
         </div>
     </div>
 </div>
-
-<style>
-    /* Estilos Personalizados */
-    .btn-xs {
-        padding: 0.15rem 0.4rem;
-        font-size: 0.75rem;
-    }
-    
-    .cursor-pointer { cursor: pointer; }
-    
-    /* Animaciones suaves */
-    .carrera-section, .cuatri-card, .materia-row {
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    }
-    
-    /* Materia Item Styling */
-    .materia-check-input {
-        display: none; /* Ocultar el checkbox nativo */
-    }
-    
-    .materia-card {
-        border: 1px solid #e9ecef;
-        background: #fff;
-        border-radius: 8px;
-        padding: 10px 15px;
-        cursor: pointer;
-        position: relative;
-        transition: all 0.2s ease;
-    }
-    
-    .materia-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        border-color: #cbd3da;
-    }
-    
-    /* Estado Seleccionado */
-    .materia-check-input:checked + .materia-card {
-        background-color: #eef2ff;
-        border-color: #667eea;
-        box-shadow: 0 2px 4px rgba(102, 126, 234, 0.15);
-    }
-    
-    .materia-check-input:checked + .materia-card .materia-icon {
-        color: #667eea;
-        transform: scale(1.1);
-    }
-    
-    .materia-check-input:checked + .materia-card .check-indicator {
-        opacity: 1;
-        transform: scale(1);
-    }
-    
-    .materia-icon {
-        transition: transform 0.2s ease;
-        color: #adb5bd;
-    }
-    
-    .check-indicator {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        color: #667eea;
-        opacity: 0;
-        transform: scale(0.5);
-        transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .item-hidden {
-        display: none !important;
-    }
-    
-    /* Bordes de colores por carrera */
-    .border-left-accent {
-        border-left: 4px solid;
-    }
-</style>
 
 <script>
 // Data from server
@@ -282,7 +207,7 @@ function renderizarUI() {
         // Header de Carrera Moderno con línea
         carreraDiv.innerHTML = `
             <div class="d-flex align-items-center mb-4">
-                <span class="badge rounded-pill me-3 shadow-sm px-3 py-2" style="background-color: ${colorCarrera}; font-size: 1rem;">${carrera}</span>
+                <span class="badge rounded-pill me-3 shadow-sm px-3 py-2 admin-carrera-badge" style="background-color: ${colorCarrera};">${carrera}</span>
                 <div class="flex-grow-1 border-bottom"></div>
             </div>
         `;
@@ -311,8 +236,8 @@ function renderizarUI() {
                             <div class="materia-icon me-3">
                                 <i class="fas fa-book"></i>
                             </div>
-                            <div class="flex-grow-1" style="min-width: 0;">
-                                <div class="fw-bold text-dark text-truncate" style="font-size: 0.85rem;">${m.codigo}</div>
+                            <div class="flex-grow-1 admin-flex-min-0">
+                                <div class="fw-bold text-dark text-truncate admin-fs-085">${m.codigo}</div>
                                 <div class="text-muted text-truncate small" title="${m.nombre}">${m.nombre}</div>
                             </div>
                             <div class="check-indicator">

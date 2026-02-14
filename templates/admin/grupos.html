@@ -1,24 +1,25 @@
 {% extends "base.html" %}
 
 {% block title %}Gestión de Grupos{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>
+                <h2 class="admin-page-title">
                     <i class="fas fa-layer-group me-2"></i>
                     Gestión de Grupos Académicos
                 </h2>
-                <div>
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary me-2">
+                <div class="page-actions">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i>
-                        Regresar
+                        Volver al Dashboard
                     </a>
                     <a href="{{ url_for('crear_grupo') }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>
-                        Nuevo Grupo
+                        Agregar Grupo
                     </a>
                 </div>
             </div>
@@ -29,7 +30,7 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">
-                <div class="card-header">
+                <div class="card-header admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-filter me-2"></i>
                         Filtros de Búsqueda
@@ -97,7 +98,7 @@
     <div class="row">
         <div class="col-12">
             <div class="card">
-                <div class="card-header bg-primary text-white">
+                <div class="card-header bg-primary text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-layer-group me-2"></i>
                         Lista de Grupos
@@ -106,8 +107,8 @@
                 <div class="card-body p-0">
                     {% if grupos %}
                         <div class="table-responsive">
-                            <table class="table table-bordered table-striped table-hover">
-                                <thead class="thead-dark">
+                            <table class="table table-hover admin-table">
+                                <thead class="table-dark">
                                     <tr>
                                         <th>Código</th>
                                         <th>Carrera</th>
@@ -129,22 +130,22 @@
                                         <td>{{ grupo.get_cuatrimestre_display() }}</td>
                                         <td>
                                             {% if grupo.turno == 'M' %}
-                                            <span class="badge badge-warning" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #ffc107; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-warning">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-sun"></i>
                                                 {{ grupo.get_turno_display() }}
                                             </span>
                                             {% else %}
-                                            <span class="badge badge-info" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #17a2b8; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-info">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-moon"></i>
                                                 {{ grupo.get_turno_display() }}
                                             </span>
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <span class="badge badge-primary" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #007bff; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-primary">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-book"></i>
                                                 {{ resumen.materias_count }} materias
                                             </span>
@@ -156,14 +157,14 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <span class="badge badge-secondary" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #6c757d; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-secondary">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-chalkboard-teacher"></i>
                                                 {{ resumen.profesores_count }} profesores
                                             </span>
                                         </td>
                                         <td>
-                                            <div class="progress mb-1" style="height: 20px;">
+                                            <div class="progress mb-1 admin-progress-lg">
                                                 <div class="progress-bar bg-{{ resumen.estado.clase }}" 
                                                      role="progressbar" 
                                                      aria-valuenow="{{ resumen.completitud }}" 
@@ -180,14 +181,14 @@
                                         </td>
                                         <td>
                                             {% if grupo.activo %}
-                                            <span class="badge badge-success" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #28a745; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-success">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-check"></i>
                                                 Activo
                                             </span>
                                             {% else %}
-                                            <span class="badge badge-secondary" style="position: relative; padding-left: 24px; border-radius: 12px; font-weight: bold; background-color: #6c757d; color: white;">
-                                                <i class="fas fa-circle" style="position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font-size: 8px; color: white;"></i>
+                                            <span class="badge admin-pill-badge admin-pill-secondary">
+                                                <i class="fas fa-circle admin-pill-dot"></i>
                                                 <i class="fas fa-times"></i>
                                                 Inactivo
                                             </span>
@@ -211,7 +212,7 @@
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             <form method="post" action="{{ url_for('eliminar_grupo', id=grupo.id) }}" 
-                                                  style="display: inline;" 
+                                                  class="inline-action-form" 
                                                   onsubmit="return confirm('¿Estás seguro de eliminar este grupo?');">
                                                 <button type="submit" class="btn btn-sm btn-danger" title="Eliminar">
                                                     <i class="fas fa-trash"></i>

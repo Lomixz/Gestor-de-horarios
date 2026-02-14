@@ -3,104 +3,9 @@
 {% block title %}Registro - Sistema Académico{% endblock %}
 
 {% block content %}
-<style>
-    /* Wizard Steps Styles */
-    .step-indicator {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 2rem;
-        position: relative;
-    }
-    .step-indicator::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: #e9ecef;
-        z-index: 0;
-        transform: translateY(-50%);
-    }
-    .step {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: #fff;
-        border: 2px solid #e9ecef;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #6c757d;
-        font-weight: bold;
-        position: relative;
-        z-index: 1;
-        transition: all 0.3s ease;
-    }
-    .step.active {
-        border-color: #3f51b5;
-        background: #3f51b5;
-        color: #fff;
-        box-shadow: 0 0 0 5px rgba(63, 81, 181, 0.2);
-    }
-    .step.completed {
-        border-color: #28a745;
-        background: #28a745;
-        color: #fff;
-    }
-    
-    /* Role Card Styles */
-    .role-card-input {
-        display: none;
-    }
-    .role-card {
-        cursor: pointer;
-        transition: all 0.2s ease;
-        border: 2px solid #e9ecef;
-    }
-    .role-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        border-color: #a4b0be;
-    }
-    .role-card-input:checked + .role-card {
-        border-color: #3f51b5;
-        background-color: #f8f9fa;
-        box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.2);
-    }
-    .role-icon {
-        font-size: 2.5rem;
-        color: #3f51b5;
-        margin-bottom: 1rem;
-    }
-    
-    /* Form Floating Fixes */
-    .form-floating > label {
-        z-index: 2;
-    }
-    .password-toggle {
-        cursor: pointer;
-        z-index: 9;
-        margin-top: 5px; /* Adjust for floating label */
-    }
-
-    /* Wizard Transitions */
-    .wizard-step {
-        display: none;
-        animation: fadeIn 0.4s ease;
-    }
-    .wizard-step.active {
-        display: block;
-    }
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-</style>
-
-<div class="row justify-content-center">
+<div class="row justify-content-center register-page">
     <div class="col-md-10 col-lg-8">
-        <div class="card shadow border-0 rounded-4">
+        <div class="card auth-card">
             <div class="card-body p-5">
                 
                 <!-- Header -->
@@ -168,7 +73,7 @@
                             </div>
                         </div>
                         <div class="d-flex justify-content-end mt-4">
-                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(2)">
+                            <button type="button" class="btn btn-primary btn-lg px-4" onclick="nextStep(2)">
                                 Siguiente <i class="fas fa-arrow-right ms-2"></i>
                             </button>
                         </div>
@@ -208,10 +113,10 @@
                             </div>
                         </div>
                         <div class="d-flex justify-content-between mt-4">
-                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(1)">
+                            <button type="button" class="btn btn-outline-secondary btn-lg px-4" onclick="prevStep(1)">
                                 <i class="fas fa-arrow-left me-2"></i> Atrás
                             </button>
-                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(3)">
+                            <button type="button" class="btn btn-primary btn-lg px-4" onclick="nextStep(3)">
                                 Siguiente <i class="fas fa-arrow-right ms-2"></i>
                             </button>
                         </div>
@@ -266,10 +171,10 @@
                         {% endfor %}
 
                         <div class="d-flex justify-content-between mt-5">
-                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(2)">
+                            <button type="button" class="btn btn-outline-secondary btn-lg px-4" onclick="prevStep(2)">
                                 <i class="fas fa-arrow-left me-2"></i> Atrás
                             </button>
-                            <button type="button" class="btn btn-primary btn-lg rounded-pill px-4" onclick="nextStep(4)">
+                            <button type="button" class="btn btn-primary btn-lg px-4" onclick="nextStep(4)">
                                 Siguiente <i class="fas fa-arrow-right ms-2"></i>
                             </button>
                         </div>
@@ -317,7 +222,7 @@
                                 </div>
                                 <div class="table-responsive rounded border">
                                     <table class="table table-sm table-borderless text-center mb-0 align-middle">
-                                        <thead class="bg-light">
+                                        <thead class="table-dark">
                                             <tr>
                                                 <th>Hora</th>
                                                 <th>L</th><th>M</th><th>M</th><th>J</th><th>V</th><th>S</th>
@@ -345,10 +250,10 @@
                         </div>
 
                         <div class="d-flex justify-content-between mt-5">
-                            <button type="button" class="btn btn-outline-secondary btn-lg rounded-pill px-4" onclick="prevStep(3)">
+                            <button type="button" class="btn btn-outline-secondary btn-lg px-4" onclick="prevStep(3)">
                                 <i class="fas fa-arrow-left me-2"></i> Atrás
                             </button>
-                            {{ form.submit(class="btn btn-success btn-lg rounded-pill px-5 shadow-sm") }}
+                            {{ form.submit(class="btn btn-success btn-lg px-5") }}
                         </div>
                     </div>
 

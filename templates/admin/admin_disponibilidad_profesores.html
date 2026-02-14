@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block title %}Disponibilidad de Profesores - Administrador{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
@@ -8,11 +9,11 @@
         <div class="col-md-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="bi bi-clock-history"></i> Disponibilidad Horaria de Profesores</h2>
+                    <h2 class="admin-page-title"><i class="bi bi-clock-history"></i> Disponibilidad Horaria de Profesores</h2>
                     <p class="text-muted mb-0">Panel de Administrador - Gestión Global</p>
                 </div>
-                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
-                    <i class="bi bi-arrow-left"></i> Volver al Panel
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Volver al Dashboard
                 </a>
             </div>
         </div>
@@ -28,7 +29,7 @@
                             <h6 class="card-title mb-0">Total de Profesores</h6>
                             <h2 class="mb-0">{{ total_profesores }}</h2>
                         </div>
-                        <i class="bi bi-people-fill" style="font-size: 3rem; opacity: 0.5;"></i>
+                        <i class="bi bi-people-fill admin-stat-icon"></i>
                     </div>
                 </div>
             </div>
@@ -41,7 +42,7 @@
                             <h6 class="card-title mb-0">Con Disponibilidad</h6>
                             <h2 class="mb-0">{{ profesores_con_disponibilidad }}</h2>
                         </div>
-                        <i class="bi bi-check-circle-fill" style="font-size: 3rem; opacity: 0.5;"></i>
+                        <i class="bi bi-check-circle-fill admin-stat-icon"></i>
                     </div>
                 </div>
             </div>
@@ -54,7 +55,7 @@
                             <h6 class="card-title mb-0">Sin Disponibilidad</h6>
                             <h2 class="mb-0">{{ total_profesores - profesores_con_disponibilidad }}</h2>
                         </div>
-                        <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem; opacity: 0.5;"></i>
+                        <i class="bi bi-exclamation-triangle-fill admin-stat-icon"></i>
                     </div>
                 </div>
             </div>
@@ -63,7 +64,7 @@
 
     <!-- Filtros -->
     <div class="card mb-4">
-        <div class="card-header bg-light">
+        <div class="card-header bg-light admin-section-header">
             <h5 class="mb-0"><i class="bi bi-funnel"></i> Filtros de Búsqueda</h5>
         </div>
         <div class="card-body">
@@ -107,13 +108,13 @@
 
     <!-- Tabla de profesores -->
     <div class="card">
-        <div class="card-header bg-light">
+        <div class="card-header bg-light admin-section-header">
             <h5 class="mb-0"><i class="bi bi-list-ul"></i> Listado de Profesores</h5>
         </div>
         <div class="card-body">
             {% if profesores %}
             <div class="table-responsive">
-                <table class="table table-hover table-striped">
+                <table class="table table-hover admin-table">
                     <thead class="table-dark">
                         <tr>
                             <th>Nombre Completo</th>
@@ -200,7 +201,7 @@
     <div class="row mt-4">
         <div class="col-md-12">
             <div class="card">
-                <div class="card-header bg-info text-white">
+                <div class="card-header bg-info text-white admin-section-header">
                     <h6 class="mb-0"><i class="bi bi-info-circle"></i> Información para Administradores</h6>
                 </div>
                 <div class="card-body">
@@ -219,26 +220,4 @@
     </div>
 </div>
 
-<style>
-.card {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-}
-
-.card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.table tbody tr {
-    transition: background-color 0.2s ease;
-}
-
-.table tbody tr:hover {
-    background-color: rgba(0,123,255,0.05);
-}
-
-.btn-group .btn {
-    margin: 0 2px;
-}
-</style>
 {% endblock %}

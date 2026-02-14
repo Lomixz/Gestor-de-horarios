@@ -2,9 +2,10 @@
 
 {% block title %}Asignar Profesores - {{ grupo.codigo }} - Sistema Académico{% endblock %}
 
+{% block body_class %}admin-ui{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
-    <!-- Encabezado -->
     <div class="row mb-4">
         <div class="col-12">
             <nav aria-label="breadcrumb">
@@ -14,7 +15,7 @@
                     <li class="breadcrumb-item active">Asignar Profesores - {{ grupo.codigo }}</li>
                 </ol>
             </nav>
-            
+
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <h2 class="mb-1">
@@ -31,7 +32,6 @@
         </div>
     </div>
 
-    <!-- Info del Grupo -->
     <div class="row mb-4">
         <div class="col-md-4">
             <div class="card border-primary">
@@ -47,7 +47,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-info text-white">
+            <div class="card bg-info text-white admin-stat-card">
                 <div class="card-body text-center">
                     <h3>{{ materias|length }}</h3>
                     <p class="mb-0">Materias en el grupo</p>
@@ -55,7 +55,7 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-success text-white">
+            <div class="card bg-success text-white admin-stat-card">
                 <div class="card-body text-center">
                     <h3>{{ profesores|length }}</h3>
                     <p class="mb-0">Profesores disponibles</p>
@@ -69,50 +69,43 @@
         <div class="row">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <div class="card-header admin-section-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="fas fa-chalkboard-teacher me-2"></i>
                             Asignación de Profesores por Materia
                         </h5>
-                        <button type="submit" class="btn btn-success">
+                        <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save me-2"></i>
                             Guardar Asignaciones
                         </button>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-light">
+                            <table class="table table-hover admin-table admin-table-middle mb-0">
+                                <thead class="table-dark">
                                     <tr>
-                                        <th style="width: 35%;">Materia</th>
-                                        <th style="width: 15%;">Código</th>
-                                        <th style="width: 10%;">Horas</th>
-                                        <th style="width: 40%;">Profesor(es) Asignado(s)</th>
+                                        <th class="th-w-35">Materia</th>
+                                        <th class="th-w-15">Código</th>
+                                        <th class="th-w-10">Horas</th>
+                                        <th class="th-w-40">Profesor(es) Asignado(s)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for materia in materias %}
                                     <tr>
+                                        <td><strong>{{ materia.nombre }}</strong></td>
+                                        <td><span class="badge bg-secondary">{{ materia.codigo }}</span></td>
+                                        <td><span class="badge bg-info">{{ materia.horas_semanales }} hrs</span></td>
                                         <td>
-                                            <strong>{{ materia.nombre }}</strong>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-secondary">{{ materia.codigo }}</span>
-                                        </td>
-                                        <td>
-                                            <span class="badge bg-info">{{ materia.horas_semanales }} hrs</span>
-                                        </td>
-                                        <td>
-                                            <select name="profesor_{{ materia.id }}" 
-                                                    class="form-select form-select-sm profesor-select"
+                                            <select name="profesor_{{ materia.id }}"
+                                                    class="form-select form-select-sm admin-profesor-select"
                                                     data-materia-id="{{ materia.id }}">
                                                 <option value="">-- Sin profesor --</option>
                                                 {% for profesor in profesores %}
-                                                    <option value="{{ profesor.id }}" 
-                                                            {% if profesor.id in asignaciones_actuales.get(materia.id, []) %}selected{% endif %}>
-                                                        {{ profesor.get_nombre_completo() }} 
-                                                        ({{ profesor.get_tipo_profesor_display() }})
-                                                    </option>
+                                                <option value="{{ profesor.id }}"
+                                                        {% if profesor.id in asignaciones_actuales.get(materia.id, []) %}selected{% endif %}>
+                                                    {{ profesor.get_nombre_completo() }} ({{ profesor.get_tipo_profesor_display() }})
+                                                </option>
                                                 {% endfor %}
                                             </select>
                                         </td>
@@ -123,12 +116,12 @@
                         </div>
                     </div>
                     <div class="card-footer text-center">
-                        <button type="submit" class="btn btn-success btn-lg">
+                        <button type="submit" class="btn btn-primary btn-lg">
                             <i class="fas fa-save me-2"></i>
                             Guardar Todas las Asignaciones
                         </button>
-                        <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-secondary btn-lg">
-                            <i class="fas fa-times me-2"></i>
+                        <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="fas fa-times me-1"></i>
                             Cancelar
                         </a>
                     </div>
@@ -144,14 +137,4 @@
     </div>
     {% endif %}
 </div>
-
-<style>
-.profesor-select {
-    min-width: 250px;
-}
-
-.table th, .table td {
-    vertical-align: middle;
-}
-</style>
 {% endblock %}

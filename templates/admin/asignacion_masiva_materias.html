@@ -1,42 +1,37 @@
 {% extends "base.html" %}
 
 {% block title %}Asignación Masiva de Materias{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
     
-    <!-- Encabezado Gradient -->
-    <div class="card border-0 shadow-sm mb-4 overflow-hidden">
-        <div class="card-header py-4 position-relative" style="background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);">
-            <div class="d-flex justify-content-between align-items-center position-relative" style="z-index: 2;">
-                <div class="text-white">
-                    <h3 class="mb-1 text-white">
-                        <i class="fas fa-tasks me-2"></i> Asignación Masiva
-                    </h3>
-                    <p class="mb-0 opacity-75">
-                        <i class="fas fa-chalkboard-teacher me-2"></i>
-                        Gestiona múltiples asignaciones de forma eficiente
-                    </p>
-                </div>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('importar_asignaciones_masivas') }}" class="btn btn-light shadow-sm text-primary fw-bold">
-                        <i class="fas fa-file-upload me-1"></i> Importar CSV
-                    </a>
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-light shadow-sm text-dark fw-bold">
-                        <i class="fas fa-arrow-left me-1"></i> Panel
-                    </a>
-                </div>
-            </div>
-            <!-- Shapes decorativos -->
-            <div class="position-absolute bottom-0 end-0 opacity-10 me-5 mb-n5" style="transform: rotate(15deg);">
-               <i class="fas fa-th fa-10x text-white"></i>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="admin-page-title">
+            <i class="fas fa-tasks me-2"></i>
+            Asignación Masiva de Materias
+        </h2>
+        <div class="admin-page-actions">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>
+                Volver al Dashboard
+            </a>
+            <a href="{{ url_for('importar_asignaciones_masivas') }}" class="btn btn-success">
+                <i class="fas fa-file-upload me-1"></i>
+                Importar CSV
+            </a>
         </div>
     </div>
 
     <!-- Filtros y Herramientas -->
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body bg-light rounded">
+    <div class="card mb-4">
+        <div class="card-header admin-section-header">
+            <h5 class="mb-0">
+                <i class="fas fa-filter me-2"></i>
+                Filtros de Búsqueda
+            </h5>
+        </div>
+        <div class="card-body">
             <form method="GET" action="{{ url_for('asignacion_masiva_materias') }}" id="filtrosForm" class="row g-3 align-items-end">
                 <div class="col-md-3">
                     <label class="form-label text-muted small fw-bold">CARRERA</label>
@@ -77,8 +72,8 @@
                         <i class="fas fa-question-circle"></i> Ayuda
                     </button>
                     {% if filtro_carrera or filtro_cuatrimestre %}
-                    <a href="{{ url_for('asignacion_masiva_materias') }}" class="btn btn-link btn-sm text-muted text-decoration-none">
-                        Limpiar filtros
+                        <a href="{{ url_for('asignacion_masiva_materias') }}" class="btn btn-link btn-sm text-muted text-decoration-none">
+                            Limpiar Filtros
                     </a>
                     {% endif %}
                 </div>
@@ -86,56 +81,64 @@
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="row g-3 mb-4">
+    <!-- Estadísticas -->
+    <div class="row mb-4">
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
-                <div class="card-body d-flex align-items-center">
-                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle me-3">
-                        <i class="fas fa-chalkboard-teacher text-primary fa-lg"></i>
-                    </div>
-                    <div>
-                        <h4 class="mb-0 fw-bold text-dark">{{ profesores|length }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Profesores</small>
+            <div class="card bg-primary text-white admin-stat-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ profesores|length }}</h4>
+                            <p class="mb-0">Profesores</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-chalkboard-teacher fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
-                <div class="card-body d-flex align-items-center">
-                    <div class="bg-success bg-opacity-10 p-3 rounded-circle me-3">
-                        <i class="fas fa-book text-success fa-lg"></i>
-                    </div>
-                    <div>
-                        <h4 class="mb-0 fw-bold text-dark">{{ materias|length }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Materias</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-info">
-                <div class="card-body d-flex align-items-center">
-                    <div class="bg-info bg-opacity-10 p-3 rounded-circle me-3">
-                        <i class="fas fa-edit text-info fa-lg"></i>
-                    </div>
-                    <div>
-                        <h4 class="mb-0 fw-bold text-dark" id="contadorCambios">0</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Cambios</small>
+            <div class="card bg-success text-white admin-stat-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ materias|length }}</h4>
+                            <p class="mb-0">Materias</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-book fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100 border-start border-4 border-warning">
-                <div class="card-body d-flex align-items-center">
-                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle me-3">
-                        <i class="fas fa-link text-warning fa-lg"></i>
+            <div class="card bg-info text-white admin-stat-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0" id="contadorCambios">0</h4>
+                            <p class="mb-0">Cambios</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-edit fa-2x"></i>
+                        </div>
                     </div>
-                    <div>
-                        <h4 class="mb-0 fw-bold text-dark">{{ asignaciones_actuales.values() | map('length') | sum }}</h4>
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total Asignado</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark admin-stat-card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ asignaciones_actuales.values() | map('length') | sum }}</h4>
+                            <p class="mb-0">Total Asignado</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-link fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -154,7 +157,7 @@
                     </h5>
                     <div class="d-flex gap-2">
                         <div class="btn-group shadow-sm">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="seleccionarTodas()" title="Seleccionar Todo">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="seleccionarTodas()" title="Seleccionar todo">
                                 <i class="fas fa-check-double"></i>
                             </button>
                             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="limpiarSeleccion()" title="Limpiar">
@@ -162,7 +165,7 @@
                             </button>
                         </div>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm px-4 fw-bold" id="btnGuardar">
-                            <i class="fas fa-save me-1"></i> GUARDAR CAMBIOS
+                            <i class="fas fa-save me-1"></i> Guardar
                         </button>
                     </div>
                 </div>
@@ -170,21 +173,21 @@
 
             <!-- Matriz -->
             <div class="card-body p-0">
-                <div class="table-responsive bg-white" style="max-height: 70vh; overflow: auto;">
+                <div class="table-responsive bg-white mass-matrix-container">
                     <table class="table table-bordered mb-0">
-                        <thead class="bg-dark text-white shadow-sm" style="position: sticky; top: 0; z-index: 10;">
+                        <thead class="table-dark">
                             <tr>
-                                <th class="p-3 border-0 bg-dark" style="position: sticky; left: 0; z-index: 11; min-width: 300px; width: 300px;">
+                                <th class="p-3 border-0 bg-dark mass-sticky-col-title">
                                     <div class="d-flex align-items-center justify-content-between">
                                         <span class="text-uppercase small fw-bold tracking-wider">Profesor</span>
                                         <i class="fas fa-check cursor-pointer opacity-50 hover-opacity-100" onclick="seleccionarColumna(-1)"></i>
                                     </div>
                                 </th>
                                 {% for materia in materias %}
-                                <th class="text-center p-2 border-secondary align-middle bg-dark" style="min-width: 140px;">
+                                <th class="text-center p-2 border-secondary align-middle bg-dark mass-materia-col">
                                     <div class="d-flex flex-column align-items-center cursor-pointer group-hover-target" onclick="seleccionarColumna({{ loop.index0 }})">
-                                        <span class="badge bg-secondary mb-1" style="font-size: 0.7rem;">C{{ materia.cuatrimestre }}</span>
-                                        <small class="d-block lh-sm text-truncate w-100" title="{{ materia.nombre }}" style="font-size: 0.75rem;">
+                                        <span class="badge bg-secondary mb-1 metric-label-xs">C{{ materia.cuatrimestre }}</span>
+                                        <small class="d-block lh-sm text-truncate w-100 mass-materia-label" title="{{ materia.nombre }}">
                                             {{ materia.codigo }}<br>
                                             {{ materia.nombre }}
                                         </small>
@@ -200,7 +203,7 @@
                             {% set en_limite = carga.porcentaje >= 100 %}
                             <tr class="align-middle {{ 'table-danger' if en_limite else '' }}">
                                 <!-- Columna Sticky Profesor -->
-                                <th class="p-3 border-end {{ 'bg-danger bg-opacity-10' if en_limite else 'bg-white' }}" style="position: sticky; left: 0; z-index: 5;">
+                                <th class="p-3 border-end {{ 'bg-danger bg-opacity-10' if en_limite else 'bg-white' }} mass-sticky-col-body">
                                     <div class="d-flex align-items-center">
                                         <div class="me-3 position-relative">
                                             {% if profesor.imagen_perfil %}
@@ -212,7 +215,7 @@
                                                 <span class="visually-hidden">Estado</span>
                                             </span>
                                         </div>
-                                        <div class="flex-grow-1" style="overflow: hidden;">
+                                        <div class="flex-grow-1 overflow-hidden">
                                             <div class="d-flex justify-content-between align-items-center cursor-pointer" onclick="seleccionarFila({{ profesor.id }})">
                                                 <h6 class="mb-0 text-truncate text-dark" title="{{ profesor.get_nombre_completo() }}">
                                                     {{ profesor.nombre }} {{ profesor.apellido }}
@@ -222,10 +225,10 @@
                                                 </h6>
                                             </div>
                                             <div class="d-flex align-items-center mt-1">
-                                                <div class="progress flex-grow-1 me-2" style="height: 4px; background-color: #e9ecef;">
+                                                <div class="progress flex-grow-1 me-2 mass-progress-xs">
                                                     <div class="progress-bar bg-{{ carga.color }}" style="width: {{ [carga.porcentaje, 100]|min }}%"></div>
                                                 </div>
-                                                <small class="{{ 'text-danger fw-bold' if en_limite else 'text-muted' }}" style="font-size: 0.7rem;" title="Horas asignadas: {{ carga.total_horas }}h | Límite: {{ carga.limite_maximo }}h{% if carga.horas_horarios != carga.total_horas %} | Horarios generados: {{ carga.horas_horarios }}h{% endif %}">
+                                                <small class="{{ 'text-danger fw-bold' if en_limite else 'text-muted' }} metric-label-xs" title="Horas asignadas: {{ carga.total_horas }}h | Límite: {{ carga.limite_maximo }}h{% if carga.horas_horarios != carga.total_horas %} | Horarios generados: {{ carga.horas_horarios }}h{% endif %}">
                                                     {{ carga.total_horas }}/{{ carga.limite_maximo }}h
                                                 </small>
                                             </div>
@@ -240,8 +243,7 @@
                                     {% set puede_asignar = carga.puede_mas or esta_asignada %}
                                     <label class="d-flex align-items-center justify-content-center w-100 h-100 py-3 {{ 'cursor-pointer' if puede_asignar else 'cursor-not-allowed' }} {{ 'bg-primary bg-opacity-10' if esta_asignada else '' }} {{ 'bg-secondary bg-opacity-10' if not puede_asignar and not esta_asignada else '' }}">
                                         <input type="checkbox"
-                                               class="form-check-input assignment-check border-2"
-                                               style="width: 1.25em; height: 1.25em;"
+                                                                                             class="form-check-input assignment-check border-2 mass-check-size"
                                                name="asignaciones[]"
                                                value="{{ profesor.id }}-{{ materia.id }}"
                                                data-profesor="{{ profesor.id }}"
@@ -271,9 +273,9 @@
                          <span class="badge bg-info ms-2 me-1">PA</span> Por Asignatura
                      </div>
                      <div class="d-flex align-items-center gap-3">
-                         <span><i class="fas fa-circle text-success me-1" style="font-size: 0.5rem;"></i> Disponible</span>
-                         <span><i class="fas fa-circle text-warning me-1" style="font-size: 0.5rem;"></i> Alta carga</span>
-                         <span><i class="fas fa-circle text-danger me-1" style="font-size: 0.5rem;"></i> En límite (no se puede asignar más)</span>
+                         <span><i class="fas fa-circle text-success me-1 tiny-dot"></i> Disponible</span>
+                         <span><i class="fas fa-circle text-warning me-1 tiny-dot"></i> Alta carga</span>
+                         <span><i class="fas fa-circle text-danger me-1 tiny-dot"></i> En límite (no se puede asignar más)</span>
                      </div>
                      <div>
                          <i class="fas fa-info-circle me-1"></i>
@@ -296,65 +298,6 @@
 
 <!-- Modal de Ayuda (Mantener igual pero styled) -->
 {% include 'ayuda_modal_partial.html' ignore missing %} 
-
-<style>
-    .avatar-circle-sm {
-        width: 40px; height: 40px;
-        display: flex; align-items: center; justify-content: center;
-        border-radius: 50%;
-        background-color: #f8f9fa;
-    }
-    
-    .cursor-pointer { cursor: pointer; }
-    .cursor-not-allowed { cursor: not-allowed; }
-    
-    .cell-hover:hover {
-        background-color: rgba(0,0,0,0.02);
-    }
-    
-    /* DESACTIVAR COMPLETAMENTE las animaciones de hover en esta tabla */
-    /* Sobrescribir los estilos globales de style.css */
-    #formAsignacion .table tbody tr,
-    #formAsignacion .table tbody tr th,
-    #formAsignacion .table tbody tr td {
-        transition: none !important;
-        transform: none !important;
-    }
-    
-    #formAsignacion .table tbody tr:hover {
-        background-color: transparent !important;
-        transform: none !important;
-        box-shadow: none !important;
-    }
-    
-    #formAsignacion .table tbody tr:hover th {
-        background-color: white !important;
-    }
-    
-    #formAsignacion .table tbody tr:hover td {
-        background-color: transparent !important;
-    }
-    
-    .form-check-input:checked {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-    }
-    
-    .tracking-wider { letter-spacing: 0.05em; }
-    
-    /* Custom scrollbar for matrix */
-    .table-responsive::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    .table-responsive::-webkit-scrollbar-thumb {
-        background-color: #cbd3da;
-        border-radius: 4px;
-    }
-    .table-responsive::-webkit-scrollbar-track {
-        background-color: #f1f1f1;
-    }
-</style>
 
 <script>
 // Mantener la lógica JS existente pero limpiala si es necesario

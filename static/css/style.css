@@ -1,108 +1,120 @@
-/* Estilos para tablas responsivas */
-.table-responsive {
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-}
-
-.table {
-    margin-bottom: 0;
-    background-color: white;
-}
-
-.table thead th {
-    background-color: #343a40;
-    color: white;
-    border: none;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.85rem;
-    letter-spacing: 0.5px;
-    padding: 1rem 0.75rem;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.table tbody tr {
-    transition: all 0.2s ease;
-    border-bottom: 1px solid #f1f3f4;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-    transform: scale(1.01);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.table td {
-    padding: 0.875rem 0.75rem;
-    vertical-align: middle;
-    border: none;
-}
-
-.table .badge {
-    font-size: 0.75rem;
-    padding: 0.4rem 0.6rem;
-}
-
-.btn-group .btn {
-    border-radius: 4px;
-    margin: 0 2px;
-}
-
-/* Responsive breakpoints */
-@media (max-width: 768px) {
-    .table-responsive {
-        font-size: 0.875rem;
-    }
-    
-    .table thead th,
-    .table td {
-        padding: 0.5rem 0.25rem;
-    }
-    
-    .btn-group .btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
-    }
-}
-
-@media (max-width: 576px) {
-    .table-responsive {
-        font-size: 0.8rem;
-    }
-    
-    .table thead th {
-        font-size: 0.7rem;
-    }
-}
-
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f8f9fa;
+    background-color: #f4f6fa;
+    color: #1f2937;
 }
 
-/* Navbar personalizado */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas,
+iframe {
+    max-width: 100%;
+}
+
+html,
+body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.app-main {
+    overflow-x: clip;
+}
+
+h1 {
+    font-size: clamp(1.45rem, 1.15rem + 1.5vw, 2.2rem);
+}
+
+h2 {
+    font-size: clamp(1.25rem, 1.05rem + 1.1vw, 1.85rem);
+}
+
+h3 {
+    font-size: clamp(1.1rem, 0.98rem + 0.75vw, 1.5rem);
+}
+
+h4 {
+    font-size: clamp(1rem, 0.9rem + 0.5vw, 1.25rem);
+}
+
+h5 {
+    font-size: clamp(0.9rem, 0.85rem + 0.3vw, 1.1rem);
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h4 {
+    font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.25rem);
+}
+
+h5 {
+    font-size: clamp(0.95rem, 0.9rem + 0.3vw, 1.1rem);
+}
+
+h6 {
+    font-size: clamp(0.875rem, 0.85rem + 0.2vw, 1rem);
+}
+
+@media (min-width: 768px) {
+    .app-main .table {
+        font-size: 0.875rem;
+    }
+
+    .app-main .btn,
+    .app-main .form-control,
+    .app-main .form-select {
+        font-size: 0.95rem;
+    }
+}
+
+.app-main {
+    min-height: calc(100vh - 132px);
+}
+
 .navbar-brand {
-    font-weight: bold;
-    font-size: 1.3rem;
+    font-weight: 700;
+    font-size: 1.15rem;
 }
 
-/* Cards con hover effect */
+.app-navbar {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.navbar .nav-link {
+    border-radius: 0.5rem;
+}
+
+.navbar .nav-link.dropdown-toggle {
+    padding: 0.45rem 0.85rem !important;
+    transition: background-color 0.2s ease;
+}
+
+.navbar .nav-link.dropdown-toggle:hover,
+.navbar .nav-link.dropdown-toggle:focus {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
 .card {
-    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    border: none;
-    border-radius: 10px;
+    border: 1px solid #e7ebf2;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+    transition: box-shadow 0.2s ease;
 }
 
 .card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
-/* Desactivar TODOS los transform/animaciones cuando hay un modal abierto.
-   Esto evita que .card:hover mueva el DOM y cause parpadeo en el canvas de firma. */
 body.modal-open .card,
 body.modal-open .card:hover,
 .modal .card,
@@ -115,114 +127,555 @@ body.modal-open .card:hover,
     animation: none !important;
 }
 
-/* Botones dentro del modal no deben moverse con hover */
-.modal .btn:hover,
-body.modal-open .btn:hover {
-    transform: none !important;
-}
-
-/* Jumbotron personalizado */
-.jumbotron {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-}
-
-/* Botones con efectos */
 .btn {
-    border-radius: 25px;
-    font-weight: 500;
-    transition: all 0.3s ease;
+    border-radius: 0.55rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    font-size: 0.875rem;
+    padding: 0.4rem 0.85rem;
 }
 
-.btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+.btn:hover,
+.btn:focus {
+    box-shadow: none;
+    transform: none;
 }
 
-/* Formularios */
-.form-control, .form-select {
-    border-radius: 8px;
-    border: 2px solid #e9ecef;
-    transition: border-color 0.3s ease;
+.btn-lg {
+    padding: 0.65rem 1.1rem;
 }
 
-.form-control:focus, .form-select:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+.table .btn {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
 }
 
-/* Input groups */
+.form-control,
+.form-select {
+    border-radius: 0.55rem;
+    border: 1px solid #d7deea;
+    min-height: 2.7rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.2);
+}
+
 .input-group-text {
-    background-color: #f8f9fa;
-    border: 2px solid #e9ecef;
-    border-right: none;
+    border-radius: 0.55rem;
+    border: 1px solid #d7deea;
+    background-color: #f8fafc;
 }
 
-/* Iconos en cards */
-.card-body i {
-    opacity: 0.8;
-}
-
-/* Alertas */
 .alert {
-    border-radius: 10px;
+    border-radius: 0.65rem;
+    border: 1px solid transparent;
+}
+
+.badge {
+    border-radius: 999px;
+    padding: 0.35rem 0.6rem;
+    font-weight: 600;
+}
+
+.badge.badge-responsive {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+}
+
+.panel-role-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.dashboard-header {
+    gap: 0.75rem;
+}
+
+.table-responsive {
+    border-radius: 0.7rem;
+    border: 1px solid #e6eaf2;
+    background-color: #fff;
+}
+
+.table {
+    margin-bottom: 0;
+    background-color: #fff;
+    width: 100%;
+}
+
+.table thead th {
+    background-color: #1f2937 !important;
+    /* Force dark header */
+    color: #fff;
     border: none;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0.65rem 0.6rem;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    white-space: nowrap;
 }
 
-/* Footer */
-footer {
-    margin-top: auto;
+/* Force dark header regardless of Bootstrap class on thead */
+.app-main .table thead.table-light th,
+.app-main .table thead.table-dark th,
+.app-main .table thead.thead-dark th,
+.app-main .table thead.bg-light th,
+.app-main .table thead.table-success th,
+.app-main .table thead.bg-dark th {
+    background-color: #1f2937 !important;
+    color: #fff !important;
 }
 
-/* Dashboard específico */
+.table td {
+    vertical-align: middle;
+    border-color: #eff2f7;
+    word-break: break-word;
+    /* Ensure wrapping */
+    overflow-wrap: anywhere;
+    max-width: 250px;
+    /* Prevent infinite columns */
+    font-size: 0.875rem;
+    /* Desktop default */
+}
+
+.table tbody tr:hover {
+    background-color: #f8fbff;
+}
+
+.table-responsive-auto {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.responsive-scroll-x {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.responsive-scroll-x .horario-grid {
+    min-width: 760px;
+}
+
+.table-responsive-auto>.table,
+.table-responsive-auto>table {
+    min-width: max(640px, 100%);
+}
+
 .table-borderless td {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.9rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.92rem;
 }
 
-/* Animaciones */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
+.jumbotron {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+    border-radius: 0.9rem;
+}
+
+.jumbotron hr {
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.auth-card {
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+.auth-card .card-body {
+    padding: 2rem;
+}
+
+.footer-soft {
+    border-top: 1px solid #e5eaf2;
+    background-color: #f8fafc;
+}
+
+.navbar .dropdown-menu {
+    max-width: min(92vw, 380px);
+}
+
+.app-main .container,
+.app-main .container-fluid {
+    width: 100%;
+    max-width: 100%;
+}
+
+.app-main .page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.app-main .table.table-wide,
+.app-main .table.table-xwide {
+    table-layout: auto;
+}
+
+.app-main .table.table-schedule {
+    min-width: 760px;
+}
+
+.app-main .table .col-horario {
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+
+    .app-main .table.table-narrow,
+    .app-main .table.table-wide,
+    .app-main .table.table-xwide {
+        width: 100%;
+        min-width: 100%;
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+}
+
+@media (max-width: 991.98px) {
+    .app-main {
+        min-height: auto;
+    }
+
+    .navbar .navbar-nav {
+        gap: 0.25rem;
+    }
+
+    .navbar .nav-link {
+        padding: 0.55rem 0.75rem;
+    }
+
+    .admin-ui .acciones-profesor {
+        flex-wrap: wrap;
+    }
+
+    .app-main .table {
+        font-size: 0.85rem;
+        /* Tablet size */
+    }
+
+    .horario-grid {
+        min-width: 600px;
     }
 }
 
-.card:not(.modal-content) {
-    animation: fadeIn 0.5s ease-out;
-}
+@media (max-width: 767.98px) {
+    .auth-card .card-body {
+        padding: 1.3rem;
+    }
 
-/* Responsive */
-@media (max-width: 768px) {
     .jumbotron {
-        padding: 2rem 1rem;
+        padding: 2rem 1rem !important;
     }
-    
-    .jumbotron h1 {
-        font-size: 2rem;
+
+    .table thead th,
+    .table td {
+        padding: 0.55rem 0.45rem;
     }
-    
-    .card-body {
+
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-responsive>.table,
+    .table-responsive>table {
+        min-width: 480px;
+    }
+
+    .table {
+        font-size: 0.78rem;
+    }
+
+    .table th,
+    .table td {
+        white-space: nowrap;
+    }
+
+    .app-main .table {
+        font-size: 0.8rem;
+    }
+
+    .app-main .table th,
+    .app-main .table td {
+        line-height: 1.25;
+    }
+
+    .app-main .table.table-wide,
+    .app-main .table.table-xwide {
+        font-size: 0.78rem;
+    }
+
+    .app-main .table.table-narrow {
+        min-width: 500px;
+    }
+
+    .app-main .table.table-wide {
+        min-width: 600px;
+    }
+
+    .app-main .table.table-xwide {
+        min-width: 720px;
+    }
+
+    .app-main .table.table-wide th,
+    .app-main .table.table-wide td,
+    .app-main .table.table-xwide th,
+    .app-main .table.table-xwide td,
+    .app-main .table.table-narrow th,
+    .app-main .table.table-narrow td,
+    .admin-ui .admin-table th,
+    .admin-ui .admin-table td {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.25;
+    }
+
+    .app-main .table.table-schedule td,
+    .app-main .table.table-schedule th {
+        white-space: nowrap;
+    }
+
+    .app-main .table .btn-group,
+    .app-main .table .btn-toolbar {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .app-main .table .badge {
+        white-space: nowrap;
+    }
+
+    .admin-ui .admin-table {
+        font-size: 0.8rem;
+    }
+
+    .admin-ui .admin-users-table-wrap .admin-table-users {
+        min-width: 720px;
+    }
+
+    .admin-ui .admin-table-users .admin-col-text {
+        white-space: normal;
+        min-width: 120px;
+    }
+
+    .admin-ui .admin-table-users .admin-users-actions .btn-group {
+        min-width: 130px;
+        justify-content: center;
+    }
+
+    .admin-ui .profesor-card {
+        overflow-x: auto;
+    }
+
+    .admin-ui .horario-grid {
+        min-width: 680px;
+    }
+
+    .horario-grid {
+        min-width: 680px;
+    }
+
+    .admin-ui .profesor-titulo {
+        font-size: 1.05rem;
+    }
+
+    /* Button sizing for touch targets */
+    .btn {
+        min-height: 42px;
+    }
+
+    .table .btn {
+        min-height: 34px;
+    }
+
+    .app-main .table .btn {
+        min-height: 34px;
+        font-size: 0.78rem;
+        padding: 0.25rem 0.45rem;
+    }
+
+    .form-control,
+    .form-select {
+        min-height: 42px;
+    }
+
+    .app-main h1,
+    .app-main h2,
+    .app-main h3,
+    .app-main h4,
+    .app-main h5,
+    .app-main h6,
+    .app-main .card-title,
+    .app-main .modal-title {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .app-main .badge {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.2;
+    }
+
+    .app-main .text-nowrap {
+        white-space: normal !important;
+    }
+
+    /* Page header stacks vertically on mobile */
+    .app-main .d-flex.justify-content-between {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .app-main .d-flex.justify-content-between.align-items-center.mb-4 {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.75rem;
+    }
+
+    /* Button groups wrap on mobile */
+    .app-main .page-actions,
+    .app-main .admin-page-actions {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .app-main .page-actions .btn-group,
+    .app-main .admin-page-actions .btn-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .app-main .page-actions .btn,
+    .app-main .admin-page-actions .btn {
+        flex: 0 1 auto;
+        white-space: nowrap;
+    }
+
+    /* Scroll indicator for tables */
+    .table-responsive,
+    .table-responsive-auto {
+        position: relative;
+    }
+
+    .table-responsive::after,
+    .table-responsive-auto::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 20px;
+        background: linear-gradient(to left, rgba(255, 255, 255, 0.85), transparent);
+        pointer-events: none;
+        z-index: 4;
+    }
+}
+
+@media (max-width: 575.98px) {
+    body {
+        font-size: 0.94rem;
+    }
+
+    .navbar-brand {
+        font-size: 1rem;
+    }
+
+    .auth-card .card-body {
         padding: 1rem;
     }
-}
 
-/* Estados de usuario */
-.badge {
-    border-radius: 15px;
-    padding: 0.5rem 1rem;
-}
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
 
-/* Hover effects para botones de dashboard */
-.card .btn {
-    transition: all 0.2s ease;
-}
 
-.card .btn:hover {
-    transform: scale(1.05);
+    .table {
+        font-size: 0.78rem;
+    }
+
+    .table th,
+    .table td {
+        padding: 0.4rem 0.35rem;
+    }
+
+    .app-main .table.table-wide {
+        min-width: 560px;
+    }
+
+    .app-main .table.table-xwide {
+        min-width: 680px;
+    }
+
+    .app-main .table.table-narrow {
+        min-width: 450px;
+    }
+
+    .app-main .table.table-schedule {
+        min-width: 640px;
+    }
+
+    .app-main .table.table-wide th,
+    .app-main .table.table-wide td,
+    .app-main .table.table-xwide th,
+    .app-main .table.table-xwide td,
+    .app-main .table.table-narrow th,
+    .app-main .table.table-narrow td {
+        min-width: 90px;
+    }
+
+    .admin-ui .admin-users-table-wrap .admin-table-users {
+        min-width: 680px;
+    }
+
+    .admin-ui .admin-table-users .admin-col-text {
+        min-width: 100px;
+    }
+
+    .table-responsive>.table,
+    .table-responsive>table,
+    .table-responsive-auto>.table,
+    .table-responsive-auto>table {
+        min-width: 420px;
+    }
+
+    .responsive-scroll-x .horario-grid,
+    .horario-grid {
+        min-width: 600px;
+    }
+
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+
+    .panel-role-title .badge.badge-responsive {
+        display: inline-block;
+        width: 100%;
+    }
 }
 
 /* Canvas de firma: evitar seleccion, gestos y efectos del navegador */
@@ -244,7 +697,7 @@ footer {
     border-right: 1px solid #dee2e6 !important;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
     .border-end {
         border-right: none !important;
         border-bottom: 1px solid #dee2e6 !important;
@@ -275,45 +728,6 @@ footer {
 
 .border-purple {
     border-color: #6f42c1 !important;
-}
-
-/* Efectos hover para el botón de usuario en la navbar */
-.navbar .nav-link.dropdown-toggle {
-    position: relative;
-    transition: all 0.3s ease;
-    border-radius: 8px;
-    padding: 0.5rem 1rem !important;
-}
-
-.navbar .nav-link.dropdown-toggle:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-    transform: translateY(-1px);
-    color: #ffffff !important;
-}
-
-.navbar .nav-link.dropdown-toggle:focus {
-    background-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
-}
-
-/* Efecto de brillo al hacer hover */
-.navbar .nav-link.dropdown-toggle::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    border-radius: 8px;
-    pointer-events: none;
-}
-
-.navbar .nav-link.dropdown-toggle:hover::before {
-    opacity: 1;
 }
 
 /* Estilos para selector múltiple de carreras */
@@ -358,6 +772,1331 @@ select[multiple] option:checked {
 }
 
 /* Animación para mostrar/ocultar campos */
-#tipoProfesorDiv, #carreraJefeDiv, #carrerasProfesorDiv {
+#tipoProfesorDiv,
+#carreraJefeDiv,
+#carrerasProfesorDiv {
     transition: all 0.3s ease-in-out;
+}
+
+.profile-avatar {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border: 3px solid #2563eb;
+}
+
+.profile-signature-preview {
+    max-height: 80px;
+    border: 1px solid #d6dde8;
+    padding: 6px;
+    background: #fff;
+    border-radius: 0.4rem;
+}
+
+.signature-canvas-wrapper {
+    background: #fff;
+    border: 1px solid #cfd6e3;
+    border-radius: 0.4rem;
+    padding: 8px;
+}
+
+.signature-canvas {
+    display: block;
+    width: 100%;
+    height: 150px;
+    cursor: crosshair;
+    border: 1px dashed #9ca3af;
+    touch-action: none;
+    background: #fff;
+}
+
+.signature-range-control {
+    width: 60px;
+    vertical-align: middle;
+}
+
+.signature-color-control {
+    width: 30px;
+    height: 20px;
+    vertical-align: middle;
+}
+
+/* Registro (wizard) */
+.register-page .step-indicator {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.75rem;
+    position: relative;
+}
+
+.register-page .step-indicator::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #e6ebf5;
+    z-index: 0;
+    transform: translateY(-50%);
+}
+
+.register-page .step {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 2px solid #d7deea;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-weight: 700;
+    position: relative;
+    z-index: 1;
+}
+
+.register-page .step.active {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.register-page .step.completed {
+    border-color: #16a34a;
+    background: #16a34a;
+    color: #fff;
+}
+
+.register-page .role-card-input {
+    display: none;
+}
+
+.register-page .role-card {
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    border: 1px solid #dbe2ee;
+}
+
+.register-page .role-card:hover {
+    border-color: #94a3b8;
+}
+
+.register-page .role-card-input:checked+.role-card {
+    border-color: #2563eb;
+    background-color: #f8fbff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.register-page .role-icon {
+    font-size: 2rem;
+    color: #2563eb;
+    margin-bottom: 0.7rem;
+}
+
+.register-page .wizard-step {
+    display: none;
+}
+
+.register-page .wizard-step.active {
+    display: block;
+}
+
+/* =========================
+   Admin UI shared styles
+   ========================= */
+.admin-ui .admin-page-title {
+    font-weight: 700;
+    margin-bottom: 0;
+}
+
+.admin-ui .admin-toolbar {
+    gap: 0.5rem;
+}
+
+.admin-ui .admin-toolbar .btn,
+.admin-ui .admin-actions .btn {
+    white-space: nowrap;
+}
+
+.admin-ui .admin-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.admin-ui .admin-page-actions .btn-group {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.admin-ui .admin-stat-card {
+    border: none;
+}
+
+.admin-ui .admin-stat-card .card-title {
+    font-size: 0.92rem;
+    margin-bottom: 0.35rem;
+}
+
+.admin-ui .admin-stat-card h3,
+.admin-ui .admin-stat-card h4 {
+    font-weight: 700;
+}
+
+.admin-ui .admin-section-header {
+    background-color: #f8fafc;
+    border-bottom: 1px solid #e8edf5;
+}
+
+.admin-ui .admin-table thead th {
+    background-color: #1f2937;
+    color: #fff;
+}
+
+.admin-ui .admin-table th,
+.admin-ui .admin-table td {
+    vertical-align: middle;
+}
+
+@media (min-width: 768px) {
+    .admin-ui .admin-table {
+        table-layout: auto;
+        width: 100%;
+        min-width: 100%;
+        font-size: 0.875rem;
+    }
+
+    .admin-ui .admin-table td:last-child,
+    .admin-ui .admin-table th:last-child {
+        width: 1%;
+        text-align: center;
+    }
+
+    .admin-ui .admin-col-phone,
+    .admin-ui .admin-col-date,
+    .admin-ui .admin-col-status,
+    .admin-ui .admin-col-type,
+    .admin-ui .admin-col-actions {
+        white-space: nowrap;
+    }
+
+    .admin-ui .admin-col-actions {
+        width: 1%;
+    }
+
+    .admin-ui .admin-col-career,
+    .admin-ui .admin-col-actions,
+    .admin-ui .admin-col-status,
+    .admin-ui .admin-col-type,
+    .admin-ui .admin-col-phone,
+    .admin-ui .admin-col-date {
+        word-break: normal;
+        overflow-wrap: normal;
+    }
+
+    .admin-ui .admin-table td:last-child .btn-group,
+    .admin-ui .admin-table td:last-child .d-flex {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        flex-wrap: nowrap;
+    }
+
+    .admin-ui .admin-table-users .admin-col-text {
+        white-space: nowrap;
+        overflow-wrap: normal;
+        word-break: normal;
+    }
+
+    .admin-ui .th-w-100 {
+        width: 120px;
+    }
+
+    .admin-ui .th-w-120 {
+        width: 130px;
+    }
+}
+
+.admin-ui .badge-nowrap {
+    white-space: nowrap !important;
+}
+
+.admin-ui .admin-users-table-wrap .admin-table-users {
+    min-width: 100%;
+}
+
+.admin-ui .admin-table-users .admin-col-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.3;
+}
+
+@media (min-width: 768px) {
+    .admin-ui .admin-table-users .admin-col-text {
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+}
+
+.admin-ui .admin-table-users .admin-users-actions .btn-group {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+}
+
+.admin-ui .admin-click-row {
+    cursor: pointer;
+}
+
+.admin-ui .avatar-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.admin-ui .inline-action-form {
+    display: inline;
+}
+
+.admin-ui .admin-danger-modal {
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.admin-ui .admin-danger-modal .modal-content {
+    animation: modalSlideIn 0.25s ease;
+}
+
+.admin-ui .admin-danger-header {
+    background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);
+}
+
+.admin-ui .admin-danger-icon-sm {
+    width: 50px;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+.admin-ui .admin-danger-icon-lg {
+    width: 70px;
+    height: 70px;
+    background: #fff3f3;
+}
+
+.admin-ui .admin-danger-note {
+    background: #fff8f8;
+    border: 1px solid #fecdd3;
+}
+
+.admin-ui .admin-rounded-10 {
+    border-radius: 10px;
+}
+
+.admin-ui .th-w-120 {
+    width: 120px;
+}
+
+.admin-ui .th-w-100 {
+    width: 100px;
+}
+
+.admin-ui .th-w-180 {
+    width: 180px;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: scale(0.95) translateY(-12px);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+.admin-ui .admin-pill-badge {
+    position: relative;
+    padding-left: 1.4rem;
+    border-radius: 12px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.admin-ui .admin-pill-dot {
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 8px;
+    color: #fff;
+}
+
+.admin-ui .admin-pill-warning {
+    background-color: #ffc107;
+}
+
+.admin-ui .admin-pill-info {
+    background-color: #17a2b8;
+}
+
+.admin-ui .admin-pill-primary {
+    background-color: #007bff;
+}
+
+.admin-ui .admin-pill-secondary {
+    background-color: #6c757d;
+}
+
+.admin-ui .admin-pill-success {
+    background-color: #28a745;
+}
+
+.admin-ui .admin-progress-lg {
+    height: 20px;
+}
+
+.admin-ui .admin-search-group {
+    max-width: 400px;
+}
+
+.admin-ui .admin-signature-preview-sm {
+    max-height: 60px;
+}
+
+.admin-ui .admin-toast-message {
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 300px;
+}
+
+.admin-ui .admin-sticky-top-20 {
+    top: 20px;
+}
+
+.admin-ui .admin-spinner-lg {
+    width: 3rem;
+    height: 3rem;
+}
+
+.admin-ui .admin-progress-xl {
+    height: 25px;
+}
+
+.admin-ui .admin-stat-icon {
+    font-size: 3rem;
+    opacity: 0.5;
+}
+
+.admin-ui .admin-confirm-input {
+    font-size: 1.2em;
+    font-weight: 700;
+}
+
+.admin-ui .admin-badge-lg {
+    font-size: 1rem;
+}
+
+.admin-ui .admin-maxh-200-scroll {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.admin-ui .admin-maxh-250-scroll {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.admin-ui .admin-hidden-initial {
+    display: none;
+}
+
+.admin-ui .admin-warning-gradient-header {
+    background: linear-gradient(135deg, #f39c12 0%, #d35400 100%);
+}
+
+.admin-ui .admin-primary-gradient-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.admin-ui .admin-z-2 {
+    z-index: 2;
+}
+
+.admin-ui .admin-icon-circle-60 {
+    width: 60px;
+    height: 60px;
+}
+
+.admin-ui .admin-heading-kicker {
+    letter-spacing: 2px;
+    font-size: 0.75rem;
+}
+
+.admin-ui .admin-rotate-15 {
+    transform: rotate(15deg);
+}
+
+.admin-ui .admin-sticky-toolbar {
+    top: 10px;
+    z-index: 900;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+}
+
+.admin-ui .admin-filter-label {
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+}
+
+.admin-ui .admin-btn-cuatri {
+    width: 28px;
+}
+
+.admin-ui .admin-fixed-actions {
+    pointer-events: none;
+    z-index: 1050;
+}
+
+.admin-ui .admin-fixed-actions-inner {
+    pointer-events: auto;
+    backdrop-filter: blur(5px);
+    background-color: rgba(33, 37, 41, 0.95) !important;
+}
+
+.admin-ui .admin-footer-badge-count {
+    font-size: 0.5rem;
+    display: none;
+}
+
+.admin-ui .btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.75rem;
+}
+
+.admin-ui .carrera-section,
+.admin-ui .cuatri-card,
+.admin-ui .materia-row {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.admin-ui .materia-check-input {
+    display: none;
+}
+
+.admin-ui .materia-card {
+    border: 1px solid #e9ecef;
+    background: #fff;
+    border-radius: 8px;
+    padding: 10px 15px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.admin-ui .materia-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    border-color: #cbd3da;
+}
+
+.admin-ui .materia-check-input:checked+.materia-card {
+    background-color: #eef2ff;
+    border-color: #667eea;
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.15);
+}
+
+.admin-ui .materia-check-input:checked+.materia-card .materia-icon {
+    color: #667eea;
+    transform: scale(1.1);
+}
+
+.admin-ui .materia-check-input:checked+.materia-card .check-indicator {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.admin-ui .materia-icon {
+    transition: transform 0.2s ease;
+    color: #adb5bd;
+}
+
+.admin-ui .check-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: #667eea;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.admin-ui .item-hidden {
+    display: none !important;
+}
+
+.admin-ui .admin-carrera-badge {
+    font-size: 1rem;
+}
+
+.admin-ui .admin-flex-min-0 {
+    min-width: 0;
+}
+
+.admin-ui .admin-fs-085 {
+    font-size: 0.85rem;
+}
+
+.admin-ui .admin-progress-thin {
+    height: 6px;
+    max-width: 100px;
+}
+
+.admin-ui .admin-avatar-code {
+    width: 50px;
+}
+
+.admin-ui .admin-avatar-40 {
+    width: 40px;
+    height: 40px;
+}
+
+.admin-ui .admin-avatar-cover {
+    object-fit: cover;
+}
+
+.admin-ui .admin-fs-075 {
+    font-size: 0.75rem;
+}
+
+.admin-ui .admin-layer-hover:hover {
+    transform: translateY(-2px);
+    transition: all 0.2s;
+}
+
+.admin-ui .th-w-10 {
+    width: 10%;
+}
+
+.admin-ui .th-w-15 {
+    width: 15%;
+}
+
+.admin-ui .th-w-35 {
+    width: 35%;
+}
+
+.admin-ui .th-w-40 {
+    width: 40%;
+}
+
+.admin-ui .admin-profesor-select {
+    min-width: 250px;
+}
+
+.admin-ui .admin-table-middle th,
+.admin-ui .admin-table-middle td {
+    vertical-align: middle;
+}
+
+.admin-ui .bg-success-subtle {
+    background-color: #d1e7dd !important;
+}
+
+.admin-ui .border-success-subtle {
+    border-color: #a3cfbb !important;
+}
+
+.admin-ui .bg-warning-subtle {
+    background-color: #fff3cd !important;
+}
+
+.admin-ui .border-warning-subtle {
+    border-color: #ffecb5 !important;
+}
+
+/* Horario por profesores */
+.admin-ui .profesor-card {
+    margin-bottom: 2rem;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.admin-ui .profesor-header {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-ui .profesor-titulo {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-ui .horario-grid {
+    display: grid;
+    grid-template-columns: 90px repeat(5, 1fr);
+    border: 1px solid #dee2e6;
+    background: white;
+}
+
+.admin-ui .grid-header {
+    background: #343a40;
+    color: white;
+    font-weight: 600;
+    text-align: center;
+    padding: 0.75rem;
+    border-right: 1px solid #495057;
+    font-size: 0.85rem;
+}
+
+.admin-ui .grid-header:first-child {
+    background: #212529;
+}
+
+.admin-ui .grid-header:last-child {
+    border-right: none;
+}
+
+.admin-ui .hora-label {
+    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    font-weight: 600;
+    text-align: center;
+    padding: 0.5rem;
+    border-right: 2px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    color: #495057;
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 70px;
+}
+
+.admin-ui .hora-label .hora-inicio,
+.admin-ui .hora-label .hora-fin {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #212529;
+}
+
+.admin-ui .celda-horario {
+    border-right: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    padding: 4px;
+    min-height: 70px;
+    position: relative;
+    background: white;
+}
+
+.admin-ui .celda-horario:last-child {
+    border-right: none;
+}
+
+.admin-ui .clase-card {
+    background: white;
+    color: #212529;
+    border-radius: 12px;
+    padding: 10px;
+    font-size: 0.75rem;
+    position: relative;
+    height: calc(100% - 8px);
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.admin-ui .clase-materia {
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    margin-bottom: 4px;
+    color: #111827;
+}
+
+.admin-ui .clase-codigo {
+    font-size: 0.7rem;
+    color: #6b7280;
+}
+
+.admin-ui .clase-grupo {
+    font-size: 0.65rem;
+    color: #2563eb;
+    font-weight: 600;
+    background: #dbeafe;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 2px;
+}
+
+.admin-ui .btn-eliminar-clase {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    background: #fee2e2;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #dc2626;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.7rem;
+}
+
+.admin-ui .btn-eliminar-clase:hover {
+    background: #dc2626;
+    color: white;
+}
+
+.admin-ui .acciones-profesor {
+    display: flex;
+    gap: 8px;
+}
+
+.admin-ui .btn-accion-profesor {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.admin-ui .btn-accion-profesor:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.admin-ui .btn-accion-profesor.btn-excel {
+    background: rgba(25, 135, 84, 0.8);
+}
+
+.admin-ui .btn-accion-profesor.btn-pdf {
+    background: rgba(220, 53, 69, 0.8);
+}
+
+/* Asignación masiva */
+.admin-ui .mass-header-gradient {
+    background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+}
+
+.admin-ui .mass-header-shape {
+    transform: rotate(15deg);
+}
+
+.admin-ui .z-2 {
+    z-index: 2;
+}
+
+.admin-ui .metric-label-xs {
+    font-size: 0.7rem;
+}
+
+.admin-ui .mass-matrix-container {
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.admin-ui .mass-sticky-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.admin-ui .mass-sticky-col-title {
+    position: sticky;
+    left: 0;
+    z-index: 11;
+    min-width: 300px;
+    width: 300px;
+}
+
+.admin-ui .mass-materia-col {
+    min-width: 140px;
+}
+
+.admin-ui .mass-materia-label {
+    font-size: 0.75rem;
+}
+
+.admin-ui .mass-sticky-col-body {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+}
+
+.admin-ui .mass-progress-xs {
+    height: 4px;
+    background-color: #e9ecef;
+}
+
+.admin-ui .mass-check-size {
+    width: 1.25em;
+    height: 1.25em;
+}
+
+.admin-ui .tiny-dot {
+    font-size: 0.5rem;
+}
+
+.admin-ui .cursor-pointer {
+    cursor: pointer;
+}
+
+.admin-ui .cursor-not-allowed {
+    cursor: not-allowed;
+}
+
+.admin-ui .cell-hover:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.admin-ui #formAsignacion .table tbody tr,
+.admin-ui #formAsignacion .table tbody tr th,
+.admin-ui #formAsignacion .table tbody tr td {
+    transition: none !important;
+    transform: none !important;
+}
+
+.admin-ui #formAsignacion .table tbody tr:hover {
+    background-color: transparent !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.admin-ui #formAsignacion .table tbody tr:hover th {
+    background-color: white !important;
+}
+
+.admin-ui #formAsignacion .table tbody tr:hover td {
+    background-color: transparent !important;
+}
+
+.admin-ui .tracking-wider {
+    letter-spacing: 0.05em;
+}
+
+.admin-ui .mass-matrix-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.admin-ui .mass-matrix-container::-webkit-scrollbar-thumb {
+    background-color: #cbd3da;
+    border-radius: 4px;
+}
+
+.admin-ui .mass-matrix-container::-webkit-scrollbar-track {
+    background-color: #f1f1f1;
+}
+
+/* =========================
+   Standardized button sizing
+   ========================= */
+.app-main .btn {
+    font-size: 0.875rem;
+    padding: 0.4rem 0.85rem;
+}
+
+.app-main .table .btn {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.55rem;
+}
+
+/* Action column standardization */
+.app-main .table .col-actions,
+.admin-ui .admin-col-actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: center;
+}
+
+/* =========================
+   Uniform checkbox sizing
+   ========================= */
+.app-main .table .form-check-input,
+.app-main .availability-table .form-check-input,
+.form-check-input.checkbox-disponibilidad {
+    width: 1.25rem;
+    height: 1.25rem;
+    cursor: pointer;
+}
+
+/* =========================
+   Font-size utility classes
+   ========================= */
+.fs-xs {
+    font-size: 0.75rem !important;
+}
+
+.fs-sm {
+    font-size: 0.8125rem !important;
+}
+
+.fs-base {
+    font-size: 0.875rem !important;
+}
+
+/* =========================
+   Scrollable container utilities
+   ========================= */
+.scroll-container-md {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.scroll-container-lg {
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.scroll-container-sm {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+/* =========================
+   Sticky column utilities (for matrix tables)
+   ========================= */
+.sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+}
+
+.sticky-col-header {
+    position: sticky;
+    left: 0;
+    z-index: 11;
+    min-width: 200px;
+}
+
+/* =========================
+   Progress bar height utilities
+   ========================= */
+.progress-xs {
+    height: 4px;
+}
+
+.progress-lg {
+    height: 25px;
+}
+
+/* =========================
+   Font-size 1rem badge
+   ========================= */
+.fs-badge-lg {
+    font-size: 1rem !important;
+}
+
+/* =========================
+   Tablet optimization (768px - 991.98px)
+   ========================= */
+@media (min-width: 768px) and (max-width: 991.98px) {
+    .app-main .table {
+        font-size: 0.85rem;
+    }
+
+    .admin-ui .admin-stat-card .card-body {
+        padding: 0.75rem;
+    }
+
+    .horario-grid,
+    .responsive-scroll-x .horario-grid,
+    .admin-ui .horario-grid {
+        min-width: 700px;
+    }
+}
+
+/* =========================
+   Jefe profesores page (moved from template)
+   ========================= */
+.avatar-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* =========================
+   Profesor disponibilidad (moved from template)
+   ========================= */
+.checkbox-disponibilidad:checked {
+    background-color: #198754;
+    border-color: #198754;
+}
+
+.availability-table .form-check-input:hover {
+    transform: scale(1.1);
+    transition: transform 0.2s;
+}
+
+.availability-table td {
+    vertical-align: middle;
+}
+
+/* =========================
+   TV / 4K screen support
+   ========================= */
+@media (min-width: 1920px) {
+    .app-main .container-fluid {
+        max-width: 1800px;
+        margin: 0 auto;
+    }
+
+    body {
+        font-size: 1rem;
+    }
+
+    .app-main .table {
+        font-size: 0.9rem;
+    }
+
+    .app-main .table thead th {
+        font-size: 0.85rem;
+    }
+
+    .app-main .btn {
+        font-size: 0.9rem;
+    }
+
+    /* Larger cards for wide screens */
+    .admin-ui .admin-stat-card .card-body {
+        padding: 1.25rem;
+    }
+
+    .admin-ui .admin-stat-card h3 {
+        font-size: 2rem;
+    }
+
+    /* More breathing room */
+    .admin-ui .card {
+        margin-bottom: 1.5rem;
+    }
+
+    /* Form inputs slightly larger */
+    .form-control,
+    .form-select {
+        font-size: 0.95rem;
+    }
+}
+
+@media (min-width: 2560px) {
+    .app-main .container-fluid {
+        max-width: 2200px;
+    }
+
+    body {
+        font-size: 1.05rem;
+    }
+
+    /* Even more spacing on ultra-wide */
+    .admin-ui .admin-stat-card .card-body {
+        padding: 1.5rem;
+    }
+
+    .admin-ui .admin-stat-card h3 {
+        font-size: 2.25rem;
+    }
+
+    .app-main .table {
+        font-size: 0.95rem;
+    }
+
+    .app-main .table thead th {
+        font-size: 0.9rem;
+        padding: 0.85rem 0.75rem;
+    }
+}
+
+@media (min-width: 3840px) {
+    .app-main .container-fluid {
+        max-width: 3200px;
+    }
+
+    body {
+        font-size: 1.15rem;
+    }
+
+    .app-main .table {
+        font-size: 1rem;
+    }
+
+    .app-main .btn {
+        font-size: 1rem;
+        padding: 0.5rem 1.25rem;
+    }
+
+    .admin-ui .admin-stat-card h3 {
+        font-size: 2.5rem;
+    }
+
+    .form-control,
+    .form-select {
+        font-size: 1.05rem;
+        padding: 0.5rem 0.85rem;
+    }
+}
+
+/* =========================
+   Print styles
+   ========================= */
+@media print {
+
+    /* Hide interactive elements */
+    .app-main .btn,
+    .page-actions,
+    .admin-page-actions,
+    .navbar,
+    .footer-soft,
+    .sidebar,
+    .admin-ui .btn,
+    .admin-ui .card-header .btn,
+    .alert-dismissible .btn-close,
+    .form-check input[type="checkbox"],
+    .pagination,
+    .breadcrumb,
+    .modal,
+    .toast-container {
+        display: none !important;
+    }
+
+    /* Reset backgrounds for print */
+    body {
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 11pt;
+    }
+
+    .app-main {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .app-main .container-fluid {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+
+    /* Table print styles */
+    .table thead th {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-size: 9pt;
+        padding: 0.4rem 0.5rem;
+    }
+
+    .table td {
+        font-size: 9pt;
+        padding: 0.35rem 0.5rem;
+    }
+
+    .table-responsive {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+
+    /* Cards */
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #dee2e6 !important;
+        break-inside: avoid;
+    }
+
+    .card-header {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Stat cards print-friendly */
+    .admin-stat-card {
+        background-color: #f8f9fa !important;
+        color: #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        break-inside: avoid;
+    }
+
+    .admin-stat-card * {
+        color: #000 !important;
+    }
+
+    /* Badges readable in print */
+    .badge {
+        border: 1px solid #000;
+        color: #000 !important;
+        background-color: #f8f9fa !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Page break control */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        break-after: avoid;
+    }
+
+    .table {
+        break-inside: auto;
+    }
+
+    .table tr {
+        break-inside: avoid;
+    }
+
+    /* Links show URL in print */
+    a[href]:not(.btn)::after {
+        content: " (" attr(href) ")";
+        font-size: 8pt;
+        color: #666;
+    }
+
+    a[href^="#"]::after,
+    a[href^="javascript"]::after {
+        content: "";
+    }
 }

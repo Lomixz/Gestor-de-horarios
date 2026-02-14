@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Eliminar Horario Académico{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -9,15 +10,15 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h1 class="h3 mb-0">
+                    <h2 class="admin-page-title">
                         <i class="fas fa-trash-alt me-2"></i>
                         Eliminar Horario Académico
-                    </h1>
+                    </h2>
                     <p class="text-muted mt-1">Confirma la eliminación del horario seleccionado</p>
                 </div>
                 <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-arrow-left me-1"></i>
-                    Regresar
+                    Volver al Dashboard
                 </a>
             </div>
         </div>
@@ -27,7 +28,7 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-danger">
-                <div class="card-header bg-danger text-white">
+                <div class="card-header bg-danger text-white admin-section-header">
                     <h5 class="mb-0">
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         ¿Está seguro de que desea eliminar este horario?
@@ -74,7 +75,7 @@
                             <label for="confirmacion" class="form-label">
                                 Para confirmar la eliminación, escriba <strong>"ELIMINAR"</strong> en el campo siguiente:
                             </label>
-                            {{ form.confirmacion(class="form-control text-center", style="font-size: 1.2em; font-weight: bold;") }}
+                            {{ form.confirmacion(class="form-control text-center admin-confirm-input") }}
                             {% if form.confirmacion.errors %}
                                 <div class="text-danger small mt-1">
                                     {% for error in form.confirmacion.errors %}

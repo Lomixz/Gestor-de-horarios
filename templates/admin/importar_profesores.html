@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 
 {% block title %}Importar Profesores - Administración{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <div class="card shadow">
+        <div class="card">
             <div class="card-body">
                 <div class="text-center mb-4">
                     <i class="fas fa-upload fa-3x text-success mb-3"></i>
@@ -37,8 +38,8 @@
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-between">
-                        <a href="{{ url_for('gestionar_profesores') }}" class="btn btn-secondary">
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('gestionar_profesores') }}" class="btn btn-outline-secondary">
                             <i class="fas fa-arrow-left me-1"></i>
                             Volver
                         </a>
@@ -47,7 +48,7 @@
                                 <i class="fas fa-download me-1"></i>
                                 Descargar Plantilla
                             </a>
-                            {{ form.submit(class="btn btn-success") }}
+                            {{ form.submit(class="btn btn-primary") }}
                         </div>
                     </div>
                 </form>
@@ -56,7 +57,7 @@
 
         <!-- Información sobre el formato del archivo -->
         <div class="card mt-4">
-            <div class="card-header bg-info text-white">
+            <div class="card-header bg-info text-white admin-section-header">
                 <h6 class="mb-0">
                     <i class="fas fa-info-circle me-2"></i>
                     Formato del Archivo
@@ -112,7 +113,7 @@
 
         <!-- Ejemplo de archivo -->
         <div class="card mt-4">
-            <div class="card-header bg-success text-white">
+            <div class="card-header bg-success text-white admin-section-header">
                 <h6 class="mb-0">
                     <i class="fas fa-file-csv me-2"></i>
                     Ejemplo de Archivo CSV
@@ -141,7 +142,7 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
 
         <!-- Notas importantes -->
         <div class="card mt-4">
-            <div class="card-header bg-warning text-dark">
+            <div class="card-header bg-warning text-dark admin-section-header">
                 <h6 class="mb-0">
                     <i class="fas fa-lightbulb me-2"></i>
                     Notas Importantes
@@ -164,7 +165,7 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
 
         <!-- Tutorial de Múltiples Carreras -->
         <div class="card mt-4 border-success">
-            <div class="card-header bg-success text-white">
+            <div class="card-header bg-success text-white admin-section-header">
                 <h6 class="mb-0">
                     <i class="fas fa-graduation-cap me-2"></i>
                     ✨ Cómo Asignar Múltiples Carreras a un Profesor
@@ -234,7 +235,7 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
 
         <!-- Mostrar contraseñas generadas si hubo usuarios creados -->
         {% if mostrar_passwords and resultado and resultado.usuarios_creados %}
-        <div class="card mt-4 border-success shadow-lg">
+            <div class="card mt-4 border-success">
             <div class="card-header bg-success text-white">
                 <h5 class="mb-0">
                     <i class="fas fa-key me-2"></i>

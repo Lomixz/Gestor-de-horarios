@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Generación Masiva de Horarios{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -9,10 +10,10 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h1 class="h3 mb-0">
+                    <h2 class="admin-page-title">
                         <i class="fas fa-rocket me-2"></i>
                         Generación Masiva de Horarios
-                    </h1>
+                    </h2>
                     <p class="text-muted mt-1">
                         <i class="fas fa-balance-scale me-1"></i>
                         Genera horarios para múltiples grupos simultáneamente - <strong>Todos los grupos equilibrados</strong>
@@ -25,7 +26,7 @@
                     </a>
                     <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i>
-                        Regresar
+                        Volver al Dashboard
                     </a>
                 </div>
             </div>
@@ -56,7 +57,7 @@
             <!-- Panel de selección de grupos -->
             <div class="col-lg-8">
                 <div class="card">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-primary text-white admin-section-header">
                         <h5 class="mb-0">
                             <i class="fas fa-users me-2"></i>
                             Seleccionar Grupos
@@ -67,11 +68,11 @@
                             <div class="mb-3">
                                 <button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="seleccionarTodos()">
                                     <i class="fas fa-check-double me-1"></i>
-                                    Seleccionar Todos
+                                    Seleccionar todo
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deseleccionarTodos()">
                                     <i class="fas fa-times me-1"></i>
-                                    Deseleccionar Todos
+                                    Deseleccionar todo
                                 </button>
                             </div>
 
@@ -89,7 +90,7 @@
                                                 <button type="button" class="btn btn-sm btn-link" 
                                                         onclick="toggleCuatrimestre('{{ carrera|replace(' ', '_') }}_{{ cuatri }}')">
                                                     <i class="fas fa-check-square me-1"></i>
-                                                    Seleccionar todos
+                                                    Seleccionar todo
                                                 </button>
                                             </div>
                                             
@@ -130,8 +131,8 @@
 
             <!-- Panel de configuración -->
             <div class="col-lg-4">
-                <div class="card sticky-top" style="top: 20px;">
-                    <div class="card-header bg-success text-white">
+                <div class="card sticky-top admin-sticky-top-20">
+                    <div class="card-header bg-success text-white admin-section-header">
                         <h5 class="mb-0">
                             <i class="fas fa-cog me-2"></i>
                             Configuración
@@ -181,7 +182,7 @@
 
                         <!-- Botón de generar -->
                         <button type="submit" 
-                                class="btn btn-success w-100" 
+                                class="btn btn-primary w-100"
                                 id="btn-generar"
                                 disabled>
                             <i class="fas fa-rocket me-2"></i>
@@ -364,7 +365,7 @@ function mostrarResultadoFinal(data) {
     let mensajeFinal = data.mensaje || '';
     
     if (data.errores_detallados && data.errores_detallados.length > 0) {
-        mensajeFinal += '<div class="alert alert-danger mt-3 text-start" style="max-height: 200px; overflow-y: auto;">';
+        mensajeFinal += '<div class="alert alert-danger mt-3 text-start admin-maxh-200-scroll">';
         mensajeFinal += '<strong><i class="fas fa-exclamation-triangle me-2"></i>Errores detectados:</strong><ul class="mb-0 mt-2">';
         
         data.errores_detallados.forEach(err => {
@@ -654,7 +655,7 @@ actualizarContador();
 </script>
 
 <!-- Modal de Progreso -->
-<div id="progresoModal" class="modal-overlay" style="display: none;">
+<div id="progresoModal" class="modal-overlay admin-hidden-initial">
     <div class="modal-progreso">
         <div class="modal-header-progreso">
             <h4>
@@ -665,7 +666,7 @@ actualizarContador();
         <div class="modal-body-progreso">
             <!-- Animación de carga -->
             <div id="modal-spinner" class="text-center mb-3">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <div class="spinner-border text-primary admin-spinner-lg" role="status">
                     <span class="visually-hidden">Generando...</span>
                 </div>
             </div>
@@ -681,7 +682,7 @@ actualizarContador();
             </div>
             
             <!-- Barra de progreso -->
-            <div class="progress mb-3" style="height: 25px;">
+              <div class="progress mb-3 admin-progress-xl">
                 <div id="progreso-barra" 
                      class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
                      role="progressbar" 
@@ -704,7 +705,7 @@ actualizarContador();
             </div>
             
             <!-- Resultado final (oculto inicialmente) -->
-            <div id="modal-resultado" style="display: none;" class="text-center">
+            <div id="modal-resultado" class="text-center d-none">
                 <p id="resultado-mensaje" class="mb-3"></p>
                 <button onclick="cerrarModalYRecargar()" class="btn btn-primary">
                     <i class="fas fa-check me-2"></i>Cerrar y Ver Resultados
@@ -721,7 +722,7 @@ actualizarContador();
 </div>
 
 <!-- Modal de Advertencia de Disponibilidad -->
-<div id="disponibilidadModal" class="modal-overlay" style="display: none;">
+<div id="disponibilidadModal" class="modal-overlay admin-hidden-initial">
     <div class="modal-disponibilidad">
         <div class="modal-header-disponibilidad">
             <h4>
@@ -754,7 +755,7 @@ actualizarContador();
             </div>
 
             <!-- Lista de profesores -->
-            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <div class="table-responsive admin-maxh-250-scroll">
                 <table class="table table-sm table-striped mb-0">
                     <thead class="table-dark sticky-top">
                         <tr>
@@ -791,9 +792,9 @@ actualizarContador();
 </div>
 
 <!-- Modal de Advertencia de Horarios Existentes -->
-<div id="horariosExistentesModal" class="modal-overlay" style="display: none;">
+<div id="horariosExistentesModal" class="modal-overlay admin-hidden-initial">
     <div class="modal-disponibilidad">
-        <div class="modal-header-disponibilidad" style="background: linear-gradient(135deg, #f39c12 0%, #d35400 100%);">
+        <div class="modal-header-disponibilidad admin-warning-gradient-header">
             <h4>
                 <i class="fas fa-exclamation-triangle me-2"></i>
                 Grupos con Horarios Existentes
@@ -808,7 +809,7 @@ actualizarContador();
             </div>
 
             <!-- Lista de grupos -->
-            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <div class="table-responsive admin-maxh-250-scroll">
                 <table class="table table-sm table-striped mb-0">
                     <thead class="table-dark sticky-top">
                         <tr>
