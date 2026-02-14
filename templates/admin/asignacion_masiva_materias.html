@@ -391,7 +391,7 @@ function autoAsignarCarrera() {
     formData.append('carrera_id', {{ filtro_carrera if filtro_carrera else 0 }});
     {% if filtro_cuatrimestre %}formData.append('cuatrimestre', {{ filtro_cuatrimestre }});{% endif %}
     
-    fetch('{{ url_for("auto_asignar_por_carrera") }}', {method: 'POST', body: formData})
+    secureFetch('{{ url_for("auto_asignar_por_carrera") }}', {method: 'POST', body: formData})
     .then(r => r.json())
     .then(d => {
         if(d.exito) { alert(d.mensaje); location.reload(); }

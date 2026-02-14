@@ -286,10 +286,13 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <code class="fs-5 text-danger" id="password-{{ loop.index }}">{{ usuario.password }}</code>
+                                    <code class="fs-5 text-danger password-field" id="password-{{ loop.index }}" data-p="{{ usuario.password | urlencode }}">********</code>
+                                    <button class="btn btn-sm btn-outline-warning ms-1" onclick="togglePassword({{ loop.index }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="copiarPassword('{{ usuario.password }}', {{ loop.index }})">
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="copiarPassword({{ loop.index }})">
                                         <i class="fas fa-copy me-1"></i>Copiar
                                     </button>
                                 </td>
@@ -321,15 +324,29 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
         </div>
 
         <script>
-        function copiarPassword(password, index) {
+        function getPassword(index) {
+            var el = document.getElementById('password-' + index);
+            return decodeURIComponent(el.getAttribute('data-p'));
+        }
+
+        function togglePassword(index) {
+            var el = document.getElementById('password-' + index);
+            if (el.textContent === '********') {
+                el.textContent = getPassword(index);
+            } else {
+                el.textContent = '********';
+            }
+        }
+
+        function copiarPassword(index) {
+            var password = getPassword(index);
             navigator.clipboard.writeText(password).then(function() {
-                // Cambiar temporalmente el botón
-                const btn = event.target.closest('button');
-                const originalHTML = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check me-1"></i>¡Copiado!';
+                var btn = event.target.closest('button');
+                var originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check me-1"></i>Copiado!';
                 btn.classList.remove('btn-outline-secondary');
                 btn.classList.add('btn-success');
-                
+
                 setTimeout(function() {
                     btn.innerHTML = originalHTML;
                     btn.classList.remove('btn-success');
@@ -341,22 +358,25 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,</pre>
         }
 
         function copiarTodasPasswords() {
-            let texto = "CONTRASEÑAS TEMPORALES - {{ resultado.usuarios_creados|length }} USUARIOS\n\n";
-            {% for usuario in resultado.usuarios_creados %}
-            texto += "{{ loop.index }}. {{ usuario.nombre }}\n";
-            texto += "   Usuario: {{ usuario.username }}\n";
-            texto += "   Email: {{ usuario.email }}\n";
-            texto += "   Contraseña: {{ usuario.password }}\n";
-            texto += "   Rol: {{ usuario.rol }}\n\n";
-            {% endfor %}
-            
+            var campos = document.querySelectorAll('.password-field');
+            var filas = document.querySelectorAll('table tbody tr');
+            var texto = "CONTRASEÑAS TEMPORALES - " + filas.length + " USUARIOS\n\n";
+            filas.forEach(function(fila, i) {
+                var celdas = fila.querySelectorAll('td');
+                var pwd = getPassword(i + 1);
+                texto += (i + 1) + ". " + celdas[0].textContent.trim() + "\n";
+                texto += "   Usuario: " + celdas[1].textContent.trim() + "\n";
+                texto += "   Email: " + celdas[2].textContent.trim() + "\n";
+                texto += "   Contraseña: " + pwd + "\n\n";
+            });
+
             navigator.clipboard.writeText(texto).then(function() {
-                const btn = event.target;
-                const originalHTML = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check me-1"></i>¡Todas Copiadas!';
+                var btn = event.target.closest('button');
+                var originalHTML = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check me-1"></i>Todas Copiadas!';
                 btn.classList.remove('btn-success');
                 btn.classList.add('btn-primary');
-                
+
                 setTimeout(function() {
                     btn.innerHTML = originalHTML;
                     btn.classList.remove('btn-primary');

@@ -11,11 +11,16 @@ build/
 # Entorno virtual
 venv/
 env/
+horarios/
 .env
 
 # Base de datos
-instance/
 *.db
+instance/*.db
+
+# Archivos temporales/prueba
+test_*.xlsx
+plan.md
 
 # Archivos sensibles
 backups/

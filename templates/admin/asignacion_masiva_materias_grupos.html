@@ -502,7 +502,7 @@ function autoAsignarMaterias() {
     formData.append('carrera_id', carreraId);
     formData.append('cuatrimestre', cuatrimestre);
     
-    fetch('{{ url_for("auto_asignar_materias_grupos") }}', {
+    secureFetch('{{ url_for("auto_asignar_materias_grupos") }}', {
         method: 'POST',
         body: formData
     })
