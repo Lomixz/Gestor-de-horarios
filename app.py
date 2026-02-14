@@ -142,7 +142,22 @@ def validar_carga_horaria_profesor(profesor):
 app = Flask(__name__)
 
 # Configuración de la aplicación
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+# SECRET_KEY must be consistent across all Gunicorn workers
+def _get_secret_key():
+    key = os.environ.get('SECRET_KEY')
+    if key:
+        return key
+    key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', '.secret_key')
+    if os.path.exists(key_file):
+        with open(key_file, 'r') as f:
+            return f.read().strip()
+    key = secrets.token_hex(32)
+    os.makedirs(os.path.dirname(key_file), exist_ok=True)
+    with open(key_file, 'w') as f:
+        f.write(key)
+    return key
+
+app.config['SECRET_KEY'] = _get_secret_key()
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///sistema_academico.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload
