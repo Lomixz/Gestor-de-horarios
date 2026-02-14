@@ -213,7 +213,6 @@ class User(UserMixin, db.Model):
     fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
     activo = db.Column(db.Boolean, default=True)
     requiere_cambio_password = db.Column(db.Boolean, default=False)  # Forzar cambio de contraseña
-    password_temporal = db.Column(db.String(20))  # Almacenar contraseña temporal para mostrar al admin
     
     # ========== MÉTODOS PARA MÚLTIPLES ROLES (NUEVO) ==========
     
@@ -261,7 +260,7 @@ class User(UserMixin, db.Model):
     
     # ==========================================================
     
-    def __init__(self, username, email, password, nombre, apellido, rol, telefono=None, tipo_profesor=None, carreras=None, imagen_perfil=None, firma=None, carrera_id=None, requiere_cambio_password=False, password_temporal=None):
+    def __init__(self, username, email, password, nombre, apellido, rol, telefono=None, tipo_profesor=None, carreras=None, imagen_perfil=None, firma=None, carrera_id=None, requiere_cambio_password=False):
         self.username = username
         self.email = email
         self.set_password(password)
@@ -276,7 +275,6 @@ class User(UserMixin, db.Model):
         self.firma = firma
         self.carrera_id = carrera_id
         self.requiere_cambio_password = requiere_cambio_password
-        self.password_temporal = password_temporal
     
     def set_password(self, password):
         """Establecer contraseña hasheada"""

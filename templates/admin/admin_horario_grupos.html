@@ -757,7 +757,7 @@ function eliminarHorarioAjax(id, boton) {
     const card = boton.closest('.clase-card');
     const celda = card.closest('.celda-horario');
     
-    fetch('/admin/horarios-academicos/' + id + '/eliminar-rapido', {
+    secureFetch('/admin/horarios-academicos/' + id + '/eliminar-rapido', {
         method: 'POST',
         headers: {
             'X-Requested-With': 'XMLHttpRequest'
@@ -836,7 +836,7 @@ function eliminarSeleccionados() {
     btnEliminar.disabled = true;
     btnEliminar.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Eliminando...';
     
-    fetch('/admin/horarios-academicos/eliminar-masivo', {
+    secureFetch('/admin/horarios-academicos/eliminar-masivo', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

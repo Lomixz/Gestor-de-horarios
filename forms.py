@@ -16,6 +16,18 @@ def clean_phone_number(phone):
         return re.sub(r'\D', '', phone)
     return phone
 
+def validate_password_strength(form, field):
+    """Validar complejidad de contraseña"""
+    password = field.data
+    if len(password) < 8:
+        raise ValidationError('La contraseña debe tener al menos 8 caracteres.')
+    if not re.search(r'[A-Z]', password):
+        raise ValidationError('La contraseña debe incluir al menos una letra mayúscula.')
+    if not re.search(r'[0-9]', password):
+        raise ValidationError('La contraseña debe incluir al menos un número.')
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};:,.<>?/\\|`~]', password):
+        raise ValidationError('La contraseña debe incluir al menos un carácter especial (!@#$%^&*...).')
+
 class LoginForm(FlaskForm):
     """Formulario de inicio de sesión"""
     username = StringField('Usuario', validators=[DataRequired(), Length(min=4, max=20)])
@@ -49,15 +61,15 @@ class RegistrationForm(FlaskForm):
     ])
     
     password = PasswordField('Contraseña', validators=[
-        DataRequired(), 
-        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+        DataRequired(),
+        validate_password_strength
     ])
-    
+
     password2 = PasswordField('Confirmar Contraseña', validators=[
-        DataRequired(), 
+        DataRequired(),
         EqualTo('password', message='Las contraseñas deben coincidir')
     ])
-    
+
     rol = SelectField('Rol', choices=[
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
@@ -581,14 +593,14 @@ class AgregarProfesorForm(FlaskForm):
 
     password = PasswordField('Contraseña', validators=[
         DataRequired(message='La contraseña es obligatoria'),
-        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+        validate_password_strength
     ])
-    
+
     password2 = PasswordField('Confirmar Contraseña', validators=[
         DataRequired(message='La confirmación de contraseña es obligatoria'),
         EqualTo('password', message='Las contraseñas deben coincidir')
     ])
-    
+
     tipo_profesor = SelectField('Tipo de Profesor', validators=[DataRequired(message='Debe seleccionar el tipo de profesor')], choices=[
         ('', 'Seleccione tipo de profesor'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
@@ -684,7 +696,7 @@ class AgregarUsuarioForm(FlaskForm):
 
     password = PasswordField('Contraseña', validators=[
         DataRequired(),
-        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+        validate_password_strength
     ])
 
     password2 = PasswordField('Confirmar Contraseña', validators=[
@@ -1087,14 +1099,14 @@ class CambiarPasswordProfesorForm(FlaskForm):
     """Formulario para que el administrador cambie la contraseña de un profesor"""
     nueva_password = PasswordField('Nueva Contraseña', validators=[
         DataRequired(message='La contraseña es obligatoria'),
-        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+        validate_password_strength
     ])
-    
+
     confirmar_password = PasswordField('Confirmar Nueva Contraseña', validators=[
         DataRequired(message='Debe confirmar la contraseña'),
         EqualTo('nueva_password', message='Las contraseñas deben coincidir')
     ])
-    
+
     submit = SubmitField('Cambiar Contraseña')
 
 class CambiarPasswordObligatorioForm(FlaskForm):
@@ -1102,15 +1114,15 @@ class CambiarPasswordObligatorioForm(FlaskForm):
     password_actual = PasswordField('Contraseña Temporal Actual', validators=[
         DataRequired(message='La contraseña actual es obligatoria')
     ])
-    
+
     nueva_password = PasswordField('Nueva Contraseña', validators=[
         DataRequired(message='La nueva contraseña es obligatoria'),
-        Length(min=6, message='La contraseña debe tener al menos 6 caracteres')
+        validate_password_strength
     ])
-    
+
     confirmar_password = PasswordField('Confirmar Nueva Contraseña', validators=[
         DataRequired(message='Debe confirmar la contraseña'),
         EqualTo('nueva_password', message='Las contraseñas deben coincidir')
     ])
-    
+
     submit = SubmitField('Cambiar Contraseña')

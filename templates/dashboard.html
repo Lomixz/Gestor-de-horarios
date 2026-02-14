@@ -785,7 +785,7 @@ function inicializarCanvasFirmaLocal() {
 
         var firmaBase64 = firmaCanvas.toDataURL('image/png');
 
-        fetch('/guardar_firma_dibujada', {
+        secureFetch('/guardar_firma_dibujada', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ firma: firmaBase64 })

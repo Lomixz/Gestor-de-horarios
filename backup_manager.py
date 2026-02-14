@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 # Configurar logging
 logging.basicConfig(
@@ -18,6 +19,65 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+def get_encryption_key():
+    """Obtener clave de encriptación desde variable de entorno"""
+    key_hex = os.environ.get('BACKUP_ENCRYPTION_KEY')
+    if not key_hex:
+        return None
+    try:
+        key = bytes.fromhex(key_hex)
+        if len(key) != 32:
+            logging.error("BACKUP_ENCRYPTION_KEY debe ser de 32 bytes (64 caracteres hex)")
+            return None
+        return key
+    except ValueError:
+        logging.error("BACKUP_ENCRYPTION_KEY no es un valor hexadecimal válido")
+        return None
+
+def encrypt_file(filepath, key):
+    """Encriptar archivo con AES-256-GCM"""
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)  # 96-bit nonce para GCM
+
+    with open(filepath, 'rb') as f:
+        plaintext = f.read()
+
+    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+
+    encrypted_path = filepath + '.enc'
+    with open(encrypted_path, 'wb') as f:
+        # Formato: nonce (12 bytes) + ciphertext
+        f.write(nonce + ciphertext)
+
+    # Eliminar archivo original sin encriptar
+    os.remove(filepath)
+    logging.info(f"Backup encriptado: {encrypted_path}")
+    return encrypted_path
+
+def decrypt_file(encrypted_path, key):
+    """Desencriptar archivo con AES-256-GCM"""
+    aesgcm = AESGCM(key)
+
+    with open(encrypted_path, 'rb') as f:
+        data = f.read()
+
+    nonce = data[:12]
+    ciphertext = data[12:]
+
+    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+
+    decrypted_path = encrypted_path.replace('.enc', '')
+    with open(decrypted_path, 'wb') as f:
+        f.write(plaintext)
+
+    logging.info(f"Backup desencriptado: {decrypted_path}")
+    return decrypted_path
+
+def generate_encryption_key():
+    """Generar una nueva clave de encriptación AES-256 (para configuración inicial)"""
+    key = AESGCM.generate_key(bit_length=256)
+    return key.hex()
 
 def create_app():
     """Crear aplicación Flask"""
@@ -79,10 +139,20 @@ def crear_backup_automatico():
             shutil.copy2(db_path, filepath)
             logging.info(f"Backup creado: {filepath}")
 
-            # Calcular tamaño y checksum
+            # Calcular tamaño y checksum del archivo original
             file_size = os.path.getsize(filepath)
             with open(filepath, 'rb') as f:
                 checksum = hashlib.sha256(f.read()).hexdigest()
+
+            # Encriptar backup si la clave está configurada
+            encryption_key = get_encryption_key()
+            if encryption_key:
+                filepath = encrypt_file(filepath, encryption_key)
+                filename = filename + '.enc'
+                file_size = os.path.getsize(filepath)
+                logging.info("Backup encriptado con AES-256-GCM")
+            else:
+                logging.warning("BACKUP_ENCRYPTION_KEY no configurada - backup sin encriptar")
 
             # Registrar en historial
             backup = BackupHistory(
@@ -204,8 +274,28 @@ if __name__ == "__main__":
                 print(f"   Espacio libre: {status['espacio_libre_gb']} GB")
             else:
                 print("❌ Error al obtener estado del sistema de backups")
+        elif comando == 'genkey':
+            key = generate_encryption_key()
+            print(f"Nueva clave AES-256 generada:")
+            print(f"BACKUP_ENCRYPTION_KEY={key}")
+            print(f"\nAgrega esta linea a tu archivo .env")
+        elif comando == 'decrypt':
+            if len(sys.argv) < 3:
+                print("Uso: python backup_manager.py decrypt <archivo.enc>")
+                sys.exit(1)
+            enc_file = sys.argv[2]
+            key = get_encryption_key()
+            if not key:
+                print("Error: BACKUP_ENCRYPTION_KEY no configurada")
+                sys.exit(1)
+            try:
+                result = decrypt_file(enc_file, key)
+                print(f"Backup desencriptado: {result}")
+            except Exception as e:
+                print(f"Error al desencriptar: {e}")
+                sys.exit(1)
         else:
-            print("Uso: python backup_manager.py [auto|manual|status]")
+            print("Uso: python backup_manager.py [auto|manual|status|genkey|decrypt <archivo>]")
     else:
         # Ejecutar backup automático por defecto
         success = crear_backup_automatico()

@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <!-- CSS personalizado -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- CSRF Token -->
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
     <!-- Navbar -->
@@ -87,6 +89,25 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Función global para fetch con CSRF token
+        function secureFetch(url, options) {
+            options = options || {};
+            var token = document.querySelector('meta[name="csrf-token"]');
+            if (token) {
+                if (!options.headers) {
+                    options.headers = {};
+                }
+                // Si headers es un objeto Headers, usar append
+                if (options.headers instanceof Headers) {
+                    options.headers.append('X-CSRFToken', token.content);
+                } else {
+                    options.headers['X-CSRFToken'] = token.content;
+                }
+            }
+            return fetch(url, options);
+        }
+    </script>
     <script>
         (function () {
             function ensureResponsiveTables(scope) {

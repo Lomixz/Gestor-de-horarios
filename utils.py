@@ -214,8 +214,7 @@ def procesar_archivo_profesores(archivo, carrera_defecto_id=None):
                         telefono=str(row['telefono']).strip() if 'telefono' in df.columns and not pd.isna(row['telefono']) else None,
                         carreras=carreras if rol_final in ['profesor_completo', 'profesor_asignatura'] else None,
                         carrera_id=carrera_id if rol_final == 'jefe_carrera' else None,
-                        requiere_cambio_password=True,  # Forzar cambio de contraseña
-                        password_temporal=password_temporal  # Guardar para mostrar al admin
+                        requiere_cambio_password=True
                     )
                     
                     db.session.add(usuario)

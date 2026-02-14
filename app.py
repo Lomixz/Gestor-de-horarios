@@ -1,7 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
-from sqlalchemy import func
+from markupsafe import Markup, escape
+from sqlalchemy import func, text
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role
 from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm, 
                    CarreraForm, ImportarProfesoresForm, FiltrarProfesoresForm, ExportarProfesoresForm,
@@ -14,8 +18,11 @@ from utils import (procesar_archivo_profesores, generar_pdf_profesores, procesar
                    generar_pdf_materias, generar_plantilla_csv, procesar_archivo_carreras, 
                    generar_plantilla_csv_carreras, procesar_archivo_asignaciones, 
                    generar_plantilla_csv_asignaciones, calcular_carga_profesor)
-from datetime import time, datetime
+from datetime import time, datetime, timedelta
+from urllib.parse import urlparse
 import os
+import secrets
+import logging
 import pandas as pd
 from io import BytesIO, StringIO
 from reportlab.lib import colors
@@ -58,7 +65,7 @@ def convertir_imagen_para_excel(ruta_imagen):
         else:
             return XlImage(ruta_imagen)
     except Exception as e:
-        print(f"Error al convertir imagen {ruta_imagen}: {e}")
+        logger.error(f"Error al convertir imagen: {e}")
         return None
 
 
@@ -135,12 +142,39 @@ def validar_carga_horaria_profesor(profesor):
 app = Flask(__name__)
 
 # Configuración de la aplicación
-app.config['SECRET_KEY'] = 'tu_clave_secreta_aqui_cambiala_en_produccion'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sistema_academico.db'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///sistema_academico.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB max upload
+
+# Seguridad de sesiones
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=60)
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/app.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('sistema_academico')
+audit_logger = logging.getLogger('audit')
+audit_handler = logging.FileHandler('logs/audit.log', encoding='utf-8')
+audit_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+audit_logger.addHandler(audit_handler)
+audit_logger.setLevel(logging.INFO)
+
+# Crear directorio de logs si no existe
+os.makedirs('logs', exist_ok=True)
 
 # Inicializar extensiones
 db.init_app(app)
+csrf = CSRFProtect(app)
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per hour"], storage_uri="memory://")
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -152,6 +186,18 @@ def load_user(user_id):
     """Cargar usuario por ID para Flask-Login"""
     return User.query.get(int(user_id))
 
+# Security headers
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    if request.is_secure:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
 # Rutas principales
 @app.route('/')
 def index():
@@ -159,6 +205,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
 def login():
     """Página de inicio de sesión"""
     if current_user.is_authenticated:
@@ -171,7 +218,8 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
-                
+                audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
+
                 # Verificar si el usuario requiere cambio de contraseña
                 if user.requiere_cambio_password:
                     flash(f'Bienvenido, {user.get_nombre_completo()}. Por seguridad, debes cambiar tu contraseña temporal.', 'warning')
@@ -179,17 +227,22 @@ def login():
                 
                 flash(f'¡Bienvenido, {user.get_nombre_completo()}!', 'success')
                 
-                # Redirigir a la página solicitada o al dashboard
+                # Redirigir a la página solicitada o al dashboard (validando que sea URL interna)
                 next_page = request.args.get('next')
-                return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+                if next_page and urlparse(next_page).netloc == '' and next_page.startswith('/'):
+                    return redirect(next_page)
+                return redirect(url_for('dashboard'))
             else:
+                audit_logger.warning(f"LOGIN_DISABLED user={user.username} ip={request.remote_addr}")
                 flash('Tu cuenta está desactivada. Contacta al administrador.', 'error')
         else:
+            audit_logger.warning(f"LOGIN_FAILED user={form.username.data} ip={request.remote_addr}")
             flash('Usuario o contraseña incorrectos.', 'error')
     
     return render_template('login.html', form=form)
 
 @app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def register():
     """Página de registro"""
     if current_user.is_authenticated:
@@ -253,7 +306,7 @@ def register():
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la cuenta. Inténtalo de nuevo.', 'error')
-            print(f"Error en registro: {e}")
+            logger.error(f"Error en registro: {e}")
     
     return render_template('register.html', form=form, horarios=horarios)
 
@@ -278,19 +331,21 @@ def cambiar_password_obligatorio():
             # Actualizar contraseña
             current_user.password = form.nueva_password.data
             current_user.requiere_cambio_password = False
-            current_user.password_temporal = None
-            
+            # Password temporal ya no se almacena en BD
+
             db.session.commit()
-            
+            audit_logger.info(f"PASSWORD_CHANGED user={current_user.username} ip={request.remote_addr}")
+
             flash('¡Contraseña actualizada exitosamente! Ahora puedes acceder al sistema.', 'success')
             return redirect(url_for('dashboard'))
             
         except Exception as e:
             db.session.rollback()
             flash('Error al cambiar la contraseña. Inténtalo de nuevo.', 'error')
-            print(f"Error en cambiar password obligatorio: {e}")
+            logger.error("Error en cambiar password obligatorio")
+            audit_logger.info(f"PASSWORD_CHANGE_ERROR user={current_user.username}")
     
-    return render_template('cambiar_password_obligatorio.html', form=form, password_temporal=current_user.password_temporal)
+    return render_template('cambiar_password_obligatorio.html', form=form)
 
 # ==========================================
 # FUNCIÓN CENTRAL PARA PROCESAR HORARIOS
@@ -345,16 +400,16 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
             if incluir_ids:
                 info_clase_html = {
                     'id': a.id,
-                    'html': f"{a.materia.nombre}<br><small class='text-muted'>{a.materia.codigo}</small><br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
+                    'html': f"{escape(a.materia.nombre)}<br><small class='text-muted'>{escape(a.materia.codigo)}</small><br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
                     'grupo': grupo_codigo,
                     'hora_inicio': hora_inicio_int,
                     'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                 }
             else:
                 info_clase_html = (
-                    f"{a.materia.nombre}<br>"
-                    f"<small class='text-muted'>{a.materia.codigo}</small><br>"
-                    f"<span class='badge bg-primary bg-opacity-25 text-primary' style='font-size:0.65rem;'>Grupo: {grupo_codigo}</span><br>"
+                    f"{escape(a.materia.nombre)}<br>"
+                    f"<small class='text-muted'>{escape(a.materia.codigo)}</small><br>"
+                    f"<span class='badge bg-primary bg-opacity-25 text-primary' style='font-size:0.65rem;'>Grupo: {escape(grupo_codigo)}</span><br>"
                     f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                 )
 
@@ -379,12 +434,12 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
                             'materia': a.materia.nombre,
                             'profesor': a.profesor.get_nombre_completo(),
                             'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
-                            'html': f"{a.materia.nombre}<br>Prof: {a.profesor.get_nombre_completo()}<br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
+                            'html': f"{escape(a.materia.nombre)}<br>Prof: {escape(a.profesor.get_nombre_completo())}<br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                         }
                     else:
                         info_clase_html = (
-                            f"{a.materia.nombre}<br>"
-                            f"Prof: {a.profesor.get_nombre_completo()}<br>"
+                            f"{escape(a.materia.nombre)}<br>"
+                            f"Prof: {escape(a.profesor.get_nombre_completo())}<br>"
                             f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
                         )
 
@@ -566,7 +621,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
                 img.height = 55
                 ws.add_image(img, 'A1')
         except Exception as e:
-            print(f"Error al cargar logo: {e}")
+            logger.error(f"Error al cargar logo: {e}")
 
     # ========== 2. FILA 1: "Carga Horaria" (B1:L1 - verde) ==========
     ws.merge_cells('B1:L1')
@@ -1062,7 +1117,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
                     firma_img.anchor = crear_anchor_firma(1, 55)
                     ws.add_image(firma_img)
             except Exception as e:
-                print(f"Error al cargar firma del profesor: {e}")
+                logger.error(f"Error al cargar firma del profesor: {e}")
 
     # 2. Firma del Director Académico (Autorizó) — centrada en D-F
     config_firma_director = ConfiguracionSistema.query.filter_by(clave='director_academico_firma').first()
@@ -1075,7 +1130,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
                     firma_dir_img.anchor = crear_anchor_firma(3, 113)
                     ws.add_image(firma_dir_img)
             except Exception as e:
-                print(f"Error al cargar firma del director: {e}")
+                logger.error(f"Error al cargar firma del director: {e}")
 
     # 3. Firma del Responsable del PA (Recibió) — centrada en G-L
     config_firma_responsable = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
@@ -1088,7 +1143,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
                     firma_resp_img.anchor = crear_anchor_firma(9, 15)
                     ws.add_image(firma_resp_img)
             except Exception as e:
-                print(f"Error al cargar firma del responsable: {e}")
+                logger.error(f"Error al cargar firma del responsable: {e}")
 
     # ========== 13. GUARDAR EN BUFFER ==========
     buffer = BytesIO()
@@ -1120,6 +1175,7 @@ def dashboard():
 def logout():
     """Cerrar sesión"""
     name = current_user.get_nombre_completo()
+    audit_logger.info(f"LOGOUT user={current_user.username} ip={request.remote_addr}")
     logout_user()
     flash(f'¡Hasta luego, {name}!', 'info')
     return redirect(url_for('index'))
@@ -2005,7 +2061,7 @@ def profesor_disponibilidad():
         except Exception as e:
             db.session.rollback()
             flash(f'❌ Error al guardar la disponibilidad: {str(e)}', 'error')
-            print(f"Error al guardar disponibilidad: {e}")
+            logger.error(f"Error al guardar disponibilidad: {e}")
     
     # GET: Obtener disponibilidades actuales del profesor
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
@@ -2586,7 +2642,7 @@ def agregar_horario():
         except Exception as e:
             db.session.rollback()
             flash('Error al crear el horario. Inténtalo de nuevo.', 'error')
-            print(f"Error en agregar horario: {e}")
+            logger.error(f"Error en agregar horario: {e}")
     
     return render_template('admin/horario_form.html', form=form, horario=None)
 
@@ -2625,7 +2681,7 @@ def editar_horario(id):
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar el horario. Inténtalo de nuevo.', 'error')
-            print(f"Error en editar horario: {e}")
+            logger.error(f"Error en editar horario: {e}")
     
     return render_template('admin/horario_form.html', form=form, horario=horario)
 
@@ -2657,7 +2713,7 @@ def eliminar_horario(id):
         except Exception as e:
             db.session.rollback()
             flash('Error al eliminar el horario. Inténtalo de nuevo.', 'error')
-            print(f"Error en eliminar horario: {e}")
+            logger.error(f"Error en eliminar horario: {e}")
     
     return render_template('admin/eliminar_horario.html', form=form, horario=horario)
 
@@ -2752,7 +2808,7 @@ def nueva_carrera():
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la carrera. Inténtalo de nuevo.', 'error')
-            print(f"Error en nueva carrera: {e}")
+            logger.error(f"Error en nueva carrera: {e}")
     
     return render_template('admin/carrera_form.html', form=form, titulo="Nueva Carrera")
 
@@ -2831,7 +2887,7 @@ def editar_carrera(id):
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar la carrera. Inténtalo de nuevo.', 'error')
-            print(f"Error en editar carrera: {e}")
+            logger.error(f"Error en editar carrera: {e}")
     
     return render_template('admin/carrera_form.html', form=form, carrera=carrera, titulo="Editar Carrera")
 
@@ -3060,7 +3116,7 @@ def nueva_materia():
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la materia. Inténtalo de nuevo.', 'error')
-            print(f"Error en nueva materia: {e}")
+            logger.error(f"Error en nueva materia: {e}")
     
     return render_template('admin/materia_form.html', form=form, titulo="Nueva Materia")
 
@@ -3110,7 +3166,7 @@ def editar_materia(id):
         except Exception as e:
             db.session.rollback()
             flash('Error al actualizar la materia. Inténtalo de nuevo.', 'error')
-            print(f"Error en editar materia: {e}")
+            logger.error(f"Error en editar materia: {e}")
     
     return render_template('admin/materia_form.html', form=form, materia=materia, titulo="Editar Materia")
 
@@ -3174,7 +3230,7 @@ def importar_materias():
                 
         except Exception as e:
             flash('Error al procesar el archivo. Inténtalo de nuevo.', 'error')
-            print(f"Error en importar materias: {e}")
+            logger.error(f"Error en importar materias: {e}")
     
     return render_template('admin/importar_materias.html', form=form)
 
@@ -3260,7 +3316,7 @@ def exportar_materias():
         
     except Exception as e:
         flash('Error al generar el PDF. Inténtalo de nuevo.', 'error')
-        print(f"Error en exportar materias: {e}")
+        logger.error(f"Error en exportar materias: {e}")
         import traceback
         traceback.print_exc()
         return redirect(url_for('gestionar_materias'))
@@ -3287,7 +3343,7 @@ def descargar_plantilla_csv_materias():
         
     except Exception as e:
         flash('Error al generar la plantilla. Inténtalo de nuevo.', 'error')
-        print(f"Error en descargar plantilla CSV: {e}")
+        logger.error(f"Error en descargar plantilla CSV: {e}")
         return redirect(url_for('importar_materias'))
 
 # Rutas para gestión de profesores
@@ -3375,7 +3431,7 @@ def importar_profesores():
                 
         except Exception as e:
             flash('Error al procesar el archivo. Inténtalo de nuevo.', 'error')
-            print(f"Error en importar profesores: {e}")
+            logger.error(f"Error en importar profesores: {e}")
     
     return render_template('admin/importar_profesores.html', form=form)
 
@@ -3391,7 +3447,7 @@ def descargar_plantilla_csv_profesores():
         return generar_plantilla_csv()
     except Exception as e:
         flash('Error al generar la plantilla CSV. Inténtalo de nuevo.', 'error')
-        print(f"Error en descargar plantilla CSV profesores: {e}")
+        logger.error(f"Error en descargar plantilla CSV profesores: {e}")
         return redirect(url_for('importar_profesores'))
 
 @app.route('/admin/profesores/exportar')
@@ -3427,7 +3483,7 @@ def exportar_profesores():
         
     except Exception as e:
         flash('Error al generar el PDF. Inténtalo de nuevo.', 'error')
-        print(f"Error en exportar profesores: {e}")
+        logger.error(f"Error en exportar profesores: {e}")
         import traceback
         traceback.print_exc()
         return redirect(url_for('gestionar_profesores'))
@@ -3556,7 +3612,7 @@ def agregar_profesor():
         except Exception as e:
             db.session.rollback()
             flash('Error al crear el profesor. Inténtalo de nuevo.', 'error')
-            print(f"Error al crear profesor: {e}")
+            logger.error(f"Error al crear profesor: {e}")
     
     return render_template('admin/profesor_form.html', form=form, titulo="Agregar Profesor", horarios=horarios)
 
@@ -4494,7 +4550,7 @@ def generar_horarios_masivo():
         periodo_academico = f"{año_actual}-{año_actual}_{timestamp}"
         
         # Generar horarios masivos
-        print(f"🚀 Iniciando generación masiva para {len(grupos_ids)} grupos...")
+        logger.info(f"Iniciando generacion masiva para {len(grupos_ids)} grupos")
         # Inicializar progreso
         global generacion_progreso
         generacion_progreso = {
@@ -4537,13 +4593,13 @@ def generar_horarios_masivo():
                         grupos_codigos.append(grupo.codigo.upper())
                 
                 # Obtener TODOS los horarios activos de los grupos seleccionados
-                print(f"🔍 Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
+                logger.info(f"Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
                 horarios_generados = HorarioAcademico.query.filter(
                     HorarioAcademico.grupo.in_(grupos_codigos),
                     HorarioAcademico.activo == True
                 ).all()
                 
-                print(f"   📊 Encontrados {len(horarios_generados)} horarios para backup")
+                logger.info(f"Encontrados {len(horarios_generados)} horarios para backup")
                 
                 # Serializar datos
                 datos = []
@@ -4580,7 +4636,7 @@ def generar_horarios_masivo():
                 db.session.add(version)
                 db.session.commit()
                 
-                print(f"   ✅ Backup creado: {version_nombre} con {len(datos)} horarios")
+                logger.info(f"Backup creado: {version_nombre} con {len(datos)} horarios")
                 
                 # Limitar versiones por usuario - 20 para admin, 10 para usuarios normales
                 from models import User
@@ -4596,10 +4652,10 @@ def generar_horarios_masivo():
                     for v_old in versiones_usuario[limite_versiones:]:
                         v_old.activo = False
                     db.session.commit()
-                    print(f"   🗑️ Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                    logger.info(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
                     
             except Exception as e:
-                print(f"❌ Error creando backup: {e}")
+                logger.error(f"Error creando backup: {e}")
         
         if resultado['exito']:
             flash(f"✅ {resultado['mensaje']}", 'success')
@@ -4691,7 +4747,7 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
                     'errores_validacion': []
                 })
                 generacion_progreso['mensaje'] = f"❌ Error en {grupo.codigo}: {str(e)}"
-            print(f"Error en grupo {grupo.codigo}: {e}")
+            logger.error(f"Error en grupo {grupo.codigo}: {e}")
     
     # Resumen final
     if resultados['grupos_procesados'] > 0:
@@ -4951,7 +5007,7 @@ def api_iniciar_generacion_masiva():
                         if grupo:
                             grupos_por_carrera[grupo.carrera_id].append(grupo.codigo.upper())
                     
-                    print(f"🔍 Creando backups para {len(grupos_por_carrera)} carrera(s)")
+                    logger.info(f"Creando backups para {len(grupos_por_carrera)} carrera(s)")
                     
                     # Crear un backup por cada carrera
                     for carrera_id, grupos_codigos in grupos_por_carrera.items():
@@ -4996,7 +5052,7 @@ def api_iniciar_generacion_masiva():
                         )
                         db.session.add(version)
                         
-                        print(f"   ✅ Backup creado: {version_nombre} ({carrera_nombre}) con {len(datos)} horarios")
+                        logger.info(f"Backup creado: {version_nombre} ({carrera_nombre}) con {len(datos)} horarios")
                     
                     db.session.commit()
                     
@@ -5013,10 +5069,10 @@ def api_iniciar_generacion_masiva():
                         for v_old in versiones_usuario[limite_versiones:]:
                             v_old.activo = False
                         db.session.commit()
-                        print(f"   🗑️ Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                        logger.info(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
                         
                 except Exception as e:
-                    print(f"❌ Error creando backup: {e}")
+                    logger.error(f"Error creando backup: {e}")
                     import traceback
                     traceback.print_exc()
             
@@ -6238,21 +6294,33 @@ def descargar_backup(filename):
     try:
         from models import BackupHistory
 
+        # Sanitizar filename para prevenir path traversal
+        safe_filename = secure_filename(filename)
+        if not safe_filename:
+            flash('Nombre de archivo no válido.', 'error')
+            return redirect(url_for('configuracion_sistema'))
+
         # Verificar que el backup existe en la base de datos
-        backup = BackupHistory.query.filter_by(filename=filename).first()
+        backup = BackupHistory.query.filter_by(filename=safe_filename).first()
         if not backup:
             flash('Backup no encontrado.', 'error')
             return redirect(url_for('configuracion_sistema'))
 
-        filepath = os.path.join('backups', filename)
+        # Validar que el path resuelto esté dentro del directorio de backups
+        backups_dir = os.path.abspath('backups')
+        filepath = os.path.abspath(os.path.join('backups', safe_filename))
+        if not filepath.startswith(backups_dir):
+            flash('Acceso denegado.', 'error')
+            return redirect(url_for('configuracion_sistema'))
+
         if os.path.exists(filepath):
-            return send_file(filepath, as_attachment=True, download_name=filename)
+            return send_file(filepath, as_attachment=True, download_name=safe_filename)
         else:
             flash('Archivo de backup no encontrado en el servidor.', 'error')
             return redirect(url_for('configuracion_sistema'))
 
     except Exception as e:
-        flash(f'Error al descargar backup: {str(e)}', 'error')
+        flash('Error al descargar backup.', 'error')
         return redirect(url_for('configuracion_sistema'))
 
 # API para optimizar base de datos
@@ -6265,8 +6333,8 @@ def optimizar_base_datos():
 
     try:
         # Ejecutar comandos de optimización para SQLite
-        db.session.execute('VACUUM')
-        db.session.execute('ANALYZE')
+        db.session.execute(text('VACUUM'))
+        db.session.execute(text('ANALYZE'))
         db.session.commit()
 
         return jsonify({'success': True, 'message': 'Base de datos optimizada exitosamente'})
@@ -6427,10 +6495,15 @@ def eliminar_imagen_perfil():
     return redirect(url_for('dashboard'))
 
 # Función auxiliar para verificar tipos de archivo permitidos
-def allowed_file(filename):
-    """Verificar si el archivo tiene una extensión permitida"""
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_MIME_TYPES = {'image/png', 'image/jpeg', 'image/gif'}
+
+def allowed_file(filename, file_obj=None):
+    """Verificar si el archivo tiene una extensión y MIME type permitidos"""
+    ext_ok = '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    if file_obj and hasattr(file_obj, 'content_type'):
+        return ext_ok and file_obj.content_type in ALLOWED_MIME_TYPES
+    return ext_ok
 
 # ========== RUTAS PARA FIRMAS DIGITALES ==========
 
@@ -6455,6 +6528,10 @@ def guardar_firma_dibujada():
         # Extraer datos base64
         imagen_data = firma_base64.split(',')[1]
         imagen_bytes = base64.b64decode(imagen_data)
+
+        # Validar tamaño de imagen (max 2MB)
+        if len(imagen_bytes) > 2 * 1024 * 1024:
+            return jsonify({'success': False, 'message': 'La imagen es demasiado grande (máximo 2MB)'}), 400
 
         # Generar nombre de archivo
         filename = f"firma_{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
@@ -8866,7 +8943,7 @@ def _generar_pdf_horario_profesor(profesor_nombre):
                 else:
                     return RlImage(ruta, width=1.3*inch, height=0.5*inch)
             except Exception as e:
-                print(f"Error cargando firma PDF: {e}")
+                logger.error(f"Error cargando firma PDF: {e}")
                 return None
 
         # Firma del profesor
@@ -9384,13 +9461,13 @@ def api_iniciar_generacion_masiva_jefe():
                     
                     # MEJORADO: Obtener TODOS los horarios activos de los grupos seleccionados
                     # Esto asegura que el backup tenga el estado completo de esos grupos
-                    print(f"🔍 Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
+                    logger.info(f"Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
                     horarios_generados = HorarioAcademico.query.filter(
                         HorarioAcademico.grupo.in_(grupos_codigos),
                         HorarioAcademico.activo == True
                     ).all()
                     
-                    print(f"   📊 Encontrados {len(horarios_generados)} horarios para backup")
+                    logger.info(f"Encontrados {len(horarios_generados)} horarios para backup")
                     
                     # Serializar datos
                     datos = []
@@ -9443,10 +9520,10 @@ def api_iniciar_generacion_masiva_jefe():
                         for v_old in versiones_usuario[limite_versiones:]:
                             v_old.activo = False
                         db.session.commit()
-                        print(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
+                        logger.info(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
                         
                 except Exception as e:
-                    print(f"Error creando versión: {e}")
+                    logger.error(f"Error creando version: {e}")
             
             with progreso_lock:
                 generacion_progreso['completado'] = True
@@ -10412,4 +10489,5 @@ with app.app_context():
     init_upload_dirs()
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true')
+    app.run(debug=debug_mode, host='0.0.0.0', port=5001)

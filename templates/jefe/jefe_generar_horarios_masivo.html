@@ -276,7 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Función para verificar horarios existentes
     function verificarHorariosExistentes(gruposIds) {
-        return fetch('/api/verificar-horarios-existentes', {
+        return secureFetch('/api/verificar-horarios-existentes', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ grupos_ids: gruposIds })
@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function() {
             dias_semana: document.querySelector('[name="dias_semana"]').value
         };
 
-        fetch('/api/jefe/iniciar-generacion-masiva', {
+        secureFetch('/api/jefe/iniciar-generacion-masiva', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(formData)

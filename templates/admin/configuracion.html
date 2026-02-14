@@ -755,7 +755,7 @@ function guardarHorarios() {
         tiempo_entre_clases: document.getElementById('tiempo_entre_clases').value
     };
 
-    fetch('/admin/configuracion/horarios', {
+    secureFetch('/admin/configuracion/horarios', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -814,7 +814,7 @@ function guardarCargaHoraria() {
         limite_absoluto: limiteAbsoluto
     };
 
-    fetch('/admin/configuracion/carga-horaria', {
+    secureFetch('/admin/configuracion/carga-horaria', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -937,7 +937,7 @@ function guardarDatabase() {
     }
 
     // Enviar configuración al servidor
-    fetch('/admin/configuracion/database', {
+    secureFetch('/admin/configuracion/database', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -961,7 +961,7 @@ function guardarDatabase() {
 function hacerBackup() {
     mostrarMensaje('Iniciando backup de base de datos...', 'info');
 
-    fetch('/admin/configuracion/backup', {
+    secureFetch('/admin/configuracion/backup', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1036,7 +1036,7 @@ function verLogs() {
 function optimizarBD() {
     mostrarMensaje('Optimizando base de datos...', 'info');
 
-    fetch('/admin/configuracion/optimize', {
+    secureFetch('/admin/configuracion/optimize', {
         method: 'POST'
     })
     .then(response => response.json())
@@ -1056,7 +1056,7 @@ function reiniciarSistema() {
     if (confirm('¿Está seguro de que desea reiniciar el sistema? Esto aplicará todos los cambios pendientes.')) {
         mostrarMensaje('Reiniciando sistema...', 'warning');
 
-        fetch('/admin/configuracion/restart', {
+        secureFetch('/admin/configuracion/restart', {
             method: 'POST'
         })
         .then(response => response.json())
@@ -1143,7 +1143,7 @@ function eliminarFirmaDirector() {
     document.getElementById('preview_firma_director').innerHTML = '';
 
     // Marcar para eliminar en el servidor
-    fetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
+    secureFetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo: 'director_academico' })
@@ -1161,7 +1161,7 @@ function eliminarFirmaResponsable() {
     document.getElementById('preview_firma_responsable').innerHTML = '';
 
     // Marcar para eliminar en el servidor
-    fetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
+    secureFetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo: 'responsable_pa' })
@@ -1193,7 +1193,7 @@ function guardarConfigExcel() {
         formData.append('responsable_pa_firma', firmaResponsableInput.files[0]);
     }
 
-    fetch('/admin/configuracion/exportacion-excel', {
+    secureFetch('/admin/configuracion/exportacion-excel', {
         method: 'POST',
         body: formData
     })

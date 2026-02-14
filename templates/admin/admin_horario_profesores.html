@@ -233,7 +233,7 @@ function guardarHorasTC() {
         investigacion: parseInt(document.getElementById('horasInvestigacion').value) || 0
     };
     
-    fetch(`/admin/profesor/${profesorId}/horas-tc`, {
+    secureFetch(`/admin/profesor/${profesorId}/horas-tc`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
