@@ -3,6 +3,7 @@ FROM python:3.12-slim
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -24,20 +25,13 @@ COPY . .
 # Create necessary directories with proper permissions
 RUN mkdir -p instance logs static/uploads/perfiles backups static/uploads/firmas horarios \
     && chown -R appuser:appuser /app \
-    && chmod 750 instance logs backups \
-    && chmod 755 static/uploads static/uploads/perfiles static/uploads/firmas horarios
+    && chmod +x entrypoint.sh
 
 # Expose the port the app runs on
 EXPOSE 5001
 
-# Make entrypoint executable
-RUN chmod +x entrypoint.sh
-
-# Switch to non-root user
-USER appuser
-
-# Volume mount points - ensure correct ownership at runtime
+# Volume mount points
 VOLUME ["/app/instance", "/app/logs", "/app/backups", "/app/static/uploads", "/app/horarios"]
 
-# Run the entrypoint script
+# Run the entrypoint script as root (it will fix permissions then drop to appuser)
 CMD ["./entrypoint.sh"]
