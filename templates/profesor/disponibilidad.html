@@ -53,6 +53,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" id="disponibilidadForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     
                     <!-- Botones de selección rápida -->
                     <div class="mb-4 d-flex gap-2 flex-wrap">

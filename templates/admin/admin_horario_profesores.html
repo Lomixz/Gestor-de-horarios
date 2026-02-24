@@ -98,7 +98,7 @@
                                     </button>
                                     <form id="form-eliminar-{{ clase.id }}" method="POST" 
                                           action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" 
-                                        class="d-none"></form>
+                                        class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
                                 </div>
                                 {% endif %}
                             {% endif %}

@@ -219,6 +219,7 @@
 
             <!-- Matriz de Asignación -->
             <form method="POST" id="form-asignaciones">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="row mb-3">
                     <div class="col-12">
                         <div class="card">

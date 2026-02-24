@@ -29,6 +29,7 @@
     </div>
 
     <form method="POST" id="formGeneracionMasiva">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <!-- Lista de Grupos -->
             <div class="col-lg-8">

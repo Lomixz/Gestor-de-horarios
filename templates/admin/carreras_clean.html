@@ -143,6 +143,7 @@
                                                     <form method="POST" action="{{ url_for('eliminar_carrera', id=carrera.id) }}" 
                                                           style="display: inline;" 
                                                           onsubmit="return confirm('¿Estás seguro de que deseas eliminar la carrera \'{{ carrera.nombre }}\'?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <button type="submit" 
                                                                 class="btn btn-sm btn-outline-danger" 
                                                                 title="Eliminar">

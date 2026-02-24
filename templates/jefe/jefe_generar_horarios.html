@@ -30,6 +30,7 @@
                 </div>
                 <div class="card-body p-4">
                     <form method="POST" id="formGenerar">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <!-- Selector de Grupo -->
                         <div class="mb-4">
                             <label class="form-label fw-semibold">

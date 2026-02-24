@@ -230,6 +230,7 @@
                                             </a>
                                             {% if usuario.activo %}
                                                 <form method="POST" action="{{ url_for('desactivar_usuario', id=usuario.id) }}" class="inline-action-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                     <button type="submit" 
                                                             class="btn btn-sm btn-outline-warning" 
                                                             data-bs-toggle="tooltip" 
@@ -241,6 +242,7 @@
                                                 </form>
                                             {% else %}
                                                 <form method="POST" action="{{ url_for('activar_usuario', id=usuario.id) }}" class="inline-action-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                     <button type="submit" 
                                                             class="btn btn-sm btn-outline-success" 
                                                             data-bs-toggle="tooltip" 

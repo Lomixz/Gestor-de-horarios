@@ -211,9 +211,10 @@
                                                class="btn btn-sm btn-warning" title="Editar">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <form method="post" action="{{ url_for('eliminar_grupo', id=grupo.id) }}" 
-                                                  class="inline-action-form" 
+                                            <form method="post" action="{{ url_for('eliminar_grupo', id=grupo.id) }}"
+                                                  class="inline-action-form"
                                                   onsubmit="return confirm('¿Estás seguro de eliminar este grupo?');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-sm btn-danger" title="Eliminar">
                                                     <i class="fas fa-trash"></i>
                                                 </button>

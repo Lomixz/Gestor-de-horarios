@@ -327,7 +327,7 @@
                                                           <form id="form-eliminar-profesor-{{ profesor.id }}" 
                                                               method="POST" 
                                                               action="{{ url_for('eliminar_profesor_admin', id=profesor.id) }}" 
-                                                              class="d-none"></form>
+                                                              class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
                                                     </div>
                                                     <button class="btn btn-sm btn-secondary" 
                                                             data-bs-toggle="collapse" 

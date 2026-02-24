@@ -147,6 +147,7 @@
 
     {% if profesores and materias %}
     <form method="POST" action="{{ url_for('asignacion_masiva_materias', carrera=filtro_carrera if filtro_carrera else '', cuatrimestre=filtro_cuatrimestre if filtro_cuatrimestre else '') }}" id="formAsignacion">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card border-0 shadow-sm">
             
             <!-- Barra de Acciones de la Matriz -->

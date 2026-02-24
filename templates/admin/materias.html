@@ -255,6 +255,7 @@
                                                 <form method="POST" action="{{ url_for('eliminar_materia', id=materia.id) }}"
                                                     class="inline-action-form"
                                                       onsubmit="return confirm('¿Estás seguro de que deseas eliminar la materia \'{{ materia.nombre }}\'?')">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                     <button type="submit"
                                                             class="btn btn-sm btn-outline-danger"
                                                             title="Eliminar">

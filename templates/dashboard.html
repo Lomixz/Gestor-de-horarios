@@ -78,6 +78,7 @@
                     <!-- Formulario para subir imagen -->
                     <div class="mt-3">
                         <form action="{{ url_for('subir_imagen_perfil') }}" method="post" enctype="multipart/form-data" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="input-group">
                                     <input type="file" class="d-none" id="imagen_perfil" name="imagen_perfil" 
                                         accept="image/*" onchange="this.form.submit()">
@@ -125,6 +126,7 @@
 
                             <!-- Botón para subir imagen de firma -->
                             <form action="{{ url_for('subir_firma') }}" method="post" enctype="multipart/form-data" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="file" class="d-none" id="firma" name="firma"
                                         accept="image/*" onchange="this.form.submit()">
                                 <label for="firma" class="btn btn-outline-secondary btn-sm">

@@ -489,6 +489,7 @@
 
                                     <!-- Subir imagen de firma -->
                                     <form action="{{ url_for('admin_subir_firma_usuario', id=usuario.id) }}" method="post" enctype="multipart/form-data" class="mb-2">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="input-group input-group-sm">
                                             <input type="file" class="form-control" name="firma" accept="image/*" required>
                                             <button type="submit" class="btn btn-primary">
@@ -499,6 +500,7 @@
                                     </form>
                                     {% if usuario.get_firma_url() %}
                                     <form action="{{ url_for('admin_eliminar_firma_usuario', id=usuario.id) }}" method="post" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-outline-danger btn-sm"
                                                 onclick="return confirm('¿Está seguro de eliminar la firma de {{ usuario.get_nombre_completo() }}?');">
                                             <i class="fas fa-trash me-1"></i>Eliminar Firma

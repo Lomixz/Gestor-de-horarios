@@ -66,6 +66,7 @@
 
     {% if materias %}
     <form method="POST" id="form-asignaciones">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <div class="col-12">
                 <div class="card">

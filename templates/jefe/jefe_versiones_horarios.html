@@ -84,6 +84,7 @@
                                     <form method="POST" action="{{ url_for('restaurar_version_jefe', version_id=version.id) }}"
                                           style="display: inline;"
                                           onsubmit="return confirm('¿Restaurar esta versión? Los horarios actuales de los grupos afectados serán reemplazados.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <button type="submit" class="btn btn-outline-primary" title="Restaurar">
                                             <i class="fas fa-undo"></i>
                                         </button>
@@ -177,6 +178,7 @@
                     <i class="fas fa-times me-1"></i>Cancelar
                 </button>
                 <form id="formEliminar" method="POST" style="display: inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="eliminar_horarios" id="eliminarHorariosInput" value="false">
                     <button type="submit" class="btn btn-danger">
                         <i class="fas fa-trash me-1"></i>Eliminar
