@@ -2440,7 +2440,17 @@ def asignar_profesores_grupo(grupo_id):
     # Obtener materias del grupo
     materias_grupo = grupo.materias
     
-    # Obtener profesores disponibles (de la misma carrera)
+    # Construir diccionario de profesores por materia
+    # Solo muestra profesores que tienen la materia asignada en su perfil
+    profesores_por_materia = {}
+    for materia in materias_grupo:
+        profesores_por_materia[materia.id] = User.query.filter(
+            User.materias.any(id=materia.id),
+            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            User.activo == True
+        ).order_by(User.apellido, User.nombre).all()
+    
+    # También obtener todos los profesores de la carrera (para referencia)
     profesores = User.query.filter(
         User.carreras.any(id=grupo.carrera_id),
         User.rol.in_(['profesor_completo', 'profesor_asignatura']),
@@ -2505,6 +2515,7 @@ def asignar_profesores_grupo(grupo_id):
                          grupo=grupo,
                          materias=materias_grupo,
                          profesores=profesores,
+                         profesores_por_materia=profesores_por_materia,
                          asignaciones_actuales=asignaciones_actuales)
 
 @app.route('/admin/grupos/importar-asignaciones-materias', methods=['GET', 'POST'])

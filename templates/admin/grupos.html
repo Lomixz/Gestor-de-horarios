@@ -17,6 +17,10 @@
                         <i class="fas fa-arrow-left me-1"></i>
                         Volver al Dashboard
                     </a>
+                    <a href="{{ url_for('asignacion_masiva_materias_grupos') }}" class="btn btn-success">
+                        <i class="fas fa-th me-1"></i>
+                        Asignación Masiva de Materias
+                    </a>
                     <a href="{{ url_for('crear_grupo') }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>
                         Agregar Grupo
@@ -74,11 +78,11 @@
                             <label for="busqueda-texto" class="form-label">
                                 <i class="fas fa-search me-1"></i>Buscar por código
                             </label>
-                            <input type="text" id="busqueda-texto" class="form-control" 
-                                   placeholder="Escribe para buscar...">
+                            <input type="text" id="busqueda-texto" class="form-control"
+                                placeholder="Escribe para buscar...">
                         </div>
                     </div>
-                    
+
                     <!-- Contador de resultados -->
                     <div class="mt-3">
                         <span class="badge bg-primary" id="contador-resultados">
@@ -106,134 +110,131 @@
                 </div>
                 <div class="card-body p-0">
                     {% if grupos %}
-                        <div class="table-responsive">
-                            <table class="table table-hover admin-table">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Código</th>
-                                        <th>Carrera</th>
-                                        <th>Cuatrimestre</th>
-                                        <th>Turno</th>
-                                        <th>Materias</th>
-                                        <th>Profesores</th>
-                                        <th>Completitud</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for grupo in grupos %}
-                                    {% set resumen = grupo.get_resumen_completo() %}
-                                    <tr class="fila-grupo">
-                                        <td><strong>{{ grupo.codigo }}</strong></td>
-                                        <td>{{ grupo.get_carrera_nombre() }}</td>
-                                        <td>{{ grupo.get_cuatrimestre_display() }}</td>
-                                        <td>
-                                            {% if grupo.turno == 'M' %}
-                                            <span class="badge admin-pill-badge admin-pill-warning">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-sun"></i>
-                                                {{ grupo.get_turno_display() }}
-                                            </span>
-                                            {% else %}
-                                            <span class="badge admin-pill-badge admin-pill-info">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-moon"></i>
-                                                {{ grupo.get_turno_display() }}
-                                            </span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <span class="badge admin-pill-badge admin-pill-primary">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-book"></i>
-                                                {{ resumen.materias_count }} materias
-                                            </span>
-                                            {% if resumen.materias_sin_profesor > 0 %}
-                                            <br><small class="text-danger">
-                                                <i class="fas fa-exclamation-triangle"></i>
-                                                {{ resumen.materias_sin_profesor }} sin profesor
-                                            </small>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <span class="badge admin-pill-badge admin-pill-secondary">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-chalkboard-teacher"></i>
-                                                {{ resumen.profesores_count }} profesores
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div class="progress mb-1 admin-progress-lg">
-                                                <div class="progress-bar bg-{{ resumen.estado.clase }}" 
-                                                     role="progressbar" 
-                                                     aria-valuenow="{{ resumen.completitud }}" 
-                                                     aria-valuemin="0" 
-                                                     aria-valuemax="100"
-                                                     data-width="{{ resumen.completitud }}">
-                                                    {{ resumen.completitud }}%
-                                                </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover admin-table">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Carrera</th>
+                                    <th>Cuatrimestre</th>
+                                    <th>Turno</th>
+                                    <th>Materias</th>
+                                    <th>Profesores</th>
+                                    <th>Completitud</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for grupo in grupos %}
+                                {% set resumen = grupo.get_resumen_completo() %}
+                                <tr class="fila-grupo">
+                                    <td><strong>{{ grupo.codigo }}</strong></td>
+                                    <td>{{ grupo.get_carrera_nombre() }}</td>
+                                    <td>{{ grupo.get_cuatrimestre_display() }}</td>
+                                    <td>
+                                        {% if grupo.turno == 'M' %}
+                                        <span class="badge admin-pill-badge admin-pill-warning">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-sun"></i>
+                                            {{ grupo.get_turno_display() }}
+                                        </span>
+                                        {% else %}
+                                        <span class="badge admin-pill-badge admin-pill-info">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-moon"></i>
+                                            {{ grupo.get_turno_display() }}
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge admin-pill-badge admin-pill-primary">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-book"></i>
+                                            {{ resumen.materias_count }} materias
+                                        </span>
+                                        {% if resumen.materias_sin_profesor > 0 %}
+                                        <br><small class="text-danger">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            {{ resumen.materias_sin_profesor }} sin profesor
+                                        </small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge admin-pill-badge admin-pill-secondary">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-chalkboard-teacher"></i>
+                                            {{ resumen.profesores_count }} profesores
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="progress mb-1 admin-progress-lg">
+                                            <div class="progress-bar bg-{{ resumen.estado.clase }}" role="progressbar"
+                                                aria-valuenow="{{ resumen.completitud }}" aria-valuemin="0"
+                                                aria-valuemax="100" data-width="{{ resumen.completitud }}">
+                                                {{ resumen.completitud }}%
                                             </div>
-                                            <small class="text-{{ resumen.estado.clase }}">
-                                                <i class="fas fa-circle"></i>
-                                                {{ resumen.estado.texto }}
-                                            </small>
-                                        </td>
-                                        <td>
-                                            {% if grupo.activo %}
-                                            <span class="badge admin-pill-badge admin-pill-success">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-check"></i>
-                                                Activo
-                                            </span>
-                                            {% else %}
-                                            <span class="badge admin-pill-badge admin-pill-secondary">
-                                                <i class="fas fa-circle admin-pill-dot"></i>
-                                                <i class="fas fa-times"></i>
-                                                Inactivo
-                                            </span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('gestionar_materias_grupo', id=grupo.id) }}" 
-                                               class="btn btn-sm btn-info" title="Asignar Materias">
-                                                <i class="fas fa-book"></i>
-                                            </a>
-                                            <a href="{{ url_for('ver_materias_grupo', id=grupo.id) }}" 
-                                               class="btn btn-sm btn-success" title="Ver Materias">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                            <a href="{{ url_for('asignar_profesores_grupo', grupo_id=grupo.id) }}" 
-                                               class="btn btn-sm btn-primary" title="Asignar Profesores">
-                                                <i class="fas fa-user-tie"></i>
-                                            </a>
-                                            <a href="{{ url_for('editar_grupo', id=grupo.id) }}" 
-                                               class="btn btn-sm btn-warning" title="Editar">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <form method="post" action="{{ url_for('eliminar_grupo', id=grupo.id) }}"
-                                                  class="inline-action-form"
-                                                  onsubmit="return confirm('¿Estás seguro de eliminar este grupo?');">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-danger" title="Eliminar">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                                        </div>
+                                        <small class="text-{{ resumen.estado.clase }}">
+                                            <i class="fas fa-circle"></i>
+                                            {{ resumen.estado.texto }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if grupo.activo %}
+                                        <span class="badge admin-pill-badge admin-pill-success">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-check"></i>
+                                            Activo
+                                        </span>
+                                        {% else %}
+                                        <span class="badge admin-pill-badge admin-pill-secondary">
+                                            <i class="fas fa-circle admin-pill-dot"></i>
+                                            <i class="fas fa-times"></i>
+                                            Inactivo
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('gestionar_materias_grupo', id=grupo.id) }}"
+                                            class="btn btn-sm btn-info" title="Asignar Materias">
+                                            <i class="fas fa-book"></i>
+                                        </a>
+                                        <a href="{{ url_for('ver_materias_grupo', id=grupo.id) }}"
+                                            class="btn btn-sm btn-success" title="Ver Materias">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('asignar_profesores_grupo', grupo_id=grupo.id) }}"
+                                            class="btn btn-sm btn-primary" title="Asignar Profesores">
+                                            <i class="fas fa-user-tie"></i>
+                                        </a>
+                                        <a href="{{ url_for('editar_grupo', id=grupo.id) }}"
+                                            class="btn btn-sm btn-warning" title="Editar">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <form method="post" action="{{ url_for('eliminar_grupo', id=grupo.id) }}"
+                                            class="inline-action-form"
+                                            onsubmit="return confirm('¿Estás seguro de eliminar este grupo?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                     {% else %}
-                        <div class="text-center text-muted py-5">
-                            <i class="fas fa-layer-group fa-3x mb-3"></i>
-                            <p class="lead">No hay grupos registrados</p>
-                            <a href="{{ url_for('crear_grupo') }}" class="btn btn-primary">
-                                <i class="fas fa-plus me-1"></i>
-                                Crear el Primer Grupo
-                            </a>
-                        </div>
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-layer-group fa-3x mb-3"></i>
+                        <p class="lead">No hay grupos registrados</p>
+                        <a href="{{ url_for('crear_grupo') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>
+                            Crear el Primer Grupo
+                        </a>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -242,131 +243,131 @@
 </div>
 
 <script>
-// Variables globales
-const totalGrupos = {{ grupos|length }};
-let filasGrupos = [];
+    // Variables globales
+    const totalGrupos = {{ grupos| length }};
+    let filasGrupos = [];
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar array de filas de grupos
-    filasGrupos = Array.from(document.querySelectorAll('.fila-grupo'));
-    
-    // Configurar listeners para filtros en tiempo real
-    const busquedaTexto = document.getElementById('busqueda-texto');
-    const filtroCarrera = document.getElementById('filtro-carrera');
-    const filtroCuatrimestre = document.getElementById('filtro-cuatrimestre');
-    const filtroTurno = document.getElementById('filtro-turno');
-    const btnLimpiar = document.getElementById('limpiar-filtros');
-    
-    // Aplicar filtros cuando cambie cualquier campo
-    if (busquedaTexto) busquedaTexto.addEventListener('input', aplicarFiltros);
-    if (filtroCarrera) filtroCarrera.addEventListener('change', aplicarFiltros);
-    if (filtroCuatrimestre) filtroCuatrimestre.addEventListener('change', aplicarFiltros);
-    if (filtroTurno) filtroTurno.addEventListener('change', aplicarFiltros);
-    
-    // Limpiar filtros
-    if (btnLimpiar) {
-        btnLimpiar.addEventListener('click', function() {
-            busquedaTexto.value = '';
-            filtroCarrera.value = '';
-            filtroCuatrimestre.value = '';
-            filtroTurno.value = '';
-            aplicarFiltros();
+    document.addEventListener('DOMContentLoaded', function () {
+        // Inicializar array de filas de grupos
+        filasGrupos = Array.from(document.querySelectorAll('.fila-grupo'));
+
+        // Configurar listeners para filtros en tiempo real
+        const busquedaTexto = document.getElementById('busqueda-texto');
+        const filtroCarrera = document.getElementById('filtro-carrera');
+        const filtroCuatrimestre = document.getElementById('filtro-cuatrimestre');
+        const filtroTurno = document.getElementById('filtro-turno');
+        const btnLimpiar = document.getElementById('limpiar-filtros');
+
+        // Aplicar filtros cuando cambie cualquier campo
+        if (busquedaTexto) busquedaTexto.addEventListener('input', aplicarFiltros);
+        if (filtroCarrera) filtroCarrera.addEventListener('change', aplicarFiltros);
+        if (filtroCuatrimestre) filtroCuatrimestre.addEventListener('change', aplicarFiltros);
+        if (filtroTurno) filtroTurno.addEventListener('change', aplicarFiltros);
+
+        // Limpiar filtros
+        if (btnLimpiar) {
+            btnLimpiar.addEventListener('click', function () {
+                busquedaTexto.value = '';
+                filtroCarrera.value = '';
+                filtroCuatrimestre.value = '';
+                filtroTurno.value = '';
+                aplicarFiltros();
+            });
+        }
+
+        // Establecer el ancho de las barras de progreso
+        const progressBars = document.querySelectorAll('.progress-bar[data-width]');
+        progressBars.forEach(function (bar) {
+            const width = bar.getAttribute('data-width');
+            bar.style.width = width + '%';
         });
-    }
-    
-    // Establecer el ancho de las barras de progreso
-    const progressBars = document.querySelectorAll('.progress-bar[data-width]');
-    progressBars.forEach(function(bar) {
-        const width = bar.getAttribute('data-width');
-        bar.style.width = width + '%';
     });
-});
 
-function aplicarFiltros() {
-    const textoBusqueda = document.getElementById('busqueda-texto').value.toLowerCase().trim();
-    const carreraSeleccionada = document.getElementById('filtro-carrera').value.toLowerCase();
-    const cuatrimestreSeleccionado = document.getElementById('filtro-cuatrimestre').value.toLowerCase();
-    const turnoSeleccionado = document.getElementById('filtro-turno').value.toLowerCase();
-    
-    let totalVisible = 0;
-    
-    filasGrupos.forEach(function(fila) {
-        // Obtener datos de la fila
-        const codigo = fila.querySelector('td:nth-child(1)').textContent.toLowerCase();
-        const carrera = fila.querySelector('td:nth-child(2)').textContent.toLowerCase();
-        const cuatrimestre = fila.querySelector('td:nth-child(3)').textContent.toLowerCase();
-        const turno = fila.querySelector('td:nth-child(4)').textContent.toLowerCase();
-        
-        // Aplicar filtros
-        let mostrar = true;
-        
-        // Filtro de búsqueda por texto
-        if (textoBusqueda !== '') {
-            mostrar = mostrar && codigo.includes(textoBusqueda);
-        }
-        
-        // Filtro por carrera
-        if (carreraSeleccionada !== '') {
-            mostrar = mostrar && carrera.includes(carreraSeleccionada);
-        }
-        
-        // Filtro por cuatrimestre
-        if (cuatrimestreSeleccionado !== '') {
-            mostrar = mostrar && cuatrimestre.includes(cuatrimestreSeleccionado);
-        }
-        
-        // Filtro por turno
-        if (turnoSeleccionado !== '') {
-            mostrar = mostrar && turno.includes(turnoSeleccionado);
-        }
-        
-        // Mostrar u ocultar fila
-        if (mostrar) {
-            fila.style.display = '';
-            totalVisible++;
-        } else {
-            fila.style.display = 'none';
-        }
-    });
-    
-    // Actualizar contador
-    actualizarContador(totalVisible, totalGrupos);
-    
-    // Mostrar mensaje si no hay resultados
-    mostrarMensajeSinResultados(totalVisible);
-}
+    function aplicarFiltros() {
+        const textoBusqueda = document.getElementById('busqueda-texto').value.toLowerCase().trim();
+        const carreraSeleccionada = document.getElementById('filtro-carrera').value.toLowerCase();
+        const cuatrimestreSeleccionado = document.getElementById('filtro-cuatrimestre').value.toLowerCase();
+        const turnoSeleccionado = document.getElementById('filtro-turno').value.toLowerCase();
 
-function actualizarContador(visible, total) {
-    const contadorElement = document.getElementById('total-visible');
-    if (contadorElement) {
-        contadorElement.textContent = visible;
+        let totalVisible = 0;
+
+        filasGrupos.forEach(function (fila) {
+            // Obtener datos de la fila
+            const codigo = fila.querySelector('td:nth-child(1)').textContent.toLowerCase();
+            const carrera = fila.querySelector('td:nth-child(2)').textContent.toLowerCase();
+            const cuatrimestre = fila.querySelector('td:nth-child(3)').textContent.toLowerCase();
+            const turno = fila.querySelector('td:nth-child(4)').textContent.toLowerCase();
+
+            // Aplicar filtros
+            let mostrar = true;
+
+            // Filtro de búsqueda por texto
+            if (textoBusqueda !== '') {
+                mostrar = mostrar && codigo.includes(textoBusqueda);
+            }
+
+            // Filtro por carrera
+            if (carreraSeleccionada !== '') {
+                mostrar = mostrar && carrera.includes(carreraSeleccionada);
+            }
+
+            // Filtro por cuatrimestre
+            if (cuatrimestreSeleccionado !== '') {
+                mostrar = mostrar && cuatrimestre.includes(cuatrimestreSeleccionado);
+            }
+
+            // Filtro por turno
+            if (turnoSeleccionado !== '') {
+                mostrar = mostrar && turno.includes(turnoSeleccionado);
+            }
+
+            // Mostrar u ocultar fila
+            if (mostrar) {
+                fila.style.display = '';
+                totalVisible++;
+            } else {
+                fila.style.display = 'none';
+            }
+        });
+
+        // Actualizar contador
+        actualizarContador(totalVisible, totalGrupos);
+
+        // Mostrar mensaje si no hay resultados
+        mostrarMensajeSinResultados(totalVisible);
     }
-    
-    // Cambiar color del badge según los resultados
-    const badge = document.getElementById('contador-resultados');
-    if (badge) {
-        if (visible === 0) {
-            badge.className = 'badge bg-danger';
-        } else if (visible < total) {
-            badge.className = 'badge bg-warning';
-        } else {
-            badge.className = 'badge bg-primary';
+
+    function actualizarContador(visible, total) {
+        const contadorElement = document.getElementById('total-visible');
+        if (contadorElement) {
+            contadorElement.textContent = visible;
+        }
+
+        // Cambiar color del badge según los resultados
+        const badge = document.getElementById('contador-resultados');
+        if (badge) {
+            if (visible === 0) {
+                badge.className = 'badge bg-danger';
+            } else if (visible < total) {
+                badge.className = 'badge bg-warning';
+            } else {
+                badge.className = 'badge bg-primary';
+            }
         }
     }
-}
 
-function mostrarMensajeSinResultados(totalVisible) {
-    // Buscar si ya existe el mensaje
-    let mensajeExistente = document.getElementById('mensaje-sin-resultados');
-    
-    if (totalVisible === 0) {
-        if (!mensajeExistente) {
-            // Crear mensaje de sin resultados
-            const tbody = document.querySelector('tbody');
-            if (tbody) {
-                const mensaje = document.createElement('tr');
-                mensaje.id = 'mensaje-sin-resultados';
-                mensaje.innerHTML = `
+    function mostrarMensajeSinResultados(totalVisible) {
+        // Buscar si ya existe el mensaje
+        let mensajeExistente = document.getElementById('mensaje-sin-resultados');
+
+        if (totalVisible === 0) {
+            if (!mensajeExistente) {
+                // Crear mensaje de sin resultados
+                const tbody = document.querySelector('tbody');
+                if (tbody) {
+                    const mensaje = document.createElement('tr');
+                    mensaje.id = 'mensaje-sin-resultados';
+                    mensaje.innerHTML = `
                     <td colspan="9" class="text-center py-5">
                         <i class="fas fa-search fa-3x text-muted mb-3"></i>
                         <p class="lead text-muted">No se encontraron grupos con los filtros aplicados</p>
@@ -375,16 +376,16 @@ function mostrarMensajeSinResultados(totalVisible) {
                         </button>
                     </td>
                 `;
-                tbody.appendChild(mensaje);
+                    tbody.appendChild(mensaje);
+                }
+            }
+        } else {
+            // Eliminar mensaje si existe
+            if (mensajeExistente) {
+                mensajeExistente.remove();
             }
         }
-    } else {
-        // Eliminar mensaje si existe
-        if (mensajeExistente) {
-            mensajeExistente.remove();
-        }
     }
-}
 </script>
 
 {% endblock %}
