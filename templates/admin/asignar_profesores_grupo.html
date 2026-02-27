@@ -70,15 +70,11 @@
         <div class="row">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header admin-section-header d-flex justify-content-between align-items-center">
+                    <div class="card-header admin-section-header">
                         <h5 class="mb-0">
                             <i class="fas fa-chalkboard-teacher me-2"></i>
                             Asignación de Profesores por Materia
                         </h5>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save me-2"></i>
-                            Guardar Asignaciones
-                        </button>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -98,17 +94,27 @@
                                         <td><span class="badge bg-secondary">{{ materia.codigo }}</span></td>
                                         <td><span class="badge bg-info">{{ materia.horas_semanales }} hrs</span></td>
                                         <td>
+                                            {% set profs_materia = (profesores_por_materia|default({})).get(materia.id,
+                                            profesores|default([])) %}
+                                            {% if profs_materia %}
                                             <select name="profesor_{{ materia.id }}"
-                                                    class="form-select form-select-sm admin-profesor-select"
-                                                    data-materia-id="{{ materia.id }}">
+                                                class="form-select form-select-sm admin-profesor-select"
+                                                data-materia-id="{{ materia.id }}">
                                                 <option value="">-- Sin profesor --</option>
-                                                {% for profesor in profesores %}
-                                                <option value="{{ profesor.id }}"
-                                                        {% if profesor.id in asignaciones_actuales.get(materia.id, []) %}selected{% endif %}>
-                                                    {{ profesor.get_nombre_completo() }} ({{ profesor.get_tipo_profesor_display() }})
+                                                {% for profesor in profs_materia %}
+                                                <option value="{{ profesor.id }}" {% if profesor.id in
+                                                    asignaciones_actuales.get(materia.id, []) %}selected{% endif %}>
+                                                    {{ profesor.get_nombre_completo() }} ({{
+                                                    profesor.get_tipo_profesor_display() }})
                                                 </option>
                                                 {% endfor %}
                                             </select>
+                                            {% else %}
+                                            <span class="text-danger small">
+                                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                                Ningún profesor tiene esta materia asignada
+                                            </span>
+                                            {% endif %}
                                         </td>
                                     </tr>
                                     {% endfor %}
