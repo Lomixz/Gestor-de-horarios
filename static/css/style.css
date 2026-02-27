@@ -1059,6 +1059,11 @@ select[multiple] option:checked {
 .admin-ui .avatar-circle {
     width: 40px;
     height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    flex-shrink: 0;
+    line-height: 1;
+    white-space: nowrap;
     font-size: 14px;
     font-weight: 700;
 }
@@ -1850,6 +1855,11 @@ select[multiple] option:checked {
 .avatar-circle {
     width: 40px;
     height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    flex-shrink: 0;
+    line-height: 1;
+    white-space: nowrap;
     font-size: 14px;
     font-weight: bold;
 }
