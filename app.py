@@ -7442,8 +7442,6 @@ def exportar_horarios_profesor_pdf():
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(base_dir, 'Logo.png')
     logo_exists = os.path.exists(logo_path)
 
     buffer = BytesIO()
@@ -7804,8 +7802,6 @@ def exportar_horarios_grupo_pdf():
     # Logo
     base_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(base_dir, 'Logo.png')
     logo_exists = os.path.exists(logo_path)
     
     # Crear PDF landscape
@@ -9012,7 +9008,7 @@ def _generar_pdf_horario_profesor(profesor_nombre):
         bold_left = ParagraphStyle('BoldLeft', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=0)
 
         # Cargar logo
-        logo_path = os.path.join('static', 'images', 'Logo.png')
+        logo_path = os.path.join('static', 'images', 'logo.png')
         logo_elem = None
         if os.path.exists(logo_path):
             try:

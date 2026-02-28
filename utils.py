@@ -597,8 +597,6 @@ def generar_pdf_materias(materias, nombre_carrera=None, cuatrimestre=None, ciclo
     # ── Ruta del logo ──
     base_dir = os.path.dirname(os.path.abspath(__file__))
     logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(base_dir, 'Logo.png')
     logo_exists = os.path.exists(logo_path)
 
     # ── Colores institucionales UPTex ──
