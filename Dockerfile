@@ -12,7 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --default-timeout=100 -r requirements.txt
 # Install gunicorn for production serving
 RUN pip install --no-cache-dir gunicorn
 
