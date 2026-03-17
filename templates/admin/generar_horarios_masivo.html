@@ -317,8 +317,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            const progressUrl = data.task_id
+                ? `/api/generacion-progreso/${data.task_id}`
+                : '/api/generacion-progreso';
+
             const interval = setInterval(() => {
-                fetch('/api/generacion-progreso')
+                fetch(progressUrl)
                 .then(r => r.json())
                 .then(progreso => {
                     const pct = Math.round((progreso.grupos_procesados / progreso.total_grupos) * 100);

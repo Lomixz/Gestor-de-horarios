@@ -100,7 +100,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-phone"></i>
                                 </span>
-                                {{ form.telefono(class="form-control", placeholder="Ej: 5512345678 (10 dígitos)", maxlength="13", id="telefono_input") }}
+                                {{ form.telefono(class="form-control", placeholder="Ej: 5512345678", maxlength="10", pattern="\d{10}", type="tel", id="telefono_input") }}
                             </div>
                             {% if form.telefono.errors %}
                                 {% for error in form.telefono.errors %}

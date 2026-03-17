@@ -444,11 +444,21 @@ class GeneradorHorariosMejorado:
                 DisponibilidadProfesor.disponible == True,
             ).count()
         else:
-            # Si NO tiene disponibilidad registrada, asumir disponibilidad COMPLETA
-            # (todos los horarios del turno x todos los días de la semana)
-            slots_totales = len(horarios_ids) * len(self.dias_semana)
-            logger.info(f"Profesor ID {profesor_id} sin disponibilidad explícita. "
-                       f"Asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
+            # Professor has no explicit availability registered
+            from models import ConfiguracionSistema
+            require_explicit = ConfiguracionSistema.get_config(
+                'require_explicit_availability', False
+            )
+            if require_explicit:
+                # Strict mode: no availability = 0 capacity
+                slots_totales = 0
+                logger.warning(f"Profesor ID {profesor_id} sin disponibilidad registrada. "
+                               f"Modo estricto activo: capacidad = 0")
+            else:
+                # Legacy mode: assume full availability
+                slots_totales = len(horarios_ids) * len(self.dias_semana)
+                logger.info(f"Profesor ID {profesor_id} sin disponibilidad explícita. "
+                           f"Asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
 
         # 3. Contar slots ocupados (HorarioAcademico)
         # Excluyendo los grupos actuales (porque los estamos regenerando)
@@ -530,11 +540,19 @@ class GeneradorHorariosMejorado:
         """
         Cargar disponibilidades de profesores seleccionados.
 
-        IMPORTANTE: Si un profesor NO tiene disponibilidad explícita registrada,
-        se asume disponibilidad COMPLETA (disponible en todos los horarios de todos los días).
-        Esto permite que profesores nuevos o sin configurar puedan ser incluidos en horarios.
+        Behavior depends on the 'require_explicit_availability' system config:
+        - If True: professors WITHOUT explicit availability are flagged as errors
+          and will NOT be assumed available. Generation will fail for their groups.
+        - If False (default): professors without availability are assumed fully
+          available (legacy behavior for backwards compatibility).
         """
+        from models import ConfiguracionSistema
+
         print("📅 Cargando disponibilidades...")
+
+        require_explicit = ConfiguracionSistema.get_config(
+            'require_explicit_availability', False
+        )
 
         profesores_ids = set(p.id for p in self.profesor_por_materia_grupo.values())
         profesores_sin_disponibilidad = []
@@ -558,35 +576,38 @@ class GeneradorHorariosMejorado:
             slots_disponibles = 0
 
             if disponibilidades_profesor:
-                # El profesor tiene disponibilidad explícita registrada
                 for disp in disponibilidades_profesor:
                     if disp.dia_semana in disponibilidad_dict:
                         disponibilidad_dict[disp.dia_semana][disp.horario_id] = disp.disponible
                         if disp.disponible:
                             slots_disponibles += 1
             else:
-                # El profesor NO tiene disponibilidad registrada
-                # Asumir disponibilidad COMPLETA en todos los horarios de todos los días
                 profesor = User.query.get(profesor_id)
                 nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
-                profesores_sin_disponibilidad.append(nombre_profesor)
+                profesores_sin_disponibilidad.append((profesor_id, nombre_profesor))
 
-                for dia in self.dias_semana:
-                    for horario_id in todos_los_horarios.keys():
-                        disponibilidad_dict[dia][horario_id] = True
-                        slots_disponibles += 1
+                if require_explicit:
+                    # Strict mode: leave availability empty (all slots unavailable)
+                    logger.warning(f"Profesor {nombre_profesor} sin disponibilidad registrada "
+                                   f"(modo estricto activo - NO se asumirá disponible)")
+                else:
+                    # Legacy mode: assume full availability
+                    for dia in self.dias_semana:
+                        for horario_id in todos_los_horarios.keys():
+                            disponibilidad_dict[dia][horario_id] = True
+                            slots_disponibles += 1
 
             self.disponibilidades[profesor_id] = disponibilidad_dict
 
-            # Obtener nombre del profesor para logging
             profesor = User.query.get(profesor_id)
             nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
             logger.debug(f"  Profesor {nombre_profesor}: {slots_disponibles} slots disponibles")
 
         if profesores_sin_disponibilidad:
+            mode_label = "BLOQUEADOS" if require_explicit else "disponibilidad completa asumida"
             print(f"   ⚠️ {len(profesores_sin_disponibilidad)} profesores sin disponibilidad explícita "
-                  f"(se asume disponibilidad completa):")
-            for nombre in profesores_sin_disponibilidad[:5]:  # Mostrar máximo 5
+                  f"({mode_label}):")
+            for _, nombre in profesores_sin_disponibilidad[:5]:
                 print(f"      - {nombre}")
             if len(profesores_sin_disponibilidad) > 5:
                 print(f"      ... y {len(profesores_sin_disponibilidad) - 5} más")
@@ -745,22 +766,16 @@ class GeneradorHorariosMejorado:
         CRÍTICO para generación secuencial: Respetar horarios ya asignados a profesores.
         Si un profesor ya tiene una clase en cierto horario/día, no puede tener otra.
 
-        MEJORADO: Ahora considera TODOS los horarios activos del profesor, no solo
-        los de otras materias. Esto es crucial para la generación masiva/secuencial.
+        OPTIMIZADO: Prefetch ALL existing schedules for all relevant professors
+        in a single query instead of N+1 queries per professor.
         """
         print("📋 Verificando horarios ya existentes...")
         logger.info("Verificando conflictos con horarios existentes...")
 
-        # Obtener IDs de materias de los grupos actuales (para no bloquear las propias)
-        materias_grupos_actuales = set()
-        for grupo in self.grupos:
-            for materia in self.materias_por_grupo.get(grupo.id, []):
-                materias_grupos_actuales.add(materia.id)
-
         restricciones_aplicadas = 0
         profesores_con_conflictos = set()
 
-        # Recolectar todos los profesores únicos de esta generación
+        # Collect all unique professors in this generation
         profesores_unicos = set()
         for grupo in self.grupos:
             for materia in self.materias_por_grupo.get(grupo.id, []):
@@ -768,30 +783,34 @@ class GeneradorHorariosMejorado:
                 if profesor:
                     profesores_unicos.add(profesor.id)
 
-        # Para cada profesor, buscar TODOS sus horarios existentes activos
-        for profesor_id in profesores_unicos:
-            # Buscar horarios ya asignados a este profesor (activos, de CUALQUIER materia)
-            # Usar CODIGO DE GRUPO porque HorarioAcademico no tiene grupo_id
-            grupos_codigos_actuales = [g.codigo for g in self.grupos]
-            
-            horarios_existentes = HorarioAcademico.query.filter(
-                HorarioAcademico.profesor_id == profesor_id,
-                HorarioAcademico.activo == True,
-                # Excluir los grupos actuales
-                ~HorarioAcademico.grupo.in_(grupos_codigos_actuales)
-            ).all()
+        if not profesores_unicos:
+            print("   ✓ No hay horarios previos que bloquear")
+            return
 
-            if horarios_existentes:
-                profesores_con_conflictos.add(profesor_id)
+        grupos_codigos_actuales = [g.codigo.upper() for g in self.grupos]
 
-            for ha in horarios_existentes:
-                # Encontrar el día idx
+        # OPTIMIZED: Single query to fetch ALL existing schedules for all professors
+        horarios_existentes = HorarioAcademico.query.filter(
+            HorarioAcademico.profesor_id.in_(profesores_unicos),
+            HorarioAcademico.activo == True,
+            ~HorarioAcademico.grupo.in_(grupos_codigos_actuales),
+        ).all()
+
+        # Index by professor_id for fast lookup
+        horarios_por_profesor = defaultdict(list)
+        for ha in horarios_existentes:
+            horarios_por_profesor[ha.profesor_id].append(ha)
+
+        for profesor_id, horarios_prof in horarios_por_profesor.items():
+            profesores_con_conflictos.add(profesor_id)
+
+            for ha in horarios_prof:
                 try:
                     dia_idx = self.dias_semana.index(ha.dia_semana)
                 except ValueError:
                     continue
 
-                # Bloquear este slot para TODAS las materias de este profesor en los grupos actuales
+                # Block this slot for ALL subjects this professor teaches in current groups
                 for grupo in self.grupos:
                     for materia in self.materias_por_grupo.get(grupo.id, []):
                         profesor = self.profesor_por_materia_grupo.get(
@@ -1156,61 +1175,66 @@ class GeneradorHorariosMejorado:
             return False
 
     def guardar_horarios(self):
-        """Guardar horarios generados en la base de datos"""
+        """Guardar horarios generados en la base de datos.
+
+        Usa SAVEPOINT para atomicidad: si la inserción falla,
+        los horarios previos NO se eliminan.
+        """
         print("💾 Guardando horarios...")
         logger.info(f"Guardando horarios para {len(self.grupos)} grupos")
         print(f"   📝 Usando creado_por: {self.creado_por}")
 
         try:
-            # CORRECCIÓN CRÍTICA: Eliminar horarios anteriores SOLO de estos grupos específicos
-            # No eliminar por materia_id porque eso borra horarios de otros grupos
-            for grupo in self.grupos:
-                # Eliminar solo los horarios de este grupo específico
-                # IMPORTANTE: Usar upper() para consistencia con cómo se guarda en HorarioAcademico
-                grupo_codigo_normalizado = grupo.codigo.upper()
-                deleted_count = HorarioAcademico.query.filter(
-                    HorarioAcademico.grupo == grupo_codigo_normalizado
-                ).delete(synchronize_session=False)
-                if deleted_count > 0:
-                    print(f"   🗑️ Eliminados {deleted_count} horarios previos de {grupo_codigo_normalizado}")
+            # SAVEPOINT: si falla la inserción, el rollback restaura los datos previos
+            nested = db.session.begin_nested()
 
-            # No hacer commit intermedio para atomicidad
+            try:
+                # Eliminar horarios anteriores SOLO de estos grupos específicos
+                for grupo in self.grupos:
+                    grupo_codigo_normalizado = grupo.codigo.upper()
+                    deleted_count = HorarioAcademico.query.filter(
+                        HorarioAcademico.grupo == grupo_codigo_normalizado
+                    ).delete(synchronize_session=False)
+                    if deleted_count > 0:
+                        print(f"   🗑️ Eliminados {deleted_count} horarios previos de {grupo_codigo_normalizado}")
 
-            # Guardar nuevos horarios
-            horarios_por_grupo = defaultdict(list)
-            
-            # Mapa de grupos para acceso rápido
-            grupos_map = {g.id: g for g in self.grupos}
+                # Guardar nuevos horarios
+                horarios_por_grupo = defaultdict(list)
+                grupos_map = {g.id: g for g in self.grupos}
 
-            for (grupo_id, materia_id, horario_id, dia_idx), var in self.variables.items():
-                if self.solver.Value(var) == 1:
-                    profesor = self.profesor_por_materia_grupo.get((grupo_id, materia_id))
-                    if not profesor:
-                        logger.warning(f"No se encontró profesor para grupo_id={grupo_id}, materia_id={materia_id}")
-                        continue
+                for (grupo_id, materia_id, horario_id, dia_idx), var in self.variables.items():
+                    if self.solver.Value(var) == 1:
+                        profesor = self.profesor_por_materia_grupo.get((grupo_id, materia_id))
+                        if not profesor:
+                            logger.warning(f"No se encontró profesor para grupo_id={grupo_id}, materia_id={materia_id}")
+                            continue
 
-                    dia = self.dias_semana[dia_idx]
-                    
-                    # Obtener código del grupo - CRÍTICO: nunca usar 'A' como fallback
-                    grupo_obj = grupos_map.get(grupo_id)
-                    if not grupo_obj:
-                        logger.error(f"Grupo {grupo_id} no encontrado en grupos_map")
-                        continue
-                    grupo_codigo = grupo_obj.codigo
+                        dia = self.dias_semana[dia_idx]
 
-                    horario_academico = HorarioAcademico(
-                        profesor_id=profesor.id,
-                        materia_id=materia_id,
-                        horario_id=horario_id,
-                        dia_semana=dia,
-                        grupo=grupo_codigo.upper(),  # Normalizar a mayúsculas para consistencia
-                        periodo_academico=self.periodo_academico,
-                        version_nombre=self.version_nombre,
-                        creado_por=self.creado_por,
-                    )
+                        grupo_obj = grupos_map.get(grupo_id)
+                        if not grupo_obj:
+                            logger.error(f"Grupo {grupo_id} no encontrado en grupos_map")
+                            continue
+                        grupo_codigo = grupo_obj.codigo
 
-                    db.session.add(horario_academico)
-                    horarios_por_grupo[grupo_id].append(horario_academico)
+                        horario_academico = HorarioAcademico(
+                            profesor_id=profesor.id,
+                            materia_id=materia_id,
+                            horario_id=horario_id,
+                            dia_semana=dia,
+                            grupo=grupo_codigo.upper(),
+                            periodo_academico=self.periodo_academico,
+                            version_nombre=self.version_nombre,
+                            creado_por=self.creado_por,
+                        )
+
+                        db.session.add(horario_academico)
+                        horarios_por_grupo[grupo_id].append(horario_academico)
+
+                nested.commit()
+            except Exception as e:
+                nested.rollback()
+                raise
 
             db.session.commit()
             logger.info("Cambios guardados exitosamente")
@@ -1228,7 +1252,7 @@ class GeneradorHorariosMejorado:
             print(f"\n   TOTAL: {len(self.horarios_generados)} horarios generados")
 
             return self.horarios_generados
-            
+
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error al guardar horarios: {e}")

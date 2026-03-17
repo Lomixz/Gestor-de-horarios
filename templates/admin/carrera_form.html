@@ -23,7 +23,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-graduation-cap"></i>
                                 </span>
-                                {{ form.nombre(class="form-control", placeholder="Ej: Ingeniería en Sistemas") }}
+                                {{ form.nombre(class="form-control", placeholder="Ej: Ingeniería en Sistemas", maxlength="150") }}
                             </div>
                             {% if form.nombre.errors %}
                                 {% for error in form.nombre.errors %}
@@ -38,7 +38,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-code"></i>
                                 </span>
-                                {{ form.codigo(class="form-control", placeholder="Ej: ISI, IND, MKT") }}
+                                {{ form.codigo(class="form-control", placeholder="Ej: ISI, IND, MKT", maxlength="10") }}
                             </div>
                             {% if form.codigo.errors %}
                                 {% for error in form.codigo.errors %}
@@ -53,7 +53,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-university"></i>
                                 </span>
-                                {{ form.facultad(class="form-control", placeholder="Ej: Facultad de Ingeniería") }}
+                                {{ form.facultad(class="form-control", placeholder="Ej: Facultad de Ingeniería", maxlength="100") }}
                             </div>
                             {% if form.facultad.errors %}
                                 {% for error in form.facultad.errors %}
@@ -68,7 +68,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-align-left"></i>
                                 </span>
-                                {{ form.descripcion(class="form-control", rows="3", placeholder="Descripción opcional de la carrera...") }}
+                                {{ form.descripcion(class="form-control", rows="3", placeholder="Descripción opcional de la carrera...", maxlength="500") }}
                             </div>
                             {% if form.descripcion.errors %}
                                 {% for error in form.descripcion.errors %}

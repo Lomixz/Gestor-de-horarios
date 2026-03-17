@@ -28,13 +28,33 @@
         </div>
     </div>
 
+    {% if carreras_jefe|length > 1 %}
+    <div class="mb-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body py-2">
+                <div class="d-flex align-items-center">
+                    <label class="form-label mb-0 me-3 fw-semibold">
+                        <i class="fas fa-filter me-1 text-primary"></i>Filtrar por carrera:
+                    </label>
+                    <select id="filtroCarrera" class="form-select form-select-sm" style="max-width: 400px;">
+                        <option value="">Todas mis carreras</option>
+                        {% for carrera in carreras_jefe %}
+                        <option value="{{ carrera.nombre }}">{{ carrera.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <form method="POST" id="formGeneracionMasiva">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <!-- Lista de Grupos -->
             <div class="col-lg-8">
                 {% for carrera_nombre, cuatrimestres in grupos_organizados.items() %}
-                <div class="card shadow-sm border-0 mb-4">
+                <div class="card shadow-sm border-0 mb-4 carrera-section" data-carrera-nombre="{{ carrera_nombre }}">
                     <div class="card-header bg-gradient-primary text-white">
                         <h5 class="mb-0">
                             <i class="fas fa-graduation-cap me-2"></i>
@@ -245,13 +265,41 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     checkboxes.forEach(cb => cb.addEventListener('change', actualizarContador));
-    
-    // Seleccionar todos
+
+    // Filtro por carrera
+    const filtroCarrera = document.getElementById('filtroCarrera');
+    const carreraSections = document.querySelectorAll('.carrera-section');
+
+    function filtrarPorCarrera() {
+        if (!filtroCarrera) return;
+        const selected = filtroCarrera.value;
+        carreraSections.forEach(section => {
+            const carreraNombre = section.dataset.carreraNombre;
+            if (!selected || carreraNombre === selected) {
+                section.style.display = '';
+            } else {
+                section.style.display = 'none';
+                // Deseleccionar checkboxes de carreras ocultas
+                section.querySelectorAll('.grupo-checkbox:checked').forEach(cb => cb.checked = false);
+            }
+        });
+        actualizarContador();
+    }
+
+    if (filtroCarrera) {
+        filtroCarrera.addEventListener('change', filtrarPorCarrera);
+    }
+
+    // Seleccionar todos (solo visibles)
     document.getElementById('btnSeleccionarTodos').addEventListener('click', function() {
-        checkboxes.forEach(cb => cb.checked = true);
+        carreraSections.forEach(section => {
+            if (section.style.display !== 'none') {
+                section.querySelectorAll('.grupo-checkbox').forEach(cb => cb.checked = true);
+            }
+        });
         actualizarContador();
     });
-    
+
     // Deseleccionar todos
     document.getElementById('btnDeseleccionarTodos').addEventListener('click', function() {
         checkboxes.forEach(cb => cb.checked = false);
@@ -332,8 +380,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             // Polling de progreso
+            const progressUrl = data.task_id
+                ? `/api/generacion-progreso/${data.task_id}`
+                : '/api/generacion-progreso';
+
             const interval = setInterval(() => {
-                fetch('/api/generacion-progreso')
+                fetch(progressUrl)
                 .then(r => r.json())
                 .then(progreso => {
                     const pct = Math.round((progreso.grupos_procesados / progreso.total_grupos) * 100);

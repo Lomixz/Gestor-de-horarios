@@ -944,8 +944,18 @@ class Grupo(db.Model):
 
 class HorarioAcademico(db.Model):
     """Modelo para gestionar horarios académicos generados (asignaciones profesor-materia-horario)"""
+
+    __table_args__ = (
+        # Prevent double-booking: same professor, same slot, same day (active only)
+        db.Index('ix_horario_profesor_active', 'profesor_id', 'horario_id', 'dia_semana',
+                 unique=True, postgresql_where=db.text('activo = true')),
+        # Prevent double-booking: same group, same slot, same day (active only)
+        db.Index('ix_horario_grupo_active', 'grupo', 'horario_id', 'dia_semana',
+                 unique=True, postgresql_where=db.text('activo = true')),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
-    
+
     # Relaciones principales
     profesor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     materia_id = db.Column(db.Integer, db.ForeignKey('materia.id'), nullable=False)
@@ -1338,3 +1348,20 @@ class VersionHorario(db.Model):
     
     def __repr__(self):
         return f'<VersionHorario {self.nombre_version} - {self.total_horarios} horarios>'
+
+
+class GeneracionEnProgreso(db.Model):
+    """Lock table to prevent concurrent generation for the same group."""
+    __tablename__ = 'generacion_en_progreso'
+
+    id = db.Column(db.Integer, primary_key=True)
+    grupo_id = db.Column(db.Integer, db.ForeignKey('grupo.id'), nullable=False, unique=True)
+    task_id = db.Column(db.String(100), nullable=False)
+    iniciado_por = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    fecha_inicio = db.Column(db.DateTime, default=datetime.utcnow)
+
+    grupo = db.relationship('Grupo', backref=db.backref('generacion_lock', uselist=False))
+    usuario = db.relationship('User', foreign_keys=[iniciado_por])
+
+    def __repr__(self):
+        return f'<GeneracionEnProgreso grupo_id={self.grupo_id} task_id={self.task_id}>'
