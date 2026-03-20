@@ -50,7 +50,7 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
         task_id: Redis task_id for progress tracking. If None, uses legacy global dict.
     """
     from generador_horarios_mejorado import GeneradorHorariosMejorado
-    from models import Grupo, db
+    from models import Grupo, HorarioAcademico, db
 
     tracker = _get_progress_tracker() if task_id else None
 
@@ -86,6 +86,23 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
     grupos_ordenados = grupos_ids
     total = len(grupos_ordenados)
 
+    # PRE-LIMPIEZA: Eliminar horarios viejos de TODOS los grupos del batch
+    # antes de iniciar la generación secuencial. Esto evita que horarios de
+    # generaciones anteriores bloqueen a los profesores para los grupos pendientes.
+    try:
+        todos_grupos = Grupo.query.filter(Grupo.id.in_(grupos_ids)).all()
+        todos_codigos = [g.codigo.upper() for g in todos_grupos]
+        if todos_codigos:
+            deleted = HorarioAcademico.query.filter(
+                HorarioAcademico.grupo.in_(todos_codigos)
+            ).delete(synchronize_session=False)
+            db.session.commit()
+            if deleted > 0:
+                logger.info(f"Pre-limpieza: eliminados {deleted} horarios previos de {len(todos_codigos)} grupos")
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error en pre-limpieza de horarios: {e}")
+
     for i, grupo_id in enumerate(grupos_ordenados, 1):
         grupo = Grupo.query.get(grupo_id)
         if not grupo:
@@ -118,6 +135,11 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
                     grupos_procesados=resultados['grupos_procesados'],
                     horarios_generados=resultados['horarios_generados'],
                 )
+                # Advertir sobre materias omitidas por falta de profesor
+                materias_omitidas = resultado.get('materias_omitidas', [])
+                if materias_omitidas:
+                    warn_msg = f"⚠️ Generado parcialmente ({len(materias_omitidas)} materias sin profesor omitidas)"
+                    _add_error(grupo.codigo, warn_msg)
             else:
                 resultados['grupos_fallidos'] += 1
                 error_msg = resultado.get('mensaje', 'Error desconocido')

@@ -158,26 +158,46 @@
 <!-- Modal de Progreso -->
 <div class="modal fade" id="modalProgreso" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-spinner fa-spin me-2"></i>
-                    Generando Horarios...
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white" id="headerProgreso">
+                <h5 class="modal-title" id="tituloProgreso">
+                    <i class="fas fa-spinner fa-spin me-2" id="iconoProgreso"></i>
+                    <span id="textoTitulo">Generando Horarios...</span>
                 </h5>
             </div>
-            <div class="modal-body text-center py-5">
-                <div class="progress mb-4 progress-lg">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                         id="progressBar" role="progressbar" style="width: 0%">
+            <div class="modal-body py-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold" id="labelProgreso">Iniciando...</span>
+                    <span class="badge bg-primary fs-6" id="badgeProcesados">0 / 0</span>
+                </div>
+                <div class="progress mb-3" style="height: 24px; border-radius: 12px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                         id="progressBar" role="progressbar" style="width: 0%; transition: width 0.3s ease;">
                         0%
                     </div>
                 </div>
-                <p class="mb-2"><strong>Grupo actual:</strong> <span id="grupoActual">-</span></p>
-                <p class="mb-0"><strong>Procesados:</strong> <span id="procesados">0</span> de <span id="totalGrupos">0</span></p>
+                <div class="text-center mb-3">
+                    <span class="text-muted small" id="mensajeProgreso">Preparando generacion...</span>
+                </div>
+
+                <!-- Lista de grupos procesados -->
+                <div id="listaGruposProcesados" class="border rounded p-0 mb-3" style="max-height: 200px; overflow-y: auto; display: none;">
+                </div>
+
+                <!-- Errores -->
+                <div id="erroresGeneracion" class="d-none">
+                    <div class="alert alert-warning mb-0 py-2">
+                        <h6 class="mb-1"><i class="fas fa-exclamation-triangle me-1"></i>Advertencias:</h6>
+                        <ul id="listaErrores" class="mb-0 small"></ul>
+                    </div>
+                </div>
             </div>
-            <div class="modal-footer d-none" id="footerResultado">
+            <div class="modal-footer" id="footerResultado" style="display: none;">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
                 <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-primary">
-                    <i class="fas fa-table me-2"></i>Ver Horarios Generados
+                    <i class="fas fa-table me-1"></i>Ver Horarios
                 </a>
             </div>
         </div>
@@ -359,13 +379,28 @@ document.addEventListener('DOMContentLoaded', function() {
         const modal = new bootstrap.Modal(document.getElementById('modalProgreso'));
         modal.show();
 
-        document.getElementById('totalGrupos').textContent = gruposParaGenerar.length;
+        const totalGrupos = gruposParaGenerar.length;
+        document.getElementById('badgeProcesados').textContent = `0 / ${totalGrupos}`;
+        document.getElementById('labelProgreso').textContent = 'Iniciando...';
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('progressBar').textContent = '0%';
+        document.getElementById('progressBar').className = 'progress-bar progress-bar-striped progress-bar-animated bg-primary';
+        document.getElementById('mensajeProgreso').textContent = 'Preparando generacion...';
+        document.getElementById('headerProgreso').className = 'modal-header bg-primary text-white';
+        document.getElementById('iconoProgreso').className = 'fas fa-spinner fa-spin me-2';
+        document.getElementById('textoTitulo').textContent = 'Generando Horarios...';
+        document.getElementById('footerResultado').style.display = 'none';
+        document.getElementById('erroresGeneracion').classList.add('d-none');
+        document.getElementById('listaGruposProcesados').style.display = 'none';
+        document.getElementById('listaGruposProcesados').innerHTML = '';
 
         const formData = {
             grupos_ids: gruposParaGenerar,
             version_nombre: document.querySelector('[name="version_nombre"]').value,
             dias_semana: document.querySelector('[name="dias_semana"]').value
         };
+
+        let gruposCompletados = new Set();
 
         secureFetch('/api/jefe/iniciar-generacion-masiva', {
             method: 'POST',
@@ -379,7 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 bootstrap.Modal.getInstance(document.getElementById('modalProgreso')).hide();
                 return;
             }
-            // Polling de progreso
+
             const progressUrl = data.task_id
                 ? `/api/generacion-progreso/${data.task_id}`
                 : '/api/generacion-progreso';
@@ -388,25 +423,103 @@ document.addEventListener('DOMContentLoaded', function() {
                 fetch(progressUrl)
                 .then(r => r.json())
                 .then(progreso => {
-                    const pct = Math.round((progreso.grupos_procesados / progreso.total_grupos) * 100);
+                    const procesados = progreso.grupos_procesados || 0;
+                    const total = progreso.total_grupos || totalGrupos;
+                    const grupoActual = progreso.grupo_actual || 0;
+                    const codigoGrupo = progreso.codigo_grupo || '';
+                    const pct = total > 0 ? Math.round((procesados / total) * 100) : 0;
+
                     document.getElementById('progressBar').style.width = pct + '%';
                     document.getElementById('progressBar').textContent = pct + '%';
-                    document.getElementById('grupoActual').textContent = progreso.codigo_grupo || '-';
-                    document.getElementById('procesados').textContent = progreso.grupos_procesados;
+                    document.getElementById('badgeProcesados').textContent = `${procesados} / ${total}`;
+
+                    if (!progreso.completado && codigoGrupo) {
+                        document.getElementById('labelProgreso').textContent = `Procesando grupo ${grupoActual} de ${total}`;
+                        document.getElementById('mensajeProgreso').textContent = `Generando horario para ${codigoGrupo}...`;
+                    }
+
+                    // Errores/advertencias en lista
+                    const erroresMap = {};
+                    if (progreso.errores_detallados) {
+                        progreso.errores_detallados.forEach(e => {
+                            erroresMap[e.grupo] = e.error || e.mensaje || 'Error';
+                        });
+                    }
+
+                    if (procesados > gruposCompletados.size || Object.keys(erroresMap).length > 0) {
+                        const lista = document.getElementById('listaGruposProcesados');
+                        lista.style.display = 'block';
+
+                        let html = '';
+                        for (const [codigo, msg] of Object.entries(erroresMap)) {
+                            if (!gruposCompletados.has('err_' + codigo)) {
+                                gruposCompletados.add('err_' + codigo);
+                            }
+                            const isWarning = msg.includes('parcialmente') || msg.includes('omitidas');
+                            html += `<div class="d-flex align-items-center px-3 py-2 border-bottom ${isWarning ? 'bg-warning bg-opacity-10' : 'bg-danger bg-opacity-10'}">
+                                <i class="fas ${isWarning ? 'fa-exclamation-triangle text-warning' : 'fa-times-circle text-danger'} me-2"></i>
+                                <strong class="me-2">${codigo}</strong>
+                                <small class="text-muted text-truncate">${msg}</small>
+                            </div>`;
+                        }
+
+                        if (html) {
+                            lista.innerHTML = html;
+                            lista.scrollTop = lista.scrollHeight;
+                        }
+                    }
+
+                    if (progreso.errores_detallados && progreso.errores_detallados.length > 0) {
+                        const contenedor = document.getElementById('erroresGeneracion');
+                        const listaErr = document.getElementById('listaErrores');
+                        contenedor.classList.remove('d-none');
+                        listaErr.innerHTML = progreso.errores_detallados.map(e =>
+                            `<li><strong>${e.grupo || '?'}:</strong> ${e.error || e.mensaje || 'Error'}</li>`
+                        ).join('');
+                    }
 
                     if (progreso.completado) {
                         clearInterval(interval);
-                        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+
+                        const errores = (progreso.errores_detallados || []).length;
+                        const exitosos = procesados;
+                        const todoOk = errores === 0 && exitosos === total;
+
+                        if (todoOk) {
+                            document.getElementById('headerProgreso').className = 'modal-header bg-success text-white';
+                            document.getElementById('iconoProgreso').className = 'fas fa-check-circle me-2';
+                            document.getElementById('textoTitulo').textContent = 'Generacion Completada';
+                        } else if (exitosos > 0) {
+                            document.getElementById('headerProgreso').className = 'modal-header bg-warning text-dark';
+                            document.getElementById('iconoProgreso').className = 'fas fa-exclamation-triangle me-2';
+                            document.getElementById('textoTitulo').textContent = 'Generacion Parcial';
+                        } else {
+                            document.getElementById('headerProgreso').className = 'modal-header bg-danger text-white';
+                            document.getElementById('iconoProgreso').className = 'fas fa-times-circle me-2';
+                            document.getElementById('textoTitulo').textContent = 'Error en Generacion';
+                        }
+
                         document.getElementById('progressBar').style.width = '100%';
-                        document.getElementById('progressBar').textContent = 'Completado';
-                        document.getElementById('footerResultado').classList.remove('d-none');
+                        document.getElementById('progressBar').textContent = '100%';
+                        document.getElementById('progressBar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+                        document.getElementById('progressBar').className = `progress-bar ${todoOk ? 'bg-success' : exitosos > 0 ? 'bg-warning' : 'bg-danger'}`;
+
+                        document.getElementById('labelProgreso').textContent = 'Proceso finalizado';
+                        document.getElementById('badgeProcesados').textContent = `${exitosos} / ${total}`;
+                        document.getElementById('badgeProcesados').className = `badge fs-6 ${todoOk ? 'bg-success' : exitosos > 0 ? 'bg-warning text-dark' : 'bg-danger'}`;
+
+                        const horarios = progreso.horarios_generados || 0;
+                        document.getElementById('mensajeProgreso').innerHTML =
+                            `<strong>${exitosos}</strong> grupo(s) exitosos, <strong>${errores}</strong> con advertencias &mdash; <strong>${horarios}</strong> horarios generados`;
+
+                        document.getElementById('footerResultado').style.display = 'flex';
                     }
                 });
-            }, 1000);
+            }, 300);
         })
         .catch(err => {
             console.error(err);
-            alert('Error al iniciar la generación');
+            alert('Error al iniciar la generacion');
             bootstrap.Modal.getInstance(document.getElementById('modalProgreso')).hide();
         });
     }

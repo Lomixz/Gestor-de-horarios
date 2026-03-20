@@ -4011,8 +4011,6 @@ def api_verificar_horarios_existentes():
 @login_required
 def api_iniciar_generacion_masiva():
     """API endpoint para iniciar generación masiva en segundo plano"""
-    global generacion_progreso, progreso_lock
-    
     if not current_user.is_admin():
         return jsonify({'error': 'No tienes permisos'}), 403
     
@@ -4049,7 +4047,8 @@ def api_iniciar_generacion_masiva():
     
     # Inicializar progreso
     with progreso_lock:
-        generacion_progreso = {
+        generacion_progreso.clear()
+        generacion_progreso.update({
             'activo': True,
             'total_grupos': len(grupos_ids),
             'grupos_procesados': 0,
@@ -4059,11 +4058,10 @@ def api_iniciar_generacion_masiva():
             'mensaje': 'Iniciando generación...',
             'completado': False,
             'exito': False
-        }
-    
+        })
+
     # Función para ejecutar en thread
     def ejecutar_generacion():
-        global generacion_progreso, progreso_lock
         with app.app_context():
             resultado = generar_horarios_masivos_con_progreso(
                 grupos_ids=grupos_ids,
@@ -8019,8 +8017,12 @@ def generar_horarios_masivo_jefe():
                 else:
                     flash(f"❌ {resultado['mensaje']}", 'error')
     
+    # Obtener carreras del jefe para el filtro en el template
+    carreras_jefe = Carrera.query.filter(Carrera.id.in_(carrera_ids), Carrera.activa == True).all()
+
     return render_template('jefe/jefe_generar_horarios_masivo.html',
                          grupos_organizados=grupos_organizados,
+                         carreras_jefe=carreras_jefe,
                          resultado=resultado)
 
 
@@ -8028,8 +8030,6 @@ def generar_horarios_masivo_jefe():
 @login_required
 def api_iniciar_generacion_masiva_jefe():
     """API para iniciar generación masiva en segundo plano (jefes)"""
-    global generacion_progreso, progreso_lock
-    
     if not current_user.is_jefe_carrera():
         return jsonify({'error': 'No tienes permisos'}), 403
     
@@ -8071,7 +8071,8 @@ def api_iniciar_generacion_masiva_jefe():
         version_nombre = f"Generación Masiva Jefe {timestamp}"
     
     with progreso_lock:
-        generacion_progreso = {
+        generacion_progreso.clear()
+        generacion_progreso.update({
             'activo': True,
             'total_grupos': len(grupos_ids),
             'grupos_procesados': 0,
@@ -8081,10 +8082,9 @@ def api_iniciar_generacion_masiva_jefe():
             'mensaje': 'Iniciando generación...',
             'completado': False,
             'exito': False
-        }
-    
+        })
+
     def ejecutar_generacion():
-        global generacion_progreso, progreso_lock
         with app.app_context():
             resultado = generar_horarios_masivos_con_progreso(
                 grupos_ids=grupos_ids,
@@ -8094,82 +8094,78 @@ def api_iniciar_generacion_masiva_jefe():
                 dias_semana=dias_semana
             )
             
-            # Crear backup/versión después de generar
+            # Crear backup/versión después de generar (un backup por carrera)
             if resultado.get('exito') or resultado.get('horarios_generados', 0) > 0:
                 try:
                     import json
-                    from models import VersionHorario, Grupo
-                    
-                    # Obtener los códigos de los grupos seleccionados
-                    grupos_codigos = []
+                    from models import VersionHorario, Grupo as GrupoModel, User, Carrera
+                    from collections import defaultdict
+
+                    # Agrupar grupos seleccionados por carrera
+                    grupos_por_carrera = defaultdict(list)
                     for gid in grupos_ids:
-                        grupo = Grupo.query.get(gid)
+                        grupo = GrupoModel.query.get(gid)
                         if grupo:
-                            grupos_codigos.append(grupo.codigo.upper())
-                    
-                    # MEJORADO: Obtener TODOS los horarios activos de los grupos seleccionados
-                    # Esto asegura que el backup tenga el estado completo de esos grupos
-                    logger.info(f"Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
-                    horarios_generados = HorarioAcademico.query.filter(
-                        HorarioAcademico.grupo.in_(grupos_codigos),
-                        HorarioAcademico.activo == True
-                    ).all()
-                    
-                    logger.info(f"Encontrados {len(horarios_generados)} horarios para backup")
-                    
-                    # Serializar datos
-                    datos = []
-                    grupos_set = set()
-                    for h in horarios_generados:
-                        datos.append({
-                            'id': h.id,
-                            'profesor_id': h.profesor_id,
-                            'materia_id': h.materia_id,
-                            'horario_id': h.horario_id,
-                            'dia_semana': h.dia_semana,
-                            'grupo': h.grupo,
-                            'periodo_academico': h.periodo_academico,
-                            'version_nombre': h.version_nombre
-                        })
-                        grupos_set.add(h.grupo)
-                    
-                    # Determinar carrera - usar la del primer grupo generado
-                    carrera_id = None
-                    from models import Grupo
-                    primer_grupo = Grupo.query.get(grupos_ids[0]) if grupos_ids else None
-                    if primer_grupo:
-                        carrera_id = primer_grupo.carrera_id
-                    
-                    # Crear registro de versión
-                    version = VersionHorario(
-                        nombre_version=version_nombre,
-                        descripcion=f"Generación masiva de {len(grupos_ids)} grupos",
-                        datos_horarios=json.dumps(datos, ensure_ascii=False),
-                        total_horarios=len(datos),
-                        grupos_afectados=','.join(grupos_set),
-                        carrera_id=carrera_id,
-                        creado_por=user_id
-                    )
-                    db.session.add(version)
+                            grupos_por_carrera[grupo.carrera_id].append(grupo.codigo.upper())
+
+                    logger.info(f"Creando backups para {len(grupos_por_carrera)} carrera(s)")
+
+                    for carrera_id, grupos_codigos in grupos_por_carrera.items():
+                        horarios_generados = HorarioAcademico.query.filter(
+                            HorarioAcademico.grupo.in_(grupos_codigos),
+                            HorarioAcademico.activo == True
+                        ).all()
+
+                        if not horarios_generados:
+                            continue
+
+                        datos = []
+                        grupos_set = set()
+                        for h in horarios_generados:
+                            datos.append({
+                                'id': h.id,
+                                'profesor_id': h.profesor_id,
+                                'materia_id': h.materia_id,
+                                'horario_id': h.horario_id,
+                                'dia_semana': h.dia_semana,
+                                'grupo': h.grupo,
+                                'periodo_academico': h.periodo_academico,
+                                'version_nombre': h.version_nombre
+                            })
+                            grupos_set.add(h.grupo)
+
+                        carrera = Carrera.query.get(carrera_id)
+                        carrera_nombre = carrera.nombre if carrera else 'Sin carrera'
+
+                        version = VersionHorario(
+                            nombre_version=version_nombre,
+                            descripcion=f"Generación masiva de {len(grupos_codigos)} grupos ({carrera_nombre})",
+                            datos_horarios=json.dumps(datos, ensure_ascii=False),
+                            total_horarios=len(datos),
+                            grupos_afectados=','.join(sorted(grupos_set)),
+                            carrera_id=carrera_id,
+                            creado_por=user_id
+                        )
+                        db.session.add(version)
+                        logger.info(f"Backup creado: {version_nombre} ({carrera_nombre}) con {len(datos)} horarios")
+
                     db.session.commit()
-                    
-                    # Limitar versiones por usuario - 20 para admin, 10 para usuarios normales
-                    from models import User
+
+                    # Limitar versiones por usuario
                     usuario = User.query.get(user_id)
                     limite_versiones = 20 if usuario and usuario.is_admin() else 10
-                    
+
                     versiones_usuario = VersionHorario.query.filter(
                         VersionHorario.creado_por == user_id,
                         VersionHorario.activo == True
                     ).order_by(VersionHorario.fecha_creacion.desc()).all()
-                    
+
                     if len(versiones_usuario) > limite_versiones:
-                        # Marcar las versiones más antiguas como inactivas
                         for v_old in versiones_usuario[limite_versiones:]:
                             v_old.activo = False
                         db.session.commit()
                         logger.info(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
-                        
+
                 except Exception as e:
                     logger.error(f"Error creando version: {e}")
             

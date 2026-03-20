@@ -21,6 +21,7 @@ instance/*.db
 # Archivos temporales/prueba
 test_*.xlsx
 plan.md
+Version anterior/
 
 # Archivos sensibles
 backups/

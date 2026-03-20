@@ -239,6 +239,9 @@ class GeneradorHorariosMejorado:
         self._cache_horarios_existentes = {}  # profesor_id -> [(horario_id, dia_semana)]
         self._cache_capacidad_profesor = {}  # (profesor_id, turno) -> capacidad
 
+        self._materias_sin_profesor = []  # Materias omitidas por falta de profesor
+        self._profesores_asignacion_directa = set()  # IDs de profesores con AsignacionProfesorGrupo
+
         self.model = None
         self.solver = None
         self.variables = {}
@@ -319,23 +322,29 @@ class GeneradorHorariosMejorado:
                                 disponibilidad_seleccionada = disp
                                 break
 
-                        # Si ninguno tiene suficiente, usar el de mayor disponibilidad si tiene algo
+                        # Si ninguno tiene suficiente, usar el de mayor disponibilidad
+                        # Para asignaciones directas, SIEMPRE usar el profesor asignado
+                        # (la asignación explícita tiene prioridad sobre la disponibilidad)
                         if not profesor_seleccionado:
                             mejor_candidato = candidatos_asignados[0]
-                            if mejor_candidato[1] > 0:
-                                profesor_seleccionado = mejor_candidato[0]
-                                disponibilidad_seleccionada = mejor_candidato[1]
+                            profesor_seleccionado = mejor_candidato[0]
+                            disponibilidad_seleccionada = mejor_candidato[1]
+                            if disponibilidad_seleccionada > 0:
                                 msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
                                        f"tiene {disponibilidad_seleccionada}h disponibles (Requeridas: {horas_requeridas}h). "
                                        "Se usará de todos modos.")
-                                materias_con_advertencia.append(msg)
-                                logger.warning(msg)
                             else:
-                                # Ningún profesor asignado tiene disponibilidad
-                                usar_fallback = True
-                                nombres = ", ".join([p.nombre for p, _ in candidatos_asignados])
-                                logger.warning(f"{grupo.codigo}/{materia.codigo}: Ningún prof. asignado ({nombres}) "
-                                             f"tiene disponibilidad en turno {turno_str}. Buscando alternativa...")
+                                # Profesor asignado sin disponibilidad registrada en este turno
+                                # Se asumirá disponibilidad completa (la asignación explícita lo autoriza)
+                                msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
+                                       f"sin disponibilidad en turno {turno_str}. "
+                                       "Se asumirá disponibilidad completa por asignación directa.")
+                            materias_con_advertencia.append(msg)
+                            logger.warning(msg)
+
+                        # Marcar como asignación directa para override de disponibilidad
+                        if profesor_seleccionado:
+                            self._profesores_asignacion_directa.add(profesor_seleccionado.id)
 
                 # PRIORIDAD 2: Fallback a relación M2M si no hay asignación específica o ningún asignado tiene disponibilidad
                 if profesor_seleccionado is None:
@@ -392,12 +401,37 @@ class GeneradorHorariosMejorado:
             for adv in materias_con_advertencia:
                 print(f"      - {adv}")
 
-        # Error si hay materias sin profesor
+        # Materias sin profesor: remover del grupo en lugar de fallar todo
         if materias_sin_profesor:
-            raise ValueError(
-                f"Las siguientes materias no tienen profesor asignado o con disponibilidad:\n   - "
-                + "\n   - ".join(materias_sin_profesor)
-            )
+            logger.warning(f"Materias sin profesor asignado: {len(materias_sin_profesor)}")
+            print(f"\n   ⚠️ Se omitirán {len(materias_sin_profesor)} materias sin profesor asignado")
+            self._materias_sin_profesor = materias_sin_profesor
+
+            # Remover materias sin profesor de materias_por_grupo para que no se intenten agendar
+            for grupo in self.grupos:
+                materias_originales = self.materias_por_grupo.get(grupo.id, [])
+                self.materias_por_grupo[grupo.id] = [
+                    m for m in materias_originales
+                    if (grupo.id, m.id) in self.profesor_por_materia_grupo
+                ]
+                removidas = len(materias_originales) - len(self.materias_por_grupo[grupo.id])
+                if removidas:
+                    print(f"      {grupo.codigo}: {removidas} materias omitidas, {len(self.materias_por_grupo[grupo.id])} restantes")
+
+            # Si un grupo se queda sin materias, fallar
+            for grupo in self.grupos:
+                if not self.materias_por_grupo.get(grupo.id):
+                    raise ValueError(
+                        f"Grupo {grupo.codigo}: Todas las materias carecen de profesor asignado.\n   - "
+                        + "\n   - ".join(m for m in materias_sin_profesor if m.startswith(grupo.codigo))
+                    )
+
+        # Invalidar caché de capacidad para profesores con asignación directa
+        # (la capacidad se recalculará con el override de disponibilidad completa)
+        for prof_id in self._profesores_asignacion_directa:
+            keys_to_remove = [k for k in self._cache_capacidad_profesor if k[0] == prof_id]
+            for k in keys_to_remove:
+                del self._cache_capacidad_profesor[k]
 
     def _contar_capacidad_restante(self, profesor_id, turno):
         """
@@ -443,6 +477,13 @@ class GeneradorHorariosMejorado:
                 DisponibilidadProfesor.activo == True,
                 DisponibilidadProfesor.disponible == True,
             ).count()
+
+            # Si el profesor tiene asignación directa pero 0 slots disponibles en este turno,
+            # asumir disponibilidad completa (la asignación explícita lo autoriza)
+            if slots_totales == 0 and profesor_id in self._profesores_asignacion_directa:
+                slots_totales = len(horarios_ids) * len(self.dias_semana)
+                logger.info(f"Profesor ID {profesor_id} con asignación directa, "
+                           f"asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
         else:
             # Professor has no explicit availability registered
             from models import ConfiguracionSistema
@@ -462,7 +503,7 @@ class GeneradorHorariosMejorado:
 
         # 3. Contar slots ocupados (HorarioAcademico)
         # Excluyendo los grupos actuales (porque los estamos regenerando)
-        grupos_codigos_actuales = [g.codigo for g in self.grupos]
+        grupos_codigos_actuales = [g.codigo.upper() for g in self.grupos]
 
         slots_ocupados = HorarioAcademico.query.filter(
             HorarioAcademico.profesor_id == profesor_id,
@@ -581,6 +622,28 @@ class GeneradorHorariosMejorado:
                         disponibilidad_dict[disp.dia_semana][disp.horario_id] = disp.disponible
                         if disp.disponible:
                             slots_disponibles += 1
+
+                # Si el profesor tiene asignación directa, verificar disponibilidad
+                # por turno. Si no tiene slots en un turno donde está asignado,
+                # asumir disponibilidad completa para ese turno.
+                if profesor_id in self._profesores_asignacion_directa:
+                    for turno, horarios_turno in self.horarios_por_turno.items():
+                        horarios_turno_ids = {h.id for h in horarios_turno}
+                        slots_turno = sum(
+                            1 for dia in self.dias_semana
+                            for hid in horarios_turno_ids
+                            if disponibilidad_dict.get(dia, {}).get(hid, False)
+                        )
+                        if slots_turno == 0:
+                            profesor = User.query.get(profesor_id)
+                            nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
+                            turno_label = "matutino" if turno == "M" else "vespertino"
+                            logger.warning(f"Profesor {nombre_profesor} con asignación directa pero sin "
+                                           f"slots en turno {turno_label}. Asumiendo disponibilidad completa.")
+                            for dia in self.dias_semana:
+                                for horario in horarios_turno:
+                                    disponibilidad_dict[dia][horario.id] = True
+                                    slots_disponibles += 1
             else:
                 profesor = User.query.get(profesor_id)
                 nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
@@ -1380,11 +1443,16 @@ class GeneradorHorariosMejorado:
 
             if self.resolver():
                 self.guardar_horarios()
+                materias_omitidas = getattr(self, '_materias_sin_profesor', [])
+                msg = f"✅ Horarios generados exitosamente para {len(self.grupos)} grupos"
+                if materias_omitidas:
+                    msg += f" (⚠️ {len(materias_omitidas)} materias omitidas por falta de profesor)"
                 return {
                     "exito": True,
-                    "mensaje": f"✅ Horarios generados exitosamente para {len(self.grupos)} grupos",
+                    "mensaje": msg,
                     "grupos_procesados": len(self.grupos),
                     "horarios_generados": len(self.horarios_generados),
+                    "materias_omitidas": materias_omitidas,
                 }
             else:
                 # Generar diagnóstico detallado del fallo
