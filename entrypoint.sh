@@ -18,4 +18,4 @@ gosu appuser python init_config.py || echo "init_config: already initialized or 
 
 echo "Starting Gunicorn server on port 5001..."
 # Drop privileges to appuser and start gunicorn
-exec gosu appuser gunicorn --bind 0.0.0.0:5001 --workers 4 --timeout 600 app:app
+exec gosu appuser gunicorn --bind 0.0.0.0:5001 --workers 4 --timeout 600 --access-logfile - --error-logfile - --log-level info app:app

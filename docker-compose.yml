@@ -43,6 +43,7 @@ services:
       - ./horarios:/app/horarios
       - ./logs:/app/logs
       - ./backups:/app/backups
+      - ./tmp/chatbot_exports:/app/tmp/chatbot_exports
     env_file:
       - path: .env
         required: false

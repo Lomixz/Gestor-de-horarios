@@ -6,7 +6,7 @@ from sqlalchemy import func, text
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
-from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role
+from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role, ChatbotConfig
 from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm, 
                    CarreraForm, ImportarProfesoresForm, FiltrarProfesoresForm, ExportarProfesoresForm,
                    MateriaForm, ImportarMateriasForm, FiltrarMateriasForm, ExportarMateriasForm,
@@ -141,6 +141,9 @@ def load_user(user_id):
 # Register blueprints
 from app_pkg.blueprints.api import api_bp
 app.register_blueprint(api_bp)
+
+from app_pkg.blueprints.chatbot import chatbot_bp
+app.register_blueprint(chatbot_bp)
 
 # Security headers
 @app.after_request
@@ -369,7 +372,144 @@ def admin_panel():
 #                          profesores=profesores, 
 #                          materias=materias,
 #                          horarios_academicos=horarios_academicos,
-#                          carrera=current_user.carrera)
+#                          carrera=current_user.primera_carrera)
+
+# ==========================================
+# MÓDULO DE RECURSOS HUMANOS
+# ==========================================
+
+@app.route('/rh/usuarios-baja')
+@login_required
+def rh_usuarios_baja():
+    """Ver usuarios dados de baja (Recursos Humanos)"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Filtros
+    buscar = request.args.get('buscar', '').strip()
+    filtro_rol = request.args.get('rol', '')
+    filtro_carrera = request.args.get('carrera_id', type=int)
+
+    # Query base: usuarios inactivos
+    query = User.query.filter(User.activo == False)
+
+    if buscar:
+        query = query.filter(
+            db.or_(
+                User.nombre.ilike(f'%{buscar}%'),
+                User.apellido.ilike(f'%{buscar}%'),
+                User.username.ilike(f'%{buscar}%'),
+                User.email.ilike(f'%{buscar}%')
+            )
+        )
+    if filtro_rol:
+        query = query.filter(User.rol == filtro_rol)
+    if filtro_carrera:
+        query = query.filter(User.carreras.any(Carrera.id == filtro_carrera))
+
+    usuarios = query.order_by(User.apellido, User.nombre).all()
+    carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
+
+    return render_template('rh/usuarios_baja.html',
+                         usuarios=usuarios,
+                         carreras=carreras,
+                         buscar=buscar,
+                         filtro_rol=filtro_rol,
+                         filtro_carrera=filtro_carrera)
+
+
+@app.route('/rh/usuarios-baja/exportar/csv')
+@login_required
+def rh_exportar_csv():
+    """Exportar usuarios dados de baja en CSV"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        abort(403)
+
+    usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
+
+    import csv
+    output = BytesIO()
+    import io
+    text_output = io.StringIO()
+    writer = csv.writer(text_output)
+    writer.writerow(['Username', 'Nombre', 'Apellido', 'Email', 'Teléfono', 'Rol',
+                     'Carreras', 'Materias', 'Fecha de Registro', 'Estado'])
+    for u in usuarios:
+        carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
+        materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
+        rol_display = Role.ROLES_DISPLAY.get(u.rol, u.rol)
+        fecha = u.fecha_registro.strftime('%Y-%m-%d') if u.fecha_registro else 'N/A'
+        writer.writerow([u.username, u.nombre, u.apellido, u.email or 'N/A',
+                        getattr(u, 'telefono', 'N/A') or 'N/A', rol_display,
+                        carreras_str, materias_str, fecha, 'Dado de baja'])
+
+    output = BytesIO(text_output.getvalue().encode('utf-8-sig'))
+    return send_file(output, as_attachment=True,
+                    download_name='usuarios_dados_de_baja.csv',
+                    mimetype='text/csv')
+
+
+@app.route('/rh/usuarios-baja/exportar/pdf')
+@login_required
+def rh_exportar_pdf():
+    """Exportar usuarios dados de baja en PDF"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        abort(403)
+
+    usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    styles = getSampleStyleSheet()
+    styleN = styles['BodyText']
+    styleN.fontSize = 7
+    styleN.leading = 9
+
+    elements = []
+    elements.append(Paragraph("Reporte de Usuarios Dados de Baja", styles['Title']))
+    elements.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+    elements.append(Paragraph("<br/>", styles['Normal']))
+
+    data = [['Username', 'Nombre', 'Apellido', 'Email', 'Rol', 'Carreras', 'Materias', 'Fecha Registro']]
+    for u in usuarios:
+        carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
+        materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
+        rol_display = Role.ROLES_DISPLAY.get(u.rol, u.rol)
+        fecha = u.fecha_registro.strftime('%Y-%m-%d') if u.fecha_registro else 'N/A'
+        data.append([
+            Paragraph(u.username, styleN),
+            Paragraph(u.nombre or '', styleN),
+            Paragraph(u.apellido or '', styleN),
+            Paragraph(u.email or 'N/A', styleN),
+            Paragraph(rol_display, styleN),
+            Paragraph(carreras_str, styleN),
+            Paragraph(materias_str, styleN),
+            Paragraph(fecha, styleN)
+        ])
+
+    if len(data) == 1:
+        elements.append(Paragraph("No hay usuarios dados de baja.", styles['Normal']))
+    else:
+        col_widths = [0.9*inch, 0.9*inch, 0.9*inch, 1.3*inch, 1.0*inch, 1.5*inch, 2.0*inch, 0.8*inch]
+        table = Table(data, hAlign='CENTER', colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3c72')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True,
+                    download_name='usuarios_dados_de_baja.pdf',
+                    mimetype='application/pdf')
+
 
 # ==========================================
 # GESTIÓN DE PROFESORES PARA JEFES DE CARRERA
@@ -656,7 +796,7 @@ def disponibilidad_profesores_jefe():
     
     return render_template('jefe/disponibilidad_profesores.html',
                          profesores=profesores,
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          total_profesores=total_profesores,
                          profesores_con_disponibilidad=profesores_con_disponibilidad)
 
@@ -726,7 +866,7 @@ def editar_disponibilidad_profesor_jefe(id):
                          profesor=profesor,
                          horarios=horarios,
                          disponibilidad_dict=disponibilidad_dict,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 @app.route('/jefe-carrera/profesor/<int:id>/disponibilidad/ver')
 @login_required
@@ -764,7 +904,7 @@ def ver_disponibilidad_profesor_jefe(id):
                          profesor=profesor,
                          horarios=horarios,
                          disponibilidad_dict=disponibilidad_dict,
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          total_horas_disponibles=total_horas_disponibles)
 
 # ==========================================
@@ -898,7 +1038,7 @@ def asignacion_masiva_materias_jefe():
                          cargas_profesores=cargas_profesores,
                          filtro_cuatrimestre=cuatrimestre,
                          solo_disponibles=solo_disponibles,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 # ==========================================
 # GESTIÓN DE MATERIAS PARA JEFES DE CARRERA
@@ -945,7 +1085,7 @@ def gestionar_materias_jefe():
     
     return render_template('jefe/materias.html', 
                          materias=materias, 
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          filtros_activos={
                              'ciclo': ciclo,
                              'cuatrimestre': cuatrimestre
@@ -1041,7 +1181,7 @@ def gestionar_horarios_academicos_jefe():
     return render_template('jefe/horarios_academicos.html', 
                          horarios_academicos=horarios_academicos, 
                          grupos_unicos=grupos_unicos,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 @app.route('/jefe-carrera/horario-academico/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -1419,8 +1559,8 @@ def eliminar_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para eliminar este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -1444,8 +1584,8 @@ def gestionar_materias_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para gestionar las materias de este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -1478,8 +1618,8 @@ def ver_materias_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para ver las materias de este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -1498,15 +1638,15 @@ def asignacion_masiva_materias_grupos():
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
     
-    # Si es jefe de carrera, filtrar por su carrera
-    if current_user.is_jefe_carrera():
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     # Obtener carreras para el filtro
     if current_user.is_admin():
         carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
     else:
-        carreras = [current_user.carrera]
+        carreras = list(current_user.carreras) if current_user.carreras else []
     
     grupos = []
     materias = []
@@ -1715,11 +1855,11 @@ def exportar_asignaciones_grupos():
     
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
-    
-    # Si es jefe de carrera, forzar su carrera
-    if current_user.is_jefe_carrera():
+
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     from utils import exportar_asignaciones_grupo_csv
     contenido_csv = exportar_asignaciones_grupo_csv(carrera_id, cuatrimestre)
     
@@ -1748,11 +1888,11 @@ def auto_asignar_materias_grupos():
     
     carrera_id = request.form.get('carrera_id', type=int)
     cuatrimestre = request.form.get('cuatrimestre', type=int)
-    
-    # Si es jefe de carrera, forzar su carrera
-    if current_user.is_jefe_carrera():
+
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     if not carrera_id or not cuatrimestre:
         return jsonify({'exito': False, 'mensaje': 'Faltan parámetros'}), 400
     
@@ -4888,7 +5028,8 @@ def configuracion_sistema():
         'director_academico_firma': ConfiguracionSistema.get_config('director_academico_firma', ''),
         'responsable_pa_nombre': ConfiguracionSistema.get_config('responsable_pa_nombre', ''),
         'responsable_pa_firma': ConfiguracionSistema.get_config('responsable_pa_firma', ''),
-        'fecha_inicio_periodo': ConfiguracionSistema.get_config('fecha_inicio_periodo', '')
+        'fecha_inicio_periodo': ConfiguracionSistema.get_config('fecha_inicio_periodo', ''),
+        'firmas_habilitadas': ConfiguracionSistema.get_config('firmas_habilitadas', 'true')
     }
 
     return render_template('admin/configuracion.html', config_horas=config_horas, config_excel=config_excel)
@@ -4967,9 +5108,17 @@ def guardar_configuracion_exportacion_excel():
         from models import ConfiguracionSistema
 
         # Obtener datos del formulario
+        firmas_habilitadas = request.form.get('firmas_habilitadas', 'false')
         director_nombre = request.form.get('director_academico_nombre', '')
         responsable_nombre = request.form.get('responsable_pa_nombre', '')
         fecha_inicio = request.form.get('fecha_inicio_periodo', '')
+
+        # Guardar toggle de firmas
+        ConfiguracionSistema.set_config(
+            'firmas_habilitadas', firmas_habilitadas,
+            tipo='bool', descripcion='Habilitar firmas digitales en exportaciones',
+            categoria='exportacion'
+        )
 
         # Guardar nombres
         ConfiguracionSistema.set_config(
@@ -5281,7 +5430,7 @@ def crear_backup():
 
     try:
         from models import BackupHistory
-        import shutil
+        import subprocess
         import hashlib
         from datetime import datetime
 
@@ -5292,39 +5441,52 @@ def crear_backup():
 
         # Generar nombre del archivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'backup_{timestamp}.db'
+        filename = f'backup_{timestamp}.sql'
         filepath = os.path.join(backup_dir, filename)
 
-        # Copiar archivo de base de datos
-        db_path = 'instance/sistema_academico.db'
-        if os.path.exists(db_path):
-            shutil.copy2(db_path, filepath)
+        # Obtener URL de conexión de la base de datos
+        database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
 
-            # Calcular tamaño y checksum
-            file_size = os.path.getsize(filepath)
-            with open(filepath, 'rb') as f:
-                checksum = hashlib.sha256(f.read()).hexdigest()
-
-            # Registrar en historial
-            backup = BackupHistory(
-                filename=filename,
-                tipo='manual',
-                tamano=file_size,
-                ruta_archivo=filepath,
-                usuario_id=current_user.id
+        if 'postgresql' in database_url:
+            # Usar pg_dump para PostgreSQL
+            result = subprocess.run(
+                ['pg_dump', '--no-owner', '--no-acl', '-f', filepath, database_url],
+                capture_output=True, text=True, timeout=120
             )
-            backup.checksum = checksum
-            db.session.add(backup)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'Backup creado exitosamente',
-                'filename': filename,
-                'size': file_size
-            })
+            if result.returncode != 0:
+                return jsonify({'success': False, 'message': f'Error en pg_dump: {result.stderr}'}), 500
         else:
-            return jsonify({'success': False, 'message': 'Archivo de base de datos no encontrado'}), 404
+            # Fallback para SQLite
+            import shutil
+            db_path = 'instance/sistema_academico.db'
+            if os.path.exists(db_path):
+                shutil.copy2(db_path, filepath)
+            else:
+                return jsonify({'success': False, 'message': 'Archivo de base de datos no encontrado'}), 404
+
+        # Calcular tamaño y checksum
+        file_size = os.path.getsize(filepath)
+        with open(filepath, 'rb') as f:
+            checksum = hashlib.sha256(f.read()).hexdigest()
+
+        # Registrar en historial
+        backup = BackupHistory(
+            filename=filename,
+            tipo='manual',
+            tamano=file_size,
+            ruta_archivo=filepath,
+            usuario_id=current_user.id
+        )
+        backup.checksum = checksum
+        db.session.add(backup)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Backup creado exitosamente',
+            'filename': filename,
+            'size': file_size
+        })
 
     except Exception as e:
         db.session.rollback()
@@ -5366,8 +5528,7 @@ def obtener_historial_backups():
 def descargar_backup(filename):
     """Descargar archivo de backup"""
     if not current_user.is_admin():
-        flash('No tienes permisos para esta acción.', 'error')
-        return redirect(url_for('dashboard'))
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
 
     try:
         from models import BackupHistory
@@ -5375,31 +5536,39 @@ def descargar_backup(filename):
         # Sanitizar filename para prevenir path traversal
         safe_filename = secure_filename(filename)
         if not safe_filename:
-            flash('Nombre de archivo no válido.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Nombre de archivo no válido'}), 400
 
         # Verificar que el backup existe en la base de datos
         backup = BackupHistory.query.filter_by(filename=safe_filename).first()
         if not backup:
-            flash('Backup no encontrado.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Backup no encontrado en el historial'}), 404
 
         # Validar que el path resuelto esté dentro del directorio de backups
         backups_dir = os.path.abspath('backups')
         filepath = os.path.abspath(os.path.join('backups', safe_filename))
         if not filepath.startswith(backups_dir):
-            flash('Acceso denegado.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
 
         if os.path.exists(filepath):
             return send_file(filepath, as_attachment=True, download_name=safe_filename)
         else:
-            flash('Archivo de backup no encontrado en el servidor.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'El archivo de backup no existe en el servidor. Es posible que haya sido eliminado.'}), 404
 
     except Exception as e:
-        flash('Error al descargar backup.', 'error')
-        return redirect(url_for('configuracion_sistema'))
+        return jsonify({'success': False, 'message': f'Error al descargar backup: {str(e)}'}), 500
+
+# API para probar conexión a la base de datos
+@app.route('/admin/configuracion/test-connection', methods=['POST'])
+@login_required
+def test_db_connection():
+    """Probar conexión a la base de datos"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return jsonify({'success': True, 'message': 'Conexión exitosa'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # API para optimizar base de datos
 @app.route('/admin/configuracion/optimize', methods=['POST'])
@@ -7217,12 +7386,12 @@ def exportar_horario_individual_pdf(nombre_grupo):
 @login_required
 def jefe_ver_horarios_profesores():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
-    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_id=id_carrera, incluir_ids=True)
+    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_ids=carrera_ids, incluir_ids=True)
     return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data)
 
 
@@ -7230,12 +7399,12 @@ def jefe_ver_horarios_profesores():
 @login_required
 def jefe_ver_horarios_grupos():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
-    horarios_data = procesar_horarios(agrupar_por='grupo', carrera_id=id_carrera)
+    horarios_data = procesar_horarios(agrupar_por='grupo', carrera_ids=carrera_ids, incluir_ids=True)
     return render_template('jefe/jefe_horario_grupos.html', horarios_data=horarios_data)
 
 
@@ -7244,16 +7413,19 @@ def jefe_ver_horarios_grupos():
 def exportar_jefe_horario_grupo_excel(nombre_grupo):
     if not current_user.is_jefe_carrera():
         abort(403)
-        
-    id_carrera = current_user.primera_carrera_id
-    
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     # 1. Obtener horarios del grupo específico filtrando por carrera
     asignaciones = HorarioAcademico.query.join(Materia).filter(
         HorarioAcademico.grupo == nombre_grupo,
         HorarioAcademico.activo == True,
-        Materia.carrera_id == id_carrera
+        Materia.carrera_id.in_(carrera_ids)
     ).all()
-    
+
     if not asignaciones:
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
@@ -7361,14 +7533,17 @@ def exportar_jefe_horario_grupo_excel(nombre_grupo):
 def exportar_jefe_horario_grupo_pdf(nombre_grupo):
     if not current_user.is_jefe_carrera():
         abort(403)
-        
-    id_carrera = current_user.primera_carrera_id
-    
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     # 1. Obtener horarios del grupo específico filtrando por carrera
     asignaciones = HorarioAcademico.query.join(Materia).filter(
         HorarioAcademico.grupo == nombre_grupo,
         HorarioAcademico.activo == True,
-        Materia.carrera_id == id_carrera
+        Materia.carrera_id.in_(carrera_ids)
     ).all()
     
     if not asignaciones:
@@ -7450,13 +7625,15 @@ def exportar_jefe_horario_grupo_pdf(nombre_grupo):
 @login_required
 def exportar_jefe_horarios_profesor_excel():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios ordenados por día de semana y hora
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera, 
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -7476,7 +7653,7 @@ def exportar_jefe_horarios_profesor_excel():
         
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Horarios Profesores {current_user.carrera.codigo}"
+        ws.title = f"Horarios Profesores {current_user.get_carrera_codigo()}"
         headers = ["Profesor", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
         ws.append(headers)
         for cell in ws[1]: cell.font = Font(bold=True); cell.alignment = Alignment(horizontal='center')
@@ -7487,7 +7664,7 @@ def exportar_jefe_horarios_profesor_excel():
             for cell in col_cells: cell.alignment = Alignment(wrap_text=True, vertical='top')
         
         buffer = BytesIO(); wb.save(buffer); buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.carrera.codigo}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.get_carrera_codigo()}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         flash(f"Error al generar el archivo Excel: {e}", "danger")
         return redirect(url_for('jefe/jefe_ver_horarios_profesores'))
@@ -7496,13 +7673,15 @@ def exportar_jefe_horarios_profesor_excel():
 @login_required
 def exportar_jefe_horarios_profesor_pdf():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios ordenados por día de semana y hora
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -7532,7 +7711,7 @@ def exportar_jefe_horarios_profesor_pdf():
         table = Table(data, hAlign='CENTER', colWidths=[1.5*inch]*6)
         style = TableStyle([('BACKGROUND', (0,0), (-1,0), colors.grey),('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),('GRID', (0,0), (-1,-1), 1, colors.black)])
         table.setStyle(style); doc.build([table]); buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.carrera.codigo}.pdf', mimetype='application/pdf')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
         return redirect(url_for('jefe/jefe_ver_horarios_profesores'))
@@ -7541,13 +7720,15 @@ def exportar_jefe_horarios_profesor_pdf():
 @login_required
 def exportar_jefe_horarios_grupo_excel():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios de la carrera
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -7581,9 +7762,9 @@ def exportar_jefe_horarios_grupo_excel():
         for i, grupo in enumerate(grupos_unicos):
             # Verificar que el grupo pertenece a la carrera
             grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
-            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+            if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
                 continue
-            
+
             # Crear hoja para cada grupo
             if i == 0:
                 ws = wb.active
@@ -7652,7 +7833,7 @@ def exportar_jefe_horarios_grupo_excel():
         buffer = BytesIO()
         wb.save(buffer)
         buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         flash(f"Error al generar el archivo Excel: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_grupos'))
@@ -7661,13 +7842,15 @@ def exportar_jefe_horarios_grupo_excel():
 @login_required
 def exportar_jefe_horarios_grupo_pdf():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener grupos únicos de la carrera con horarios
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -7693,12 +7876,12 @@ def exportar_jefe_horarios_grupo_pdf():
         for grupo in grupos_unicos:
             # Verificar que el grupo pertenece a la carrera
             grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
-            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+            if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
                 continue
-            
+
             # Obtener horarios del grupo
             horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
-            
+
             # Determinar turno y sábado
             es_vespertino = 'V' in grupo[1:3]
             hora_inicio_turno = 13 if es_vespertino else 7
@@ -7754,7 +7937,7 @@ def exportar_jefe_horarios_grupo_pdf():
         
         doc.build(elements)
         buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.pdf', mimetype='application/pdf')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_grupos'))
@@ -7796,13 +7979,13 @@ def exportar_admin_fda_profesor(profesor_nombre):
 @login_required
 def exportar_jefe_fda_profesor(profesor_nombre):
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
     try:
-        horarios_data = procesar_horarios_formato_fda(carrera_id=id_carrera)
+        horarios_data = procesar_horarios_formato_fda(carrera_ids=carrera_ids)
         datos_profesor = horarios_data.get(profesor_nombre)
 
         if not datos_profesor:

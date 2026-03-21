@@ -45,12 +45,14 @@ class Role(db.Model):
     JEFE_CARRERA = 'jefe_carrera'
     PROFESOR_COMPLETO = 'profesor_completo'
     PROFESOR_ASIGNATURA = 'profesor_asignatura'
-    
+    RECURSOS_HUMANOS = 'recursos_humanos'
+
     ROLES_DISPLAY = {
         'admin': 'Administrador',
         'jefe_carrera': 'Jefe de Carrera',
         'profesor_completo': 'Profesor de Tiempo Completo',
-        'profesor_asignatura': 'Profesor por Asignatura'
+        'profesor_asignatura': 'Profesor por Asignatura',
+        'recursos_humanos': 'Recursos Humanos'
     }
     
     def __init__(self, nombre, descripcion=None):
@@ -306,6 +308,10 @@ class User(UserMixin, db.Model):
         """Verificar si es jefe de carrera (busca en roles many-to-many y campo legacy)"""
         return self.has_role('jefe_carrera')
     
+    def is_recursos_humanos(self):
+        """Verificar si es recursos humanos"""
+        return self.has_role('recursos_humanos')
+
     def is_profesor(self):
         """Verificar si es profesor (cualquier tipo) - busca en roles many-to-many y campo legacy"""
         return self.has_any_role(['profesor_completo', 'profesor_asignatura'])
@@ -429,22 +435,26 @@ class User(UserMixin, db.Model):
     
     def get_horarios_academicos_carrera(self):
         """Obtener horarios académicos de las carreras del jefe (solo para jefes de carrera)"""
-        if not self.is_jefe_carrera() or not self.carreras:
+        if not self.is_jefe_carrera():
             return []
-        from models import HorarioAcademico
-        carrera_ids = [c.id for c in self.carreras]
-        # Para profesores: usar relación many-to-many
-        return HorarioAcademico.query.join(User, HorarioAcademico.profesor_id == User.id).filter(
-            User.carreras.any(Carrera.id.in_(carrera_ids)),
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
-            User.activo == True
+        from models import HorarioAcademico, Materia
+        carrera_ids = self.get_carreras_jefe_ids()
+        if not carrera_ids:
+            return []
+        # Filtrar por carrera de la materia (no del profesor, ya que profesores pueden ser compartidos)
+        return HorarioAcademico.query.join(Materia).filter(
+            Materia.carrera_id.in_(carrera_ids),
+            HorarioAcademico.activo == True
         ).all()
     
     def get_carreras_jefe_ids(self):
-        """Obtener IDs de las carreras del jefe (helper)"""
+        """Obtener IDs de las carreras donde el usuario es jefe de carrera.
+        Usa carrera_id (campo específico para jefe de carrera)."""
         if not self.is_jefe_carrera():
             return []
-        return [c.id for c in self.carreras]
+        if self.carrera_id:
+            return [self.carrera_id]
+        return []
     
     @property
     def primera_carrera(self):
@@ -1225,9 +1235,9 @@ class BackupHistory(db.Model):
         if not self.tamano:
             return 'N/A'
         if self.tamano > 1024 * 1024:
-            return '.1f'
+            return f'{self.tamano / (1024 * 1024):.1f} MB'
         elif self.tamano > 1024:
-            return '.1f'
+            return f'{self.tamano / 1024:.1f} KB'
         else:
             return f"{self.tamano} B"
 
@@ -1365,3 +1375,41 @@ class GeneracionEnProgreso(db.Model):
 
     def __repr__(self):
         return f'<GeneracionEnProgreso grupo_id={self.grupo_id} task_id={self.task_id}>'
+
+
+class ChatbotConfig(db.Model):
+    """Configuración del chatbot LLM multi-proveedor."""
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(20), nullable=False, default='ollama')  # ollama, openai, gemini, claude
+    api_key = db.Column(db.String(500), nullable=True)  # Null for Ollama
+    model_name = db.Column(db.String(100), nullable=False, default='llama3')
+    ollama_url = db.Column(db.String(200), default='http://localhost:11434')
+    habilitado = db.Column(db.Boolean, default=False)
+    max_tokens = db.Column(db.Integer, default=1024)
+    temperatura = db.Column(db.Float, default=0.3)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @staticmethod
+    def get_config():
+        """Get the current chatbot configuration (singleton)."""
+        config = ChatbotConfig.query.first()
+        if not config:
+            config = ChatbotConfig(provider='ollama', model_name='llama3', habilitado=False)
+            db.session.add(config)
+            db.session.commit()
+        return config
+
+    def get_provider_kwargs(self):
+        """Return kwargs dict to instantiate an LLM provider."""
+        kwargs = {
+            'api_key': self.api_key,
+            'model_name': self.model_name,
+            'max_tokens': self.max_tokens,
+            'temperatura': self.temperatura,
+        }
+        if self.provider == 'ollama':
+            kwargs['ollama_url'] = self.ollama_url or 'http://localhost:11434'
+        return kwargs
+
+    def __repr__(self):
+        return f'<ChatbotConfig provider={self.provider} model={self.model_name} habilitado={self.habilitado}>'

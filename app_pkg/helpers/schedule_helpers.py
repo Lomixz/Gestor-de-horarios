@@ -9,12 +9,13 @@ from datetime import datetime
 from markupsafe import escape
 
 
-def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False):
+def procesar_horarios(agrupar_por='profesor', carrera_id=None, carrera_ids=None, incluir_ids=False):
     """
     Función centralizada para obtener y procesar los horarios académicos.
 
     :param agrupar_por: 'profesor' o 'grupo'. Define cómo se agruparán los datos.
     :param carrera_id: Opcional. Si se provee un ID, filtra los horarios para esa carrera.
+    :param carrera_ids: Opcional. Lista de IDs de carreras para filtrar (soporte multi-carrera).
     :param incluir_ids: Si True, incluye los IDs de los horarios para acciones
     :return: Un diccionario con los horarios organizados.
     """
@@ -23,8 +24,10 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
     # 1. Consulta base a la base de datos
     query = HorarioAcademico.query.filter_by(activo=True)
 
-    # 2. Si se especifica una carrera_id, filtramos los resultados
-    if carrera_id:
+    # 2. Si se especifica carrera_ids o carrera_id, filtramos los resultados
+    if carrera_ids:
+        query = query.join(Materia).filter(Materia.carrera_id.in_(carrera_ids))
+    elif carrera_id:
         query = query.join(Materia).filter(Materia.carrera_id == carrera_id)
 
     asignaciones = query.all()
@@ -82,7 +85,11 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
                 # Buscar el objeto Grupo por su código para filtrar por carrera si es necesario
                 grupo = Grupo.query.filter_by(codigo=grupo_codigo).first()
 
-                if grupo and (carrera_id is None or grupo.carrera_id == carrera_id):
+                if grupo and (
+                    (carrera_id is None and carrera_ids is None) or
+                    (carrera_ids and grupo.carrera_id in carrera_ids) or
+                    (carrera_id and grupo.carrera_id == carrera_id)
+                ):
                     clave_agrupacion = grupo_codigo
                     # Obtener la hora de inicio como entero para la cuadrícula
                     hora_inicio_int = a.horario.hora_inicio.hour if a.horario.hora_inicio else 7
@@ -123,7 +130,7 @@ def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False
     return datos_organizados
 
 
-def procesar_horarios_formato_fda(carrera_id=None):
+def procesar_horarios_formato_fda(carrera_id=None, carrera_ids=None):
     """
     Obtiene los datos de horarios con todos los detalles necesarios
     para generar el formato de Carga Horaria (FDA).
@@ -132,7 +139,9 @@ def procesar_horarios_formato_fda(carrera_id=None):
 
     query = HorarioAcademico.query.filter_by(activo=True)
 
-    if carrera_id:
+    if carrera_ids:
+        query = query.join(Materia).filter(Materia.carrera_id.in_(carrera_ids))
+    elif carrera_id:
         query = query.join(Materia).filter(Materia.carrera_id == carrera_id)
 
     asignaciones = query.all()

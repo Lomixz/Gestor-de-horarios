@@ -205,6 +205,11 @@
             observer.observe(document.body, { childList: true, subtree: true });
         })();
     </script>
+    <!-- Chatbot Widget -->
+    {% if current_user.is_authenticated %}
+        {% include 'components/chatbot_widget.html' %}
+    {% endif %}
+
     <!-- JavaScript personalizado -->
     {% block scripts %}{% endblock %}
 </body>

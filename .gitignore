@@ -39,3 +39,4 @@ static/uploads/
 .DS_Store
 Thumbs.db
 .claude/
+tmp/

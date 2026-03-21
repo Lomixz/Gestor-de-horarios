@@ -115,6 +115,31 @@ class ProgressTracker:
                     mensaje=mensaje,
                     activo=False)
 
+    def get_active_tasks(self):
+        """Get all active (non-completed) generation tasks from Redis."""
+        tasks = []
+        for key in self._redis.scan_iter(f'{self.PREFIX}*'):
+            data = self._redis.hgetall(key)
+            if data:
+                parsed = {}
+                for k, v in data.items():
+                    if v in ('true', 'false'):
+                        parsed[k] = v == 'true'
+                    elif k in ('total_grupos', 'grupos_procesados', 'grupo_actual', 'horarios_generados'):
+                        try:
+                            parsed[k] = int(v)
+                        except ValueError:
+                            parsed[k] = v
+                    elif k == 'errores_detallados':
+                        try:
+                            parsed[k] = json.loads(v)
+                        except (json.JSONDecodeError, TypeError):
+                            parsed[k] = []
+                    else:
+                        parsed[k] = v
+                tasks.append(parsed)
+        return tasks
+
     def delete(self, task_id):
         """Remove a generation task from Redis."""
         self._redis.delete(self._key(task_id))

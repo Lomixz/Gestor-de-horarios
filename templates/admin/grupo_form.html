@@ -73,7 +73,7 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     {{ form.carrera.label(class="form-label") }}
-                                    {% if es_jefe %}
+                                    {% if es_jefe and not current_user.is_admin() %}
                                         <!-- Jefe de carrera: campo bloqueado -->
                                         {{ form.carrera(class="form-control", disabled=true) }}
                                         <!-- Campo oculto para enviar el valor -->

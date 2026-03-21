@@ -649,84 +649,83 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     return buffer
 
 
+def generar_excel_profesor_buffer(profesor_nombre):
+    """
+    Genera un BytesIO con el Excel del horario del profesor en formato FDA.
+    Retorna (BytesIO, filename) o (None, error_message).
+    """
+    from models import User, HorarioAcademico
+
+    profesor = User.query.filter(
+        (User.nombre + ' ' + User.apellido) == profesor_nombre
+    ).first()
+
+    if not profesor:
+        return None, "Profesor no encontrado"
+
+    asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
+
+    dias_map = {'lunes': 'lunes', 'martes': 'martes', 'miercoles': 'miercoles',
+                'miércoles': 'miercoles', 'jueves': 'jueves', 'viernes': 'viernes',
+                'sabado': 'sabado', 'sábado': 'sabado'}
+
+    es_tc = getattr(profesor, 'rol', '') == 'profesor_completo'
+
+    datos_profesor = {
+        'info': {
+            'id': profesor.id,
+            'nombre_completo': profesor.get_nombre_completo(),
+            'es_tc': es_tc
+        },
+        'clases': []
+    }
+
+    for a in asignaciones:
+        if not all([a.materia, a.horario]):
+            continue
+
+        dia_raw = dias_map.get(a.dia_semana.lower(), a.dia_semana.lower())
+        grupo_codigo = a.grupo if a.grupo else "N/A"
+
+        duracion_horas = (a.horario.hora_fin.hour - a.horario.hora_inicio.hour) + \
+                         (a.horario.hora_fin.minute - a.horario.hora_inicio.minute) / 60.0
+
+        detalle_clase = {
+            'clave': a.materia.codigo if hasattr(a.materia, 'codigo') else '',
+            'asignatura': a.materia.nombre,
+            'grupo': grupo_codigo,
+            'dia_raw': dia_raw,
+            'hora_inicio': a.get_hora_inicio_str(),
+            'hora_fin': a.get_hora_fin_str(),
+            'horas_totales': duracion_horas,
+            'carrera': a.materia.carrera.codigo if a.materia.carrera else ''
+        }
+        datos_profesor['clases'].append(detalle_clase)
+
+    orden_dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    datos_profesor['clases'].sort(
+        key=lambda c: (orden_dias.index(c['dia_raw']) if c['dia_raw'] in orden_dias else 99, c['hora_inicio'])
+    )
+
+    periodo, año = obtener_periodo_actual()
+    buffer = generar_excel_formato_fda(datos_profesor, periodo=periodo, año=año)
+
+    filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.xlsx"
+    return buffer, filename
+
+
 def _generar_excel_horario_profesor(profesor_nombre):
     """
     Genera el archivo Excel del horario del profesor con formato de plantilla FDA (Carga Horaria).
-    Utiliza la función generar_excel_formato_fda() para mantener el formato original de la plantilla UPTEX.
+    Utiliza generar_excel_profesor_buffer() y envuelve con send_file().
     """
     from flask import send_file
-    from models import User, HorarioAcademico
 
     try:
-        # =====================================================================
-        # 1. OBTENER DATOS
-        # =====================================================================
-        profesor = User.query.filter(
-            (User.nombre + ' ' + User.apellido) == profesor_nombre
-        ).first()
+        buffer, filename = generar_excel_profesor_buffer(profesor_nombre)
+        if buffer is None:
+            return filename, 404
 
-        if not profesor:
-            return "Profesor no encontrado", 404
-
-        asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
-
-        # Periodo académico
-        periodo_academico = asignaciones[0].periodo_academico if asignaciones and asignaciones[0].periodo_academico else None
-
-        dias_map = {'lunes': 'lunes', 'martes': 'martes', 'miercoles': 'miercoles',
-                    'miércoles': 'miercoles', 'jueves': 'jueves', 'viernes': 'viernes',
-                    'sabado': 'sabado', 'sábado': 'sabado'}
-
-        es_tc = getattr(profesor, 'rol', '') == 'profesor_completo'
-
-        # =====================================================================
-        # 2. CONSTRUIR EL DICCIONARIO datos_profesor PARA generar_excel_formato_fda
-        # =====================================================================
-        datos_profesor = {
-            'info': {
-                'id': profesor.id,
-                'nombre_completo': profesor.get_nombre_completo(),
-                'es_tc': es_tc
-            },
-            'clases': []
-        }
-
-        for a in asignaciones:
-            if not all([a.materia, a.horario]):
-                continue
-
-            dia_raw = dias_map.get(a.dia_semana.lower(), a.dia_semana.lower())
-            grupo_codigo = a.grupo if a.grupo else "N/A"
-
-            duracion_horas = (a.horario.hora_fin.hour - a.horario.hora_inicio.hour) + \
-                             (a.horario.hora_fin.minute - a.horario.hora_inicio.minute) / 60.0
-
-            detalle_clase = {
-                'clave': a.materia.codigo if hasattr(a.materia, 'codigo') else '',
-                'asignatura': a.materia.nombre,
-                'grupo': grupo_codigo,
-                'dia_raw': dia_raw,
-                'hora_inicio': a.get_hora_inicio_str(),
-                'hora_fin': a.get_hora_fin_str(),
-                'horas_totales': duracion_horas,
-                'carrera': a.materia.carrera.codigo if a.materia.carrera else ''
-            }
-            datos_profesor['clases'].append(detalle_clase)
-
-        # Ordenar clases por día y hora
-        orden_dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-        datos_profesor['clases'].sort(
-            key=lambda c: (orden_dias.index(c['dia_raw']) if c['dia_raw'] in orden_dias else 99, c['hora_inicio'])
-        )
-
-        # =====================================================================
-        # 3. GENERAR EXCEL USANDO LA PLANTILLA FDA ORIGINAL
-        # =====================================================================
-        periodo, año = obtener_periodo_actual()
-
-        buffer = generar_excel_formato_fda(datos_profesor, periodo=periodo, año=año)
-
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.xlsx"
         return send_file(
             buffer,
             as_attachment=True,
@@ -740,31 +739,24 @@ def _generar_excel_horario_profesor(profesor_nombre):
         return f"Ocurrió un error al generar el archivo Excel: {e}", 500
 
 
-def _generar_pdf_horario_profesor(profesor_nombre):
+def generar_pdf_profesor_buffer(profesor_nombre):
     """
-    Genera el archivo PDF del horario del profesor con formato de plantilla FDA (Carga Horaria).
-    Incluye firmas, horas TC, nombres configurados y colores UPTEX.
+    Genera un BytesIO con el PDF del horario del profesor en formato FDA.
+    Retorna (BytesIO, filename) o (None, error_message).
     """
-    from flask import send_file
     from models import User, HorarioAcademico, ConfiguracionSistema
 
     try:
-        # =====================================================================
-        # 1. OBTENER DATOS
-        # =====================================================================
         profesor = User.query.filter(
             (User.nombre + ' ' + User.apellido) == profesor_nombre
         ).first()
 
         if not profesor:
-            return "Profesor no encontrado", 404
+            return None, "Profesor no encontrado"
 
         asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
 
-        # Periodo y año
         periodo, anio = obtener_periodo_actual()
-
-        # Fecha de inicio desde configuración
         fecha_inicio = ConfiguracionSistema.get_config('fecha_inicio_periodo', '') or ''
 
         dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -775,7 +767,6 @@ def _generar_pdf_horario_profesor(profesor_nombre):
         es_tc = profesor.rol == 'profesor_completo'
         es_asignatura = profesor.rol == 'profesor_asignatura'
 
-        # Calcular horas reales de impartición
         horas_imparticion = 0
         for a in asignaciones:
             if a.horario:
@@ -1057,12 +1048,32 @@ def _generar_pdf_horario_profesor(profesor_nombre):
         elements.append(firma_table)
 
         # =====================================================================
-        # 3. GUARDAR Y ENVIAR
+        # 3. GUARDAR EN BUFFER
         # =====================================================================
         doc.build(elements)
         buffer.seek(0)
 
         filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.pdf"
+        return buffer, filename
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return None, f"Ocurrió un error al generar el archivo PDF: {e}"
+
+
+def _generar_pdf_horario_profesor(profesor_nombre):
+    """
+    Genera el archivo PDF del horario del profesor con formato de plantilla FDA.
+    Utiliza generar_pdf_profesor_buffer() y envuelve con send_file().
+    """
+    from flask import send_file
+
+    try:
+        buffer, filename = generar_pdf_profesor_buffer(profesor_nombre)
+        if buffer is None:
+            return filename, 500
+
         return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
 
     except Exception as e:

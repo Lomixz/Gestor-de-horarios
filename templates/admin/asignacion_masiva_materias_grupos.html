@@ -90,7 +90,7 @@
                                 <i class="fas fa-university me-1"></i>
                                 Carrera
                             </label>
-                            <select name="carrera_id" class="form-select" required {% if current_user.is_jefe_carrera() %}disabled{% endif %}>
+                            <select name="carrera_id" class="form-select" required {% if current_user.is_jefe_carrera() and not current_user.is_admin() %}disabled{% endif %}>
                                 <option value="">Seleccione una carrera</option>
                                 {% for carrera in carreras %}
                                     <option value="{{ carrera.id }}" {% if carrera.id == carrera_id %}selected{% endif %}>
@@ -98,7 +98,7 @@
                                     </option>
                                 {% endfor %}
                             </select>
-                            {% if current_user.is_jefe_carrera() %}
+                            {% if current_user.is_jefe_carrera() and not current_user.is_admin() %}
                                 <input type="hidden" name="carrera_id" value="{{ carrera_id }}">
                             {% endif %}
                         </div>
