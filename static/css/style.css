@@ -2110,3 +2110,50 @@ select[multiple] option:checked {
         content: "";
     }
 }
+/* Admin Custom Modal Enhancements */
+.admin-modal-content {
+    border: none !important;
+    border-radius: 1.25rem !important;
+    overflow: hidden;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.admin-modal-content .modal-header {
+    background-color: #fff;
+    padding: 1.5rem 1.5rem 0.5rem !important;
+}
+
+.admin-modal-content .modal-title {
+    color: #111827;
+    font-size: 1.25rem;
+}
+
+.admin-modal-content .modal-body {
+    padding: 1.5rem !important;
+}
+
+.admin-modal-content .modal-footer {
+    background-color: #f9fafb;
+    padding: 1.25rem 1.5rem !important;
+}
+
+.admin-modal-content .btn {
+    border-radius: 0.75rem !important;
+    padding: 0.625rem 1.25rem !important;
+    font-weight: 700 !important;
+    transition: all 0.2s ease;
+}
+
+.admin-modal-content .btn:active {
+    transform: scale(0.96);
+}
+
+.admin-modal-content .btn-light {
+    background-color: #f3f4f6;
+    border-color: #f3f4f6;
+    color: #4b5563;
+}
+
+.admin-modal-content .btn-light:hover {
+    background-color: #e5e7eb;
+}

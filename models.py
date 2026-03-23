@@ -738,6 +738,15 @@ def init_db():
         )
         print("Configuraciones de exportación Excel inicializadas")
 
+    # Inicializar configuración de firmas de usuario si no existe
+    if not ConfiguracionSistema.query.filter_by(clave='firmas_usuario_habilitadas').first():
+        ConfiguracionSistema.set_config(
+            'firmas_usuario_habilitadas', 'true',
+            tipo='bool', descripcion='Permitir a los usuarios subir y dibujar firmas digitales en su perfil',
+            categoria='seguridad'
+        )
+        print("Configuración de firmas de usuario inicializada")
+
 
 class Materia(db.Model):
     """Modelo para gestionar materias académicas"""

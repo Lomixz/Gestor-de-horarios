@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape
@@ -177,6 +177,8 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
+                import uuid as _uuid
+                session['chatbot_login_token'] = str(_uuid.uuid4())
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
 
                 # Verificar si el usuario requiere cambio de contraseña
@@ -201,7 +203,7 @@ def login():
     return render_template('login.html', form=form)
 
 @app.route('/register', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def register():
     """Página de registro"""
     if current_user.is_authenticated:
@@ -211,17 +213,20 @@ def register():
     
     # Obtener horarios para el formulario de disponibilidad
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+
+    if request.method == 'POST' and not form.validate_on_submit():
+        logger.warning(f"Register form validation failed: {form.errors}")
+
     if form.validate_on_submit():
         try:
             # Obtener el rol final (considerando tipo de profesor)
             rol_final = form.get_final_rol()
-            
+
             # Para profesores y jefes de carrera, obtener las carreras seleccionadas
             carreras = []
             if rol_final in ['profesor_completo', 'profesor_asignatura', 'jefe_carrera'] and form.carrera.data:
                 carreras = Carrera.query.filter(Carrera.id.in_(form.carrera.data)).all()
-            
+
             # Crear nuevo usuario - ahora todos usan la relación many-to-many carreras
             user = User(
                 username=form.username.data,
@@ -233,14 +238,14 @@ def register():
                 telefono=form.telefono.data if form.telefono.data else None,
                 carreras=carreras
             )
-            
+
             db.session.add(user)
             db.session.commit()
-            
+
             # Procesar disponibilidad si es profesor
             if rol_final in ['profesor_completo', 'profesor_asignatura']:
                 dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-                
+
                 for horario in horarios:
                     for dia in dias:
                         # Verificar si el checkbox fue marcado
@@ -253,19 +258,24 @@ def register():
                                 disponible=True
                             )
                             db.session.add(disponibilidad)
-                
+
                 db.session.commit()
-            
-            flash(f'¡Registro exitoso! Bienvenido, {user.get_nombre_completo()}.', 'success')
-            
-            # Iniciar sesión automáticamente después del registro
-            login_user(user)
-            return redirect(url_for('dashboard'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la cuenta. Inténtalo de nuevo.', 'error')
-            logger.error(f"Error en registro: {e}")
+            import traceback
+            logger.error(f"Error en registro: {e}\n{traceback.format_exc()}")
+            return render_template('register.html', form=form, horarios=horarios)
+
+        # Usuario creado exitosamente — login automático fuera del try/except
+        nombre_completo = f"{user.nombre} {user.apellido}"
+        flash(f'¡Registro exitoso! Bienvenido, {nombre_completo}.', 'success')
+        login_user(user, remember=True)
+        import uuid as _uuid
+        session['chatbot_login_token'] = str(_uuid.uuid4())
+        audit_logger.info(f"REGISTER user={user.username} rol={user.rol} ip={request.remote_addr}")
+        return redirect(url_for('dashboard'))
     
     return render_template('register.html', form=form, horarios=horarios)
 
@@ -322,11 +332,15 @@ def dashboard():
     profesor_asignatura_count = User.query.filter_by(rol='profesor_asignatura').count()
     profesor_count = profesor_completo_count + profesor_asignatura_count
     
+    from models import ConfiguracionSistema
+    firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
+
     return render_template('dashboard.html',
                          user_count=user_count,
                          admin_count=admin_count,
                          jefe_count=jefe_count,
-                         profesor_count=profesor_count)
+                         profesor_count=profesor_count,
+                         firmas_usuario_habilitadas=firmas_usuario_habilitadas)
 
 @app.route('/logout')
 @login_required
@@ -4570,8 +4584,8 @@ def eliminar_horarios_masivo():
 @app.route('/admin/usuarios')
 @login_required
 def gestionar_usuarios():
-    """Gestión de usuarios (solo admin)"""
-    if not current_user.is_admin():
+    """Gestión de usuarios (admin y recursos humanos en modo solo lectura)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
 
@@ -4619,17 +4633,98 @@ def gestionar_usuarios():
         rol_display = usuario.get_rol_display()
         roles_count[rol_display] = roles_count.get(rol_display, 0) + 1
 
+    solo_lectura = current_user.is_recursos_humanos() and not current_user.is_admin()
+
     return render_template('admin/usuarios.html',
                          usuarios=usuarios,
                          total_usuarios=total_usuarios,
                          usuarios_activos=usuarios_activos,
                          usuarios_inactivos=usuarios_inactivos,
                          roles_count=roles_count,
+                         solo_lectura=solo_lectura,
                          filtros_activos={
                              'rol': rol_filter,
                              'activo': activo_filter,
                              'busqueda': busqueda
                          })
+
+@app.route('/admin/usuarios/exportar/csv')
+@login_required
+def exportar_usuarios_csv():
+    """Exportar lista de usuarios activos en CSV (admin y recursos humanos)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
+        abort(403)
+
+    usuarios = User.query.filter_by(activo=True).order_by(User.nombre, User.apellido).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Usuario', 'Nombre', 'Apellido', 'Email', 'Rol', 'Teléfono', 'Estado', 'Fecha Registro'])
+    for u in usuarios:
+        writer.writerow([
+            u.username, u.nombre, u.apellido, u.email,
+            u.get_rol_display(), u.telefono or '',
+            'Activo' if u.activo else 'Inactivo',
+            u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else ''
+        ])
+
+    output.seek(0)
+    return send_file(
+        BytesIO(output.getvalue().encode('utf-8-sig')),
+        as_attachment=True,
+        download_name='usuarios_sistema.csv',
+        mimetype='text/csv'
+    )
+
+
+@app.route('/admin/usuarios/exportar/pdf')
+@login_required
+def exportar_usuarios_pdf():
+    """Exportar lista de usuarios activos en PDF (admin y recursos humanos)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
+        abort(403)
+
+    usuarios = User.query.filter_by(activo=True).order_by(User.nombre, User.apellido).all()
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=30, bottomMargin=20)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph('Lista de Usuarios del Sistema', styles['Title']))
+    elements.append(Paragraph(f'Generado: {datetime.now().strftime("%d/%m/%Y %H:%M")}', styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    data = [['Usuario', 'Nombre Completo', 'Email', 'Rol', 'Teléfono', 'Estado']]
+    for u in usuarios:
+        data.append([
+            u.username,
+            u.get_nombre_completo(),
+            u.email,
+            u.get_rol_display(),
+            u.telefono or '',
+            'Activo' if u.activo else 'Inactivo'
+        ])
+
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#343a40')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('PADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+    doc.build(elements)
+
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name='usuarios_sistema.pdf', mimetype='application/pdf')
+
 
 @app.route('/admin/usuario/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -4781,9 +4876,13 @@ def editar_usuario(id):
                 )
                 db.session.add(nueva_disponibilidad)
 
+        # Resetear contraseña si se proporcionó una nueva
+        if form.nueva_password.data:
+            usuario.password = form.nueva_password.data
+
         try:
             db.session.commit()
-            
+
             # Construir mensaje con todos los roles
             roles_display = [Role.ROLES_DISPLAY.get(r, r) for r in roles_seleccionados]
             flash(f'Usuario {usuario.get_nombre_completo()} actualizado exitosamente con roles: {", ".join(roles_display)}.', 'success')
@@ -5032,7 +5131,37 @@ def configuracion_sistema():
         'firmas_habilitadas': ConfiguracionSistema.get_config('firmas_habilitadas', 'true')
     }
 
-    return render_template('admin/configuracion.html', config_horas=config_horas, config_excel=config_excel)
+    firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
+
+    return render_template('admin/configuracion.html',
+                           config_horas=config_horas,
+                           config_excel=config_excel,
+                           firmas_usuario_habilitadas=firmas_usuario_habilitadas)
+
+
+# API para guardar configuración de seguridad
+@app.route('/admin/configuracion/seguridad', methods=['POST'])
+@login_required
+def guardar_configuracion_seguridad():
+    """Guardar configuración de seguridad incluyendo toggle de firmas de usuario"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+
+    try:
+        from models import ConfiguracionSistema
+        data = request.get_json()
+        firmas_usuario_habilitadas = 'true' if data.get('firmas_usuario_habilitadas') else 'false'
+
+        ConfiguracionSistema.set_config(
+            'firmas_usuario_habilitadas', firmas_usuario_habilitadas,
+            tipo='bool', descripcion='Permitir a los usuarios subir y dibujar firmas digitales en su perfil',
+            categoria='seguridad'
+        )
+
+        return jsonify({'success': True, 'message': 'Configuración de seguridad guardada exitosamente'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error al guardar: {str(e)}'}), 500
 
 
 # API para configuración de carga horaria de profesores
@@ -5557,6 +5686,51 @@ def descargar_backup(filename):
     except Exception as e:
         return jsonify({'success': False, 'message': f'Error al descargar backup: {str(e)}'}), 500
 
+@app.route('/admin/configuracion/backup/<filename>', methods=['DELETE'])
+@login_required
+def eliminar_backup(filename):
+    """Eliminar archivo de backup y registro en DB"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+
+    try:
+        from models import BackupHistory, db
+        from werkzeug.utils import secure_filename
+        import os
+
+        safe_filename = secure_filename(filename)
+        
+        # Verificar que el backup existe en la base de datos
+        backup = BackupHistory.query.filter_by(filename=safe_filename).first()
+        
+        if not backup:
+            return jsonify({'success': False, 'message': 'Backup no encontrado en el historial'}), 404
+
+        # Ruta del archivo
+        backups_dir = os.path.abspath('backups')
+        filepath = os.path.abspath(os.path.join(backups_dir, safe_filename))
+        
+        # Seguridad: validar que no intenten borrar fuera de 'backups/'
+        if not filepath.startswith(backups_dir):
+            return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
+
+        # Eliminar el archivo si existe
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception as file_error:
+                print(f"Error al eliminar archivo físico: {str(file_error)}")
+        
+        # Eliminar de la base de datos
+        db.session.delete(backup)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Backup eliminado exitosamente'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Error al eliminar backup: {str(e)}'}), 500
+
 # API para probar conexión a la base de datos
 @app.route('/admin/configuracion/test-connection', methods=['POST'])
 @login_required
@@ -5753,6 +5927,10 @@ ALLOWED_MIME_TYPES = {'image/png', 'image/jpeg', 'image/gif'}
 def guardar_firma_dibujada():
     """Guardar firma dibujada en canvas como imagen"""
     import base64
+    from models import ConfiguracionSistema
+
+    if ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true') != 'true':
+        return jsonify({'success': False, 'message': 'Las firmas digitales están deshabilitadas por el administrador.'}), 403
 
     try:
         data = request.get_json()
@@ -5805,6 +5983,11 @@ def guardar_firma_dibujada():
 @login_required
 def subir_firma():
     """Subir firma digital del usuario actual"""
+    from models import ConfiguracionSistema
+    if ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true') != 'true':
+        flash('Las firmas digitales están deshabilitadas por el administrador.', 'error')
+        return redirect(url_for('dashboard'))
+
     if 'firma' not in request.files:
         flash('No se encontró el archivo de firma.', 'error')
         return redirect(url_for('dashboard'))

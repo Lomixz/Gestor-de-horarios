@@ -1,10 +1,11 @@
 """Execute chatbot tool actions against the database."""
+import csv
 import json
 import logging
 import secrets
 import string
 import threading
-from io import BytesIO
+from io import BytesIO, StringIO
 from datetime import datetime
 
 from models import (
@@ -45,6 +46,7 @@ def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
         # New handlers
         'export_schedule_excel': _export_schedule_excel,
         'export_schedule_pdf': _export_schedule_pdf,
+        'export_schedule_csv': _export_schedule_csv,
         'export_my_schedule': _export_my_schedule,
         'check_generation_progress': _check_generation_progress,
         'list_users': _list_users,
@@ -943,7 +945,49 @@ def _export_my_schedule(args, user):
             logger.error(f"Error generando PDF propio: {e}", exc_info=True)
             return _result(f'Error al generar PDF: {str(e)}')
 
-    return _result('Formato no válido. Usa "excel" o "pdf".')
+    elif formato == 'csv':
+        download_url = _generate_professor_csv(user, user)
+        if not download_url:
+            return _result('No se pudo generar el CSV. Puede que no tengas horarios asignados.')
+        return _result('Tu horario en CSV:', download_url=download_url)
+
+    return _result('Formato no válido. Usa "excel", "pdf" o "csv".')
+
+
+def _export_schedule_csv(args, user):
+    """Export a group or professor schedule as CSV."""
+    tipo = args.get('tipo', '').strip().lower()
+    identificador = args.get('identificador', '').strip()
+
+    if not tipo or not identificador:
+        return _result('Se requiere el tipo (grupo/profesor) y el identificador.')
+
+    if tipo == 'grupo':
+        codigo = identificador.upper()
+        grupo = Grupo.query.filter_by(codigo=codigo).first()
+        if not grupo:
+            return _result(f'No se encontró el grupo "{codigo}".')
+
+        horarios = HorarioAcademico.query.filter_by(grupo=codigo, activo=True).all()
+        if not horarios:
+            return _result(f'El grupo {codigo} no tiene horarios generados.')
+
+        download_url = _generate_group_csv(horarios, codigo, user)
+        if not download_url:
+            return _result('Error al generar el archivo CSV.')
+        return _result(f'CSV del horario del grupo {codigo} generado:', download_url=download_url)
+
+    elif tipo == 'profesor':
+        profesor = _find_single_professor(identificador)
+        if isinstance(profesor, dict):
+            return profesor
+
+        download_url = _generate_professor_csv(profesor, user)
+        if not download_url:
+            return _result('Error al generar el archivo CSV. El profesor puede no tener horarios.')
+        return _result(f'CSV del horario de {profesor.get_nombre_completo()} generado:', download_url=download_url)
+
+    return _result('Tipo no válido. Usa "grupo" o "profesor".')
 
 
 # ---- Progress check ----
@@ -1419,4 +1463,71 @@ def _generate_professor_excel(profesor, user):
         return f'/api/chatbot/download/{file_id}'
     except Exception as e:
         logger.error(f"Error generando Excel de profesor: {e}")
+        return None
+
+
+# ---- CSV generation helpers ----
+
+def _generate_group_csv(horarios, grupo_codigo, user):
+    """Generate a CSV file for a group schedule and return download URL."""
+    try:
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+        for h in sorted(horarios, key=lambda x: (x.dia_semana, x.get_hora_inicio_str())):
+            dia = dias_map.get(h.dia_semana.lower(), h.dia_semana)
+            materia = h.materia.nombre if h.materia else ''
+            profesor = h.profesor.get_nombre_completo() if h.profesor else ''
+            writer.writerow([dia, h.get_hora_inicio_str(), h.get_hora_fin_str(), materia, profesor])
+
+        csv_bytes = output.getvalue().encode('utf-8-sig')
+        file_id = file_manager.save_file(
+            csv_bytes,
+            f'horario_{grupo_codigo}.csv',
+            user.id,
+            'text/csv'
+        )
+        return f'/api/chatbot/download/{file_id}'
+    except Exception as e:
+        logger.error(f"Error generando CSV de grupo: {e}")
+        return None
+
+
+def _generate_professor_csv(profesor, user):
+    """Generate a CSV file for a professor schedule and return download URL."""
+    try:
+        nombre_completo = profesor.get_nombre_completo()
+        horarios = HorarioAcademico.query.filter_by(
+            profesor_id=profesor.id, activo=True
+        ).all()
+
+        if not horarios:
+            return None
+
+        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+                    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Grupo'])
+
+        for h in sorted(horarios, key=lambda x: (x.dia_semana, x.get_hora_inicio_str())):
+            dia = dias_map.get(h.dia_semana.lower(), h.dia_semana)
+            materia = h.materia.nombre if h.materia else ''
+            writer.writerow([dia, h.get_hora_inicio_str(), h.get_hora_fin_str(), materia, h.grupo or ''])
+
+        csv_bytes = output.getvalue().encode('utf-8-sig')
+        file_id = file_manager.save_file(
+            csv_bytes,
+            f'horario_{nombre_completo.replace(" ", "_")}.csv',
+            user.id,
+            'text/csv'
+        )
+        return f'/api/chatbot/download/{file_id}'
+    except Exception as e:
+        logger.error(f"Error generando CSV de profesor: {e}")
         return None

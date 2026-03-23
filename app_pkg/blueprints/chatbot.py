@@ -1,10 +1,12 @@
 """Chatbot blueprint: /api/chatbot/* endpoints."""
 import json
 import logging
-from flask import Blueprint, request, jsonify, send_file, render_template
+import uuid
+import threading
+from flask import Blueprint, request, jsonify, send_file, render_template, session as flask_session, current_app
 from flask_login import login_required, current_user
 
-from models import db, ChatbotConfig
+from models import db, User, ChatbotConfig
 from app_pkg.chatbot.providers import get_provider
 from app_pkg.chatbot.tools import (
     get_tools_for_role, get_system_prompt, get_suggestions, is_tool_allowed
@@ -13,6 +15,45 @@ from app_pkg.chatbot.actions import execute_tool
 from app_pkg.chatbot import file_manager
 
 logger = logging.getLogger('sistema_academico')
+
+# Redis-based task store for background chatbot processing
+TASK_TTL = 3600  # 1 hour
+
+
+def _get_redis():
+    """Get Redis client, or None if unavailable."""
+    try:
+        from progress import get_redis_client
+        client = get_redis_client()
+        client.ping()
+        return client
+    except Exception:
+        return None
+
+
+def _store_task_result(task_id, status, text='', html=None, download_url=None):
+    """Store a chatbot task result in Redis."""
+    r = _get_redis()
+    if not r:
+        return
+    data = json.dumps({
+        'status': status,
+        'text': text or '',
+        'html': html,
+        'download_url': download_url,
+    })
+    r.setex(f'chatbot_task:{task_id}', TASK_TTL, data)
+
+
+def _get_task_result(task_id):
+    """Retrieve a chatbot task result from Redis."""
+    r = _get_redis()
+    if not r:
+        return None
+    data = r.get(f'chatbot_task:{task_id}')
+    if data:
+        return json.loads(data)
+    return None
 
 chatbot_bp = Blueprint('chatbot', __name__)
 
@@ -23,6 +64,8 @@ def _get_user_role(user):
         return 'admin'
     elif user.is_jefe_carrera():
         return 'jefe_carrera'
+    elif user.is_recursos_humanos():
+        return 'recursos_humanos'
     elif user.rol == 'profesor_completo':
         return 'profesor_completo'
     else:
@@ -32,7 +75,7 @@ def _get_user_role(user):
 @chatbot_bp.route('/api/chatbot/message', methods=['POST'])
 @login_required
 def chatbot_message():
-    """Process a chat message and return the LLM response."""
+    """Process a chat message in background and return a task_id for polling."""
     config = ChatbotConfig.get_config()
 
     if not config.habilitado:
@@ -45,68 +88,85 @@ def chatbot_message():
     user_text = data['text'].strip()
     history = data.get('history', [])
 
+    # Capture everything needed before spawning thread
+    user_id = current_user.id
     role = _get_user_role(current_user)
     system_prompt = get_system_prompt(role)
     tools = get_tools_for_role(role)
+    provider_name = config.provider
+    provider_kwargs = config.get_provider_kwargs()
 
     # Build messages
     messages = [{'role': 'system', 'content': system_prompt}]
-    for msg in history[-20:]:  # Limit history
+    for msg in history[-15:]:
         messages.append({
             'role': msg.get('role', 'user'),
             'content': msg.get('content', '')
         })
     messages.append({'role': 'user', 'content': user_text})
 
-    try:
-        provider = get_provider(config.provider, **config.get_provider_kwargs())
-    except Exception as e:
-        logger.error(f"Error creando provider LLM: {e}")
-        return jsonify({'error': f'Error de configuración del LLM: {str(e)}'}), 500
+    # Generate task_id and store pending status
+    task_id = str(uuid.uuid4())
+    _store_task_result(task_id, 'pending')
 
-    try:
-        response = provider.chat(messages, tools=tools if tools else None)
-    except Exception as e:
-        logger.error(f"Error en LLM chat: {e}")
-        return jsonify({'error': f'Error del servicio LLM: {str(e)}'}), 500
+    app = current_app._get_current_object()
 
-    # Process tool calls if any
-    result_html = None
-    download_url = None
-
-    if response.tool_calls:
-        for tc in response.tool_calls:
-            if not is_tool_allowed(role, tc.name):
-                response.text = f'No tienes permisos para ejecutar la acción "{tc.name}".'
-                break
-
-            tool_result = execute_tool(tc.name, tc.arguments, current_user)
-
-            # Send tool result back to LLM for natural language response
-            tool_result_text = tool_result['text']
-            if tool_result.get('html'):
-                result_html = tool_result['html']
-            if tool_result.get('download_url'):
-                download_url = tool_result['download_url']
-
-            # Add tool result to messages and get final response
-            messages.append({'role': 'assistant', 'content': response.text or f'Ejecutando {tc.name}...'})
-            messages.append({'role': 'user', 'content': f'[Resultado de {tc.name}]: {tool_result_text}'})
-
+    def _process_in_background():
+        with app.app_context():
             try:
-                final_response = provider.chat(messages)
-                response.text = final_response.text
+                provider = get_provider(provider_name, **provider_kwargs)
+                response = provider.chat(messages, tools=tools if tools else None)
+
+                result_html = None
+                download_url = None
+
+                if response.tool_calls:
+                    for tc in response.tool_calls:
+                        if not is_tool_allowed(role, tc.name):
+                            response.text = f'No tienes permisos para ejecutar la acción "{tc.name}".'
+                            break
+
+                        user = db.session.get(User, user_id)
+                        tool_result = execute_tool(tc.name, tc.arguments, user)
+
+                        tool_result_text = tool_result['text']
+                        if tool_result.get('html'):
+                            result_html = tool_result['html']
+                        if tool_result.get('download_url'):
+                            download_url = tool_result['download_url']
+
+                        messages.append({'role': 'assistant', 'content': response.text or f'Ejecutando {tc.name}...'})
+                        messages.append({'role': 'user', 'content': f'[Resultado de {tc.name}]: {tool_result_text}'})
+
+                        try:
+                            final_response = provider.chat(messages)
+                            response.text = final_response.text
+                        except Exception as e:
+                            logger.error(f"Error en segunda llamada LLM: {e}")
+                            response.text = tool_result_text
+
+                        break  # Process only the first tool call
+
+                _store_task_result(task_id, 'complete', response.text, result_html, download_url)
+
             except Exception as e:
-                logger.error(f"Error en segunda llamada LLM: {e}")
-                response.text = tool_result_text
+                logger.error(f"Error en chatbot background: {e}", exc_info=True)
+                _store_task_result(task_id, 'error', f'Error del servicio: {str(e)}')
 
-            break  # Process only the first tool call
+    thread = threading.Thread(target=_process_in_background, daemon=True)
+    thread.start()
 
-    return jsonify({
-        'text': response.text,
-        'html': result_html,
-        'download_url': download_url,
-    })
+    return jsonify({'task_id': task_id, 'status': 'pending'})
+
+
+@chatbot_bp.route('/api/chatbot/task/<task_id>')
+@login_required
+def chatbot_task_status(task_id):
+    """Poll for the result of a background chatbot task."""
+    result = _get_task_result(task_id)
+    if result is None:
+        return jsonify({'status': 'pending'})
+    return jsonify(result)
 
 
 @chatbot_bp.route('/api/chatbot/download/<file_id>')
@@ -197,6 +257,7 @@ def chatbot_status():
     data = {
         'habilitado': config.habilitado,
         'provider': config.provider,
+        'login_token': flask_session.get('chatbot_login_token', ''),
     }
     if current_user.is_admin():
         data.update({

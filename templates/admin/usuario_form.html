@@ -442,6 +442,18 @@
                             </div>
                         </div>
 
+                        <!-- Resetear contraseña -->
+                        {% if usuario %}
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-key me-1 text-warning"></i>
+                                {{ form.nueva_password.label.text }}
+                            </label>
+                            {{ form.nueva_password(class="form-control", placeholder="Dejar en blanco para no cambiar") }}
+                            <div class="form-text">Si ingresas una nueva contraseña, se actualizará para este usuario.</div>
+                        </div>
+                        {% endif %}
+
                         <!-- Información adicional (solo para edición) -->
                         {% if usuario %}
                         <div class="card bg-light mb-4">

@@ -77,19 +77,26 @@
     font-weight: 600;
 }
 
-#chatbot-close {
+#chatbot-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#chatbot-clear, #chatbot-close {
     background: none;
     border: none;
     color: white;
-    font-size: 20px;
     cursor: pointer;
     padding: 0;
     line-height: 1;
     opacity: 0.8;
 }
-#chatbot-close:hover {
+#chatbot-clear:hover, #chatbot-close:hover {
     opacity: 1;
 }
+#chatbot-clear { font-size: 15px; }
+#chatbot-close { font-size: 20px; }
 
 #chatbot-messages {
     flex: 1;
@@ -121,6 +128,24 @@
     color: white;
     align-self: flex-end;
     border-bottom-right-radius: 4px;
+}
+
+/* Markdown formatting inside bot messages */
+.chat-msg.bot strong { font-weight: 700; }
+.chat-msg.bot em { font-style: italic; }
+.chat-msg.bot code {
+    background: #e2e6ea;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+}
+.chat-msg.bot ul, .chat-msg.bot ol {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+.chat-msg.bot li {
+    margin-bottom: 2px;
 }
 
 .chat-msg .msg-html {
@@ -266,7 +291,10 @@
 <div id="chatbot-panel">
     <div id="chatbot-header">
         <h6><i class="fas fa-robot me-2"></i>Asistente</h6>
-        <button id="chatbot-close">&times;</button>
+        <div id="chatbot-header-actions">
+            <button id="chatbot-clear" title="Limpiar chat"><i class="fas fa-trash-alt"></i></button>
+            <button id="chatbot-close">&times;</button>
+        </div>
     </div>
     <div id="chatbot-messages">
         <div class="chat-msg bot">¡Hola! Soy tu asistente del sistema de horarios. ¿En qué puedo ayudarte?</div>
@@ -280,9 +308,15 @@
 
 <script>
 (function() {
+    var MAX_MESSAGES = 30; // ~15 pairs user/bot
+    var MAX_HISTORY_CONTEXT = 15; // messages sent to API
+    var POLL_INTERVAL = 2000; // ms
+    var WELCOME_MSG = '¡Hola! Soy tu asistente del sistema de horarios. ¿En qué puedo ayudarte?';
+
     var toggle = document.getElementById('chatbot-toggle');
     var panel = document.getElementById('chatbot-panel');
     var closeBtn = document.getElementById('chatbot-close');
+    var clearBtn = document.getElementById('chatbot-clear');
     var input = document.getElementById('chatbot-input');
     var sendBtn = document.getElementById('chatbot-send');
     var messagesDiv = document.getElementById('chatbot-messages');
@@ -292,30 +326,120 @@
     var history = [];
     var isWaiting = false;
     var unreadCount = 0;
+    var pollTimer = null;
 
-    // Restore history from sessionStorage
+    // --- Markdown formatter ---
+    function formatMarkdown(text) {
+        if (!text) return '';
+        // Escape HTML
+        var s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+        // Code inline: `code`
+        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // Bold: **text**
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // Italic: *text* (not inside bold)
+        s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+        // Process line by line for lists
+        var lines = s.split('\n');
+        var result = [];
+        var inUl = false;
+        var inOl = false;
+
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var ulMatch = line.match(/^[\s]*[-*]\s+(.+)/);
+            var olMatch = line.match(/^[\s]*\d+\.\s+(.+)/);
+
+            if (ulMatch) {
+                if (!inUl) { result.push('<ul>'); inUl = true; }
+                if (inOl) { result.push('</ol>'); inOl = false; }
+                result.push('<li>' + ulMatch[1] + '</li>');
+            } else if (olMatch) {
+                if (!inOl) { result.push('<ol>'); inOl = true; }
+                if (inUl) { result.push('</ul>'); inUl = false; }
+                result.push('<li>' + olMatch[1] + '</li>');
+            } else {
+                if (inUl) { result.push('</ul>'); inUl = false; }
+                if (inOl) { result.push('</ol>'); inOl = false; }
+                result.push(line);
+            }
+        }
+        if (inUl) result.push('</ul>');
+        if (inOl) result.push('</ol>');
+
+        s = result.join('\n');
+
+        // Paragraphs: double newline
+        s = s.replace(/\n\n/g, '</p><p>');
+        // Single newlines to <br>
+        s = s.replace(/\n/g, '<br>');
+
+        return s;
+    }
+
+    // --- Clear chat ---
+    function clearChat() {
+        history = [];
+        sessionStorage.removeItem('chatbot_history');
+        sessionStorage.removeItem('chatbot_pending_task');
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        isWaiting = false;
+        sendBtn.disabled = false;
+        messagesDiv.innerHTML = '<div class="chat-msg bot">' + WELCOME_MSG + '</div>';
+        loadSuggestions();
+    }
+
+    // --- Trim visible messages ---
+    function trimMessages() {
+        var msgs = messagesDiv.querySelectorAll('.chat-msg');
+        while (msgs.length > MAX_MESSAGES) {
+            msgs[0].remove();
+            msgs = messagesDiv.querySelectorAll('.chat-msg');
+        }
+    }
+
+    // --- Restore history from sessionStorage ---
     try {
         var saved = sessionStorage.getItem('chatbot_history');
         if (saved) {
             history = JSON.parse(saved);
-            history.forEach(function(msg) {
+            // Only restore last MAX_MESSAGES
+            var toRestore = history.slice(-MAX_MESSAGES);
+            toRestore.forEach(function(msg) {
                 appendMessage(msg.role === 'user' ? 'user' : 'bot', msg.content, msg.html, msg.download_url, true);
             });
         }
-        // Restore waiting state
-        if (sessionStorage.getItem('chatbot_waiting') === 'true') {
-            isWaiting = false; // Reset - the old request is gone after page reload
-            sessionStorage.removeItem('chatbot_waiting');
-        }
     } catch(e) {}
 
-    // Check if chatbot is enabled
+    // --- Check if chatbot is enabled + login token ---
     secureFetch('/api/chatbot/status')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.habilitado) {
                 toggle.style.display = 'flex';
                 loadSuggestions();
+
+                // Check login token - clear chat on new login session
+                if (data.login_token) {
+                    var storedToken = sessionStorage.getItem('chatbot_login_token');
+                    if (storedToken && storedToken !== data.login_token) {
+                        clearChat();
+                    }
+                    sessionStorage.setItem('chatbot_login_token', data.login_token);
+                }
+
+                // Resume polling if there was a pending task
+                var pendingTask = sessionStorage.getItem('chatbot_pending_task');
+                if (pendingTask) {
+                    isWaiting = true;
+                    sendBtn.disabled = true;
+                    showTyping();
+                    startPolling(pendingTask);
+                }
             }
         })
         .catch(function() {});
@@ -325,15 +449,17 @@
         if (panel.classList.contains('open')) {
             input.focus();
             scrollToBottom();
-            // Clear unread badge
             unreadCount = 0;
             badge.style.display = 'none';
         }
     });
 
-    // Only close panel, never interrupt requests
     closeBtn.addEventListener('click', function() {
         panel.classList.remove('open');
+    });
+
+    clearBtn.addEventListener('click', function() {
+        clearChat();
     });
 
     input.addEventListener('keydown', function(e) {
@@ -356,64 +482,104 @@
 
         isWaiting = true;
         sendBtn.disabled = true;
-
-        // Show typing indicator
-        var typing = document.createElement('div');
-        typing.className = 'chat-typing';
-        typing.id = 'chatbot-typing';
-        typing.innerHTML = '<div class="dots"><span>.</span><span>.</span><span>.</span></div>';
-        messagesDiv.appendChild(typing);
-        scrollToBottom();
+        showTyping();
 
         secureFetch('/api/chatbot/message', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 text: text,
-                history: history.slice(-20)
+                history: history.slice(-MAX_HISTORY_CONTEXT)
             })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            removeTyping();
-            if (data.error) {
-                appendMessage('bot', data.error);
-                history.push({role: 'assistant', content: data.error});
+            if (data.task_id) {
+                // Background task - start polling
+                sessionStorage.setItem('chatbot_pending_task', data.task_id);
+                startPolling(data.task_id);
             } else {
-                appendMessage('bot', data.text, data.html, data.download_url);
-                history.push({
-                    role: 'assistant',
-                    content: data.text,
-                    html: data.html,
-                    download_url: data.download_url
-                });
-            }
-            saveHistory();
-
-            // Show badge if panel is closed
-            if (!panel.classList.contains('open')) {
-                unreadCount++;
-                badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
-                badge.style.display = 'flex';
+                // Immediate response
+                removeTyping();
+                handleResponse(data);
+                isWaiting = false;
+                sendBtn.disabled = false;
             }
         })
         .catch(function(err) {
             removeTyping();
             appendMessage('bot', 'Error de conexión. Intenta de nuevo.');
-        })
-        .finally(function() {
             isWaiting = false;
             sendBtn.disabled = false;
         });
+    }
+
+    function handleResponse(data) {
+        if (data.error) {
+            appendMessage('bot', data.error);
+            history.push({role: 'assistant', content: data.error});
+        } else {
+            appendMessage('bot', data.text, data.html, data.download_url);
+            history.push({
+                role: 'assistant',
+                content: data.text,
+                html: data.html,
+                download_url: data.download_url
+            });
+        }
+        saveHistory();
+        trimMessages();
+
+        if (!panel.classList.contains('open')) {
+            unreadCount++;
+            badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+            badge.style.display = 'flex';
+        }
+    }
+
+    function startPolling(taskId) {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(function() {
+            secureFetch('/api/chatbot/task/' + taskId)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.status === 'complete' || data.status === 'error') {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                        sessionStorage.removeItem('chatbot_pending_task');
+                        removeTyping();
+                        handleResponse(data);
+                        isWaiting = false;
+                        sendBtn.disabled = false;
+                    }
+                    // If still pending, keep polling
+                })
+                .catch(function() {
+                    // Network error - keep polling, might recover
+                });
+        }, POLL_INTERVAL);
+    }
+
+    function showTyping() {
+        if (document.getElementById('chatbot-typing')) return;
+        var typing = document.createElement('div');
+        typing.className = 'chat-typing';
+        typing.id = 'chatbot-typing';
+        typing.innerHTML = '<div class="dots"><span>.</span><span>.</span><span>.</span></div>';
+        messagesDiv.appendChild(typing);
+        scrollToBottom();
     }
 
     function appendMessage(type, text, html, downloadUrl, isRestore) {
         var div = document.createElement('div');
         div.className = 'chat-msg ' + type;
 
-        // Escape HTML in text but preserve line breaks
-        var safeText = text ? text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '';
-        div.innerHTML = safeText;
+        if (type === 'bot') {
+            div.innerHTML = formatMarkdown(text);
+        } else {
+            var safeText = text ? text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '';
+            div.innerHTML = safeText;
+        }
 
         if (html) {
             var htmlDiv = document.createElement('div');
@@ -449,8 +615,8 @@
 
     function saveHistory() {
         try {
-            // Keep only last 40 messages
-            var toSave = history.slice(-40);
+            var toSave = history.slice(-MAX_MESSAGES);
+            history = toSave;
             sessionStorage.setItem('chatbot_history', JSON.stringify(toSave));
         } catch(e) {}
     }

@@ -217,17 +217,36 @@ TOOLS = {
     },
     'export_my_schedule': {
         'name': 'export_my_schedule',
-        'description': 'Exporta el horario propio del profesor autenticado en Excel o PDF.',
+        'description': 'Exporta el horario propio del profesor autenticado en Excel, PDF o CSV.',
         'parameters': {
             'type': 'object',
             'properties': {
                 'formato': {
                     'type': 'string',
                     'description': 'Formato de exportación',
-                    'enum': ['excel', 'pdf']
+                    'enum': ['excel', 'pdf', 'csv']
                 }
             },
             'required': ['formato']
+        }
+    },
+    'export_schedule_csv': {
+        'name': 'export_schedule_csv',
+        'description': 'Exporta el horario de un grupo o profesor en formato CSV para descarga.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'tipo': {
+                    'type': 'string',
+                    'description': 'Tipo de horario a exportar',
+                    'enum': ['grupo', 'profesor']
+                },
+                'identificador': {
+                    'type': 'string',
+                    'description': 'Código del grupo (ej: 10MSC1) o nombre del profesor'
+                }
+            },
+            'required': ['tipo', 'identificador']
         }
     },
     'check_generation_progress': {
@@ -349,14 +368,19 @@ ROLE_TOOLS = {
         'get_stats', 'create_backup', 'generate_schedules',
         'check_generation_progress',
         'create_career', 'list_careers', 'create_subject',
-        'export_schedule_excel', 'export_schedule_pdf',
+        'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
     ],
     'jefe_carrera': [
         'get_schedule_group', 'get_schedule_professor',
         'list_groups', 'list_professors', 'list_subjects',
         'get_stats', 'generate_schedules', 'check_generation_progress',
         'list_careers',
-        'export_schedule_excel', 'export_schedule_pdf',
+        'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
+    ],
+    'recursos_humanos': [
+        'list_users', 'list_professors', 'list_careers',
+        'get_stats', 'get_schedule_group', 'get_schedule_professor',
+        'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
     ],
     'profesor_completo': [
         'get_my_schedule', 'set_availability',
@@ -390,7 +414,13 @@ Reglas:
 - Cuando necesites información del sistema, usa las herramientas disponibles.
 - Si el usuario pide algo que requiere datos del sistema, usa la herramienta adecuada en vez de inventar datos.
 - Para acciones de escritura (crear usuario, carrera, materia), pide TODOS los campos requeridos antes de ejecutar.
-- Puedes ofrecer descargas en Excel/PDF cuando el usuario consulte horarios.""",
+- Puedes ofrecer descargas en Excel, PDF o CSV cuando el usuario consulte horarios.
+
+IMPORTANTE - RESTRICCIÓN ESTRICTA:
+- SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
+- Si el usuario hace preguntas no relacionadas (chistes, clima, matemáticas, cultura general, programación, etc.), responde amablemente: "Solo puedo ayudarte con temas relacionados al sistema de gestión de horarios. ¿En qué puedo ayudarte?"
+- NO generes código, NO cuentes chistes, NO respondas preguntas de conocimiento general.
+- Tu único dominio es: horarios, grupos, profesores, materias, carreras, usuarios del sistema, exportaciones, generación de horarios y configuración del sistema.""",
 
     'jefe_carrera': """Eres el asistente del Gestor de Horarios. El usuario es un Jefe de Carrera.
 
@@ -406,7 +436,13 @@ Reglas:
 - Solo puedes consultar y operar sobre los grupos, profesores y horarios de las carreras que tienes asignadas.
 - Responde siempre en español. Sé conciso y directo.
 - Si pide algo fuera de sus carreras, indícale que no tiene permisos para ello.
-- Puedes ofrecer descargas en Excel/PDF cuando consulte horarios.""",
+- Puedes ofrecer descargas en Excel, PDF o CSV cuando consulte horarios.
+
+IMPORTANTE - RESTRICCIÓN ESTRICTA:
+- SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
+- Si el usuario hace preguntas no relacionadas (chistes, clima, matemáticas, cultura general, programación, etc.), responde amablemente: "Solo puedo ayudarte con temas relacionados al sistema de gestión de horarios. ¿En qué puedo ayudarte?"
+- NO generes código, NO cuentes chistes, NO respondas preguntas de conocimiento general.
+- Tu único dominio es: horarios, grupos, profesores, materias, carreras, usuarios del sistema, exportaciones, generación de horarios y configuración del sistema.""",
 
     'profesor_completo': """Eres el asistente del Gestor de Horarios. El usuario es un Profesor de Tiempo Completo.
 
@@ -419,20 +455,52 @@ Tus capacidades incluyen:
 Reglas:
 - Responde siempre en español. Sé conciso y directo.
 - No puedes acceder a horarios de otros profesores ni realizar acciones administrativas.
-- Ofrece la opción de descargar el horario en Excel o PDF cuando lo consulte.""",
+- Ofrece la opción de descargar el horario en Excel, PDF o CSV cuando lo consulte.
+
+IMPORTANTE - RESTRICCIÓN ESTRICTA:
+- SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
+- Si el usuario hace preguntas no relacionadas (chistes, clima, matemáticas, cultura general, programación, etc.), responde amablemente: "Solo puedo ayudarte con temas relacionados al sistema de gestión de horarios. ¿En qué puedo ayudarte?"
+- NO generes código, NO cuentes chistes, NO respondas preguntas de conocimiento general.
+- Tu único dominio es: horarios, grupos, profesores, materias, carreras, usuarios del sistema, exportaciones, generación de horarios y configuración del sistema.""",
 
     'profesor_asignatura': """Eres el asistente del Gestor de Horarios. El usuario es un Profesor por Asignatura.
 
 Tus capacidades incluyen:
 - Ver tu propio horario
-- Descargar tu horario en Excel o PDF (formato FDA oficial)
+- Descargar tu horario en Excel, PDF o CSV
 - Configurar tu disponibilidad por día y horario
 - Ver tus materias y grupos asignados
 
 Reglas:
 - Responde siempre en español. Sé conciso y directo.
 - No puedes acceder a horarios de otros profesores ni realizar acciones administrativas.
-- Ofrece la opción de descargar el horario en Excel o PDF cuando lo consulte.""",
+- Ofrece la opción de descargar el horario en Excel, PDF o CSV cuando lo consulte.
+
+IMPORTANTE - RESTRICCIÓN ESTRICTA:
+- SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
+- Si el usuario hace preguntas no relacionadas (chistes, clima, matemáticas, cultura general, programación, etc.), responde amablemente: "Solo puedo ayudarte con temas relacionados al sistema de gestión de horarios. ¿En qué puedo ayudarte?"
+- NO generes código, NO cuentes chistes, NO respondas preguntas de conocimiento general.
+- Tu único dominio es: horarios, grupos, profesores, materias, carreras, usuarios del sistema, exportaciones, generación de horarios y configuración del sistema.""",
+
+    'recursos_humanos': """Eres el asistente del Gestor de Horarios. El usuario es de Recursos Humanos con acceso de consulta.
+
+Tus capacidades incluyen:
+- Listar y consultar usuarios del sistema
+- Listar profesores y carreras
+- Consultar horarios de grupos y profesores
+- Exportar horarios en Excel, PDF y CSV
+- Ver estadísticas del sistema
+
+Reglas:
+- Responde siempre en español. Sé conciso y directo.
+- NO puedes crear, editar ni eliminar usuarios ni ningún otro dato. Tu acceso es de solo lectura.
+- Cuando necesites información del sistema, usa las herramientas disponibles.
+
+IMPORTANTE - RESTRICCIÓN ESTRICTA:
+- SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
+- Si el usuario hace preguntas no relacionadas (chistes, clima, matemáticas, cultura general, programación, etc.), responde amablemente: "Solo puedo ayudarte con temas relacionados al sistema de gestión de horarios. ¿En qué puedo ayudarte?"
+- NO generes código, NO cuentes chistes, NO respondas preguntas de conocimiento general.
+- Tu único dominio es: horarios, grupos, profesores, materias, carreras, usuarios del sistema, exportaciones, generación de horarios y configuración del sistema.""",
 }
 
 # Quick suggestion chips per role
@@ -444,6 +512,10 @@ SUGGESTION_CHIPS = {
     'jefe_carrera': [
         'Grupos de mi carrera', 'Generar horarios',
         'Profesores de mi carrera', 'Estadísticas',
+    ],
+    'recursos_humanos': [
+        'Listar usuarios', 'Listar profesores', 'Estadísticas',
+        'Listar carreras', 'Exportar horario CSV',
     ],
     'profesor_completo': [
         'Mi horario', 'Mis materias', 'Mis grupos',

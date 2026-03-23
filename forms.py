@@ -92,16 +92,17 @@ class RegistrationForm(FlaskForm):
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
         ('jefe_carrera', 'Jefe de Carrera'),
-        ('profesor', 'Profesor')
+        ('profesor', 'Profesor'),
+        ('recursos_humanos', 'Recursos Humanos')
     ], validators=[DataRequired(message='Debe seleccionar un rol')])
     
     tipo_profesor = SelectField('Tipo de Profesor', choices=[
         ('', 'Seleccione tipo de profesor'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
-    ])
-    
-    carrera = SelectMultipleField('Carrera', validators=[Optional()])
+    ], validate_choice=False)
+
+    carrera = SelectMultipleField('Carrera', validators=[Optional()], validate_choice=False)
     
     otra_carrera = BooleanField('¿Estás inscrito en otra carrera además de la que seleccionaste?', validators=[Optional()])
     
@@ -734,6 +735,7 @@ class AgregarUsuarioForm(FlaskForm):
     # Usamos Optional() porque los checkboxes en el HTML no se procesan igual que un select multiple
     roles_seleccionados = SelectMultipleField('Roles', choices=[
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -743,6 +745,7 @@ class AgregarUsuarioForm(FlaskForm):
     rol = SelectField('Rol Principal', choices=[
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor', 'Profesor'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
@@ -884,6 +887,7 @@ class EditarUsuarioForm(FlaskForm):
     rol = SelectField('Rol', choices=[
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -893,6 +897,7 @@ class EditarUsuarioForm(FlaskForm):
     # Usamos Optional porque en el formulario de jefe de carrera no se incluye este campo
     roles_seleccionados = SelectMultipleField('Roles', choices=[
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -908,6 +913,8 @@ class EditarUsuarioForm(FlaskForm):
     carreras = SelectMultipleField('Carreras', coerce=int, validators=[Optional()])
 
     activo = BooleanField('Usuario Activo')
+
+    nueva_password = PasswordField('Nueva Contraseña (opcional)', validators=[Optional()])
 
     submit = SubmitField('Actualizar Usuario')
 

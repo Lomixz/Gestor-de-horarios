@@ -18,10 +18,21 @@
                     <i class="fas fa-arrow-left me-1"></i>
                     Volver al Dashboard
                 </a>
-                <a href="{{ url_for('agregar_usuario') }}" class="btn btn-primary">
-                    <i class="fas fa-user-plus me-1"></i>
-                    Agregar Usuario
-                </a>
+                {% if solo_lectura %}
+                    <a href="{{ url_for('exportar_usuarios_csv') }}" class="btn btn-outline-success">
+                        <i class="fas fa-file-csv me-1"></i>
+                        Exportar CSV
+                    </a>
+                    <a href="{{ url_for('exportar_usuarios_pdf') }}" class="btn btn-outline-danger">
+                        <i class="fas fa-file-pdf me-1"></i>
+                        Exportar PDF
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('agregar_usuario') }}" class="btn btn-primary">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Agregar Usuario
+                    </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -212,20 +223,23 @@
                                             <span class="badge badge-nowrap bg-danger">Inactivo</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-center admin-col-date">{{ usuario.fecha_registro.strftime('%d/%m/%Y') }}</td>
+                                    <td class="text-center admin-col-date">{{ usuario.fecha_registro.strftime('%d/%m/%Y') if usuario.fecha_registro else 'N/A' }}</td>
                                     <td class="text-center admin-users-actions">
+                                        {% if solo_lectura %}
+                                            <span class="text-muted small"><i class="fas fa-eye me-1"></i>Solo lectura</span>
+                                        {% else %}
                                         <div class="btn-group" role="group">
-                                            <a href="{{ url_for('editar_usuario', id=usuario.id) }}" 
-                                               class="btn btn-sm btn-outline-primary" 
-                                               data-bs-toggle="tooltip" 
-                                               data-bs-placement="top" 
+                                            <a href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                                               class="btn btn-sm btn-outline-primary"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
                                                title="Editar Usuario">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="{{ url_for('cambiar_password_usuario', id=usuario.id) }}" 
-                                               class="btn btn-sm btn-outline-secondary" 
-                                               data-bs-toggle="tooltip" 
-                                               data-bs-placement="top" 
+                                            <a href="{{ url_for('cambiar_password_usuario', id=usuario.id) }}"
+                                               class="btn btn-sm btn-outline-secondary"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
                                                title="Cambiar Contraseña">
                                                 <i class="fas fa-key"></i>
                                             </a>
@@ -249,15 +263,16 @@
                                                 </button>
                                             {% endif %}
                                             {% if usuario.id != current_user.id %}
-                                                <a href="{{ url_for('eliminar_usuario', id=usuario.id) }}" 
-                                                   class="btn btn-sm btn-outline-danger" 
-                                                   data-bs-toggle="tooltip" 
-                                                   data-bs-placement="top" 
+                                                <a href="{{ url_for('eliminar_usuario', id=usuario.id) }}"
+                                                   class="btn btn-sm btn-outline-danger"
+                                                   data-bs-toggle="tooltip"
+                                                   data-bs-placement="top"
                                                    title="Eliminar Usuario">
                                                     <i class="fas fa-trash"></i>
                                                 </a>
                                             {% endif %}
                                         </div>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
