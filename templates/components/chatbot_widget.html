@@ -150,16 +150,25 @@
 
 .chat-msg .msg-html {
     margin-top: 8px;
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
 }
 
 .chat-msg .msg-html table {
-    font-size: 11px;
+    font-size: 10px;
     margin: 0;
+    width: max-content;
+    min-width: 100%;
 }
 
 .chat-msg .msg-html table th,
 .chat-msg .msg-html table td {
-    padding: 3px 6px;
+    padding: 2px 5px;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .chat-msg .download-btn {

@@ -471,21 +471,54 @@ def rh_exportar_pdf():
     if not current_user.is_recursos_humanos() and not current_user.is_admin():
         abort(403)
 
+    import os
+
     usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=30, bottomMargin=30)
+    page_w, page_h = landscape(letter)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=30, rightMargin=30)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 14)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Reporte de Usuarios Dados de Baja')
+        canvas_obj.setFont('Helvetica', 9)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 48, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
     styles = getSampleStyleSheet()
-    styleN = styles['BodyText']
-    styleN.fontSize = 7
-    styleN.leading = 9
+    styleN = ParagraphStyle('CellStyle', parent=styles['BodyText'], fontSize=7, leading=9)
 
     elements = []
-    elements.append(Paragraph("Reporte de Usuarios Dados de Baja", styles['Title']))
-    elements.append(Paragraph(f"Fecha de generación: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
-    elements.append(Paragraph("<br/>", styles['Normal']))
 
-    data = [['Username', 'Nombre', 'Apellido', 'Email', 'Rol', 'Carreras', 'Materias', 'Fecha Registro']]
+    data = [['Username', 'Nombre', 'Apellido', 'Email', 'Rol', 'Carreras', 'Materias', 'Fecha']]
     for u in usuarios:
         carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
         materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
@@ -505,8 +538,10 @@ def rh_exportar_pdf():
     if len(data) == 1:
         elements.append(Paragraph("No hay usuarios dados de baja.", styles['Normal']))
     else:
-        col_widths = [0.9*inch, 0.9*inch, 0.9*inch, 1.3*inch, 1.0*inch, 1.5*inch, 2.0*inch, 0.8*inch]
-        table = Table(data, hAlign='CENTER', colWidths=col_widths)
+        # Use available width to distribute columns proportionally
+        avail_w = page_w - 60  # 30 left + 30 right margins
+        col_widths = [avail_w*0.09, avail_w*0.10, avail_w*0.10, avail_w*0.16, avail_w*0.11, avail_w*0.18, avail_w*0.18, avail_w*0.08]
+        table = Table(data, hAlign='CENTER', colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3c72')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -518,7 +553,7 @@ def rh_exportar_pdf():
         ]))
         elements.append(table)
 
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True,
                     download_name='usuarios_dados_de_baja.pdf',
@@ -4684,35 +4719,71 @@ def exportar_usuarios_pdf():
     if not current_user.is_admin() and not current_user.is_recursos_humanos():
         abort(403)
 
+    import os
+
     usuarios = User.query.filter_by(activo=True).order_by(User.nombre, User.apellido).all()
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), rightMargin=20, leftMargin=20, topMargin=30, bottomMargin=20)
-    styles = getSampleStyleSheet()
-    elements = []
+    page_w, page_h = landscape(letter)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=30, rightMargin=30)
 
-    elements.append(Paragraph('Lista de Usuarios del Sistema', styles['Title']))
-    elements.append(Paragraph(f'Generado: {datetime.now().strftime("%d/%m/%Y %H:%M")}', styles['Normal']))
-    elements.append(Spacer(1, 12))
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 14)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Lista de Usuarios del Sistema')
+        canvas_obj.setFont('Helvetica', 9)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 48, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
+    styles = getSampleStyleSheet()
+    styleN = ParagraphStyle('CellStyle', parent=styles['BodyText'], fontSize=8, leading=10)
+    elements = []
 
     data = [['Usuario', 'Nombre Completo', 'Email', 'Rol', 'Teléfono', 'Estado']]
     for u in usuarios:
         data.append([
-            u.username,
-            u.get_nombre_completo(),
-            u.email,
-            u.get_rol_display(),
-            u.telefono or '',
-            'Activo' if u.activo else 'Inactivo'
+            Paragraph(u.username, styleN),
+            Paragraph(u.get_nombre_completo(), styleN),
+            Paragraph(u.email or '', styleN),
+            Paragraph(u.get_rol_display(), styleN),
+            Paragraph(u.telefono or '', styleN),
+            Paragraph('Activo' if u.activo else 'Inactivo', styleN)
         ])
 
-    table = Table(data, repeatRows=1)
+    avail_w = page_w - 60
+    col_widths = [avail_w*0.12, avail_w*0.22, avail_w*0.25, avail_w*0.18, avail_w*0.13, avail_w*0.10]
+    table = Table(data, repeatRows=1, colWidths=col_widths)
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#343a40')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3c72')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -4720,7 +4791,7 @@ def exportar_usuarios_pdf():
         ('PADDING', (0, 0), (-1, -1), 4),
     ]))
     elements.append(table)
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
 
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name='usuarios_sistema.pdf', mimetype='application/pdf')
@@ -6219,31 +6290,49 @@ def exportar_reportes_pdf():
         ])
 
     # Crear PDF
+    import os
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    page_w, page_h = A4
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=40, rightMargin=40)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 13)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Reporte del Sistema Académico')
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 46, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
     elements = []
 
     # Estilos
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=30,
-        alignment=1  # Centrado
-    )
-
-    # Título
-    title = Paragraph("Reporte del Sistema Académico", title_style)
-    elements.append(title)
-    elements.append(Spacer(1, 12))
-
-    # Fecha de generación
-    from datetime import datetime
-    fecha_style = ParagraphStyle('Fecha', parent=styles['Normal'], fontSize=10, alignment=2)
-    fecha = Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", fecha_style)
-    elements.append(fecha)
-    elements.append(Spacer(1, 20))
 
     # Estadísticas Generales
     elements.append(Paragraph("Estadísticas Generales", styles['Heading2']))
@@ -6298,7 +6387,7 @@ def exportar_reportes_pdf():
         elements.append(Paragraph("No hay datos de carreras disponibles.", styles['Normal']))
 
     # Generar PDF
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
 
     buffer.seek(0)
     return send_file(

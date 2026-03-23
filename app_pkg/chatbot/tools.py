@@ -142,6 +142,20 @@ TOOLS = {
             'required': ['version_nombre']
         }
     },
+    'get_professor_availability': {
+        'name': 'get_professor_availability',
+        'description': 'Consulta la disponibilidad de un profesor: muestra tanto la disponibilidad configurada como las horas libres reales (sin clase asignada).',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'nombre_profesor': {
+                    'type': 'string',
+                    'description': 'Nombre completo o parcial del profesor'
+                }
+            },
+            'required': ['nombre_profesor']
+        }
+    },
     'set_availability': {
         'name': 'set_availability',
         'description': 'Configura la disponibilidad del profesor para un día y turno específicos.',
@@ -363,6 +377,7 @@ TOOLS = {
 ROLE_TOOLS = {
     'admin': [
         'get_schedule_group', 'get_schedule_professor',
+        'get_professor_availability',
         'list_groups', 'list_professors', 'list_subjects',
         'add_user', 'edit_user', 'delete_user', 'list_users',
         'get_stats', 'create_backup', 'generate_schedules',
@@ -372,6 +387,7 @@ ROLE_TOOLS = {
     ],
     'jefe_carrera': [
         'get_schedule_group', 'get_schedule_professor',
+        'get_professor_availability',
         'list_groups', 'list_professors', 'list_subjects',
         'get_stats', 'generate_schedules', 'check_generation_progress',
         'list_careers',
@@ -400,6 +416,7 @@ SYSTEM_PROMPTS = {
 
 Tus capacidades incluyen:
 - Consultar horarios de cualquier grupo o profesor
+- Consultar disponibilidad y horas libres de un profesor
 - Listar grupos, profesores y materias
 - Crear, editar y desactivar usuarios (pide TODOS los campos obligatorios antes de ejecutar: username, password, nombre, apellido, email, rol; para profesores/jefe también las carreras)
 - Crear carreras y materias
@@ -426,6 +443,7 @@ IMPORTANTE - RESTRICCIÓN ESTRICTA:
 
 Tus capacidades incluyen:
 - Consultar horarios de grupos y profesores de tus carreras
+- Consultar disponibilidad y horas libres de profesores de tus carreras
 - Listar grupos, profesores y materias de tus carreras
 - Generar horarios y consultar progreso de generación
 - Listar carreras

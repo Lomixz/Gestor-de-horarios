@@ -1104,47 +1104,58 @@ class GeneradorHorariosMejorado:
                             profesor_dia_horarios[key][idx].append(var)
 
         # Para cada (profesor, día), crear restricción de huecos
+        # Garantiza: entre cualquier par de clases, máximo 2 slots vacíos.
+        # Corrige el bug original que no contaba slots sin variables (siempre vacíos).
         for (profesor_id, dia_idx), horarios_dict in profesor_dia_horarios.items():
             if len(horarios_dict) < 2:
                 continue
 
             indices = sorted(horarios_dict.keys())
-            n_slots = len(indices)
 
-            # Variables: para cada slot, si el profesor tiene al menos una clase
-            slot_ocupado = []
+            # Crear variable auxiliar para cada slot: 1 si tiene al menos una clase
+            slot_ocupado = {}
             for idx in indices:
                 vars_en_slot = horarios_dict[idx]
-                # Crear variable auxiliar: 1 si hay al menos una clase en este slot
                 ocupado = self.model.NewBoolVar(f'ocup_p{profesor_id}_d{dia_idx}_h{idx}')
-                # ocupado = 1 si sum(vars_en_slot) >= 1
                 self.model.Add(sum(vars_en_slot) >= 1).OnlyEnforceIf(ocupado)
                 self.model.Add(sum(vars_en_slot) == 0).OnlyEnforceIf(ocupado.Not())
-                slot_ocupado.append((idx, ocupado))
+                slot_ocupado[idx] = ocupado
 
-            # Restricción: entre la primera y última clase, máximo 2 huecos
-            # Usamos una aproximación: para cada par de slots ocupados (i, j),
-            # los slots intermedios que NO estén ocupados no pueden ser más de 2
-            for i in range(len(slot_ocupado)):
-                for j in range(i + 1, len(slot_ocupado)):
-                    idx_i, var_i = slot_ocupado[i]
-                    idx_j, var_j = slot_ocupado[j]
+            ordered_indices = sorted(slot_ocupado.keys())
 
-                    # Slots entre i y j
-                    slots_entre = [s for s in slot_ocupado if idx_i < s[0] < idx_j]
+            # Para cada par (i, j) de slots donde el profesor PUEDE tener clase:
+            # Si ambos están ocupados, los huecos entre ellos deben ser <= 2.
+            # Los huecos incluyen tanto slots con variables vacías como slots sin
+            # variables (donde no puede haber clase → siempre vacíos).
+            for i_pos in range(len(ordered_indices)):
+                for j_pos in range(i_pos + 1, len(ordered_indices)):
+                    idx_i = ordered_indices[i_pos]
+                    idx_j = ordered_indices[j_pos]
 
-                    if len(slots_entre) > 2:
-                        # Si hay más de 2 slots intermedios, al menos (len-2) deben estar ocupados
-                        # para que no haya más de 2 huecos
-                        vars_intermedios = [s[1] for s in slots_entre]
-                        min_ocupados = len(slots_entre) - 2
+                    # Total de slots intermedios en el rango real (incluyendo sin variables)
+                    total_intermedios = idx_j - idx_i - 1
 
-                        # Si ambos extremos están ocupados, los intermedios deben cumplir
-                        # var_i + var_j + (min_ocupados - sum(intermedios)) <= 2 + len(intermedios)
-                        # Simplificado: si var_i=1 y var_j=1, sum(intermedios) >= min_ocupados
+                    if total_intermedios <= 2:
+                        continue  # Máximo 2 huecos posibles, restricción siempre cumplida
+
+                    # Slots intermedios CON variables (podrían estar ocupados)
+                    intermedios_con_var = [
+                        slot_ocupado[idx] for idx in ordered_indices
+                        if idx_i < idx < idx_j
+                    ]
+                    # Slots intermedios SIN variables = siempre vacíos (huecos fijos)
+                    huecos_fijos = total_intermedios - len(intermedios_con_var)
+
+                    # Restricción: huecos_fijos + intermedios_vacios <= 2
+                    # => intermedios_vacios <= 2 - huecos_fijos
+                    # => len(intermedios_con_var) - sum(intermedios_con_var) <= 2 - huecos_fijos
+                    # => sum(intermedios_con_var) >= len(intermedios_con_var) - 2 + huecos_fijos
+                    min_ocupados = len(intermedios_con_var) - 2 + huecos_fijos
+
+                    if min_ocupados > 0 and intermedios_con_var:
                         self.model.Add(
-                            sum(vars_intermedios) >= min_ocupados
-                        ).OnlyEnforceIf([var_i, var_j])
+                            sum(intermedios_con_var) >= min_ocupados
+                        ).OnlyEnforceIf([slot_ocupado[idx_i], slot_ocupado[idx_j]])
 
     def agregar_funcion_objetivo(self):
         """Función objetivo para equilibrar horarios"""

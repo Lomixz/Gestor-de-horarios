@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import io
 import random
@@ -258,21 +259,52 @@ def generar_pdf_profesores(carrera_id=None, incluir_contacto=True):
     
     # Crear buffer para el PDF
     buffer = io.BytesIO()
-    
-    # Configurar documento
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
-    
+
+    page_w, page_h = A4
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=40, rightMargin=40)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    if carrera_id:
+        carrera = Carrera.query.get(carrera_id)
+        titulo = f"Lista de Profesores - {carrera.nombre if carrera else 'Carrera'}"
+    else:
+        titulo = "Lista de Profesores - Todas las Carreras"
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 13)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, titulo)
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 46, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
     # Estilos
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=30,
-        alignment=1,  # Centrado
-        textColor=colors.darkblue
-    )
-    
+
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading2'],
@@ -280,24 +312,9 @@ def generar_pdf_profesores(carrera_id=None, incluir_contacto=True):
         spaceAfter=12,
         textColor=colors.darkblue
     )
-    
+
     # Contenido del PDF
     elements = []
-    
-    # Título
-    if carrera_id:
-        carrera = Carrera.query.get(carrera_id)
-        titulo = f"Lista de Profesores - {carrera.nombre if carrera else 'Carrera'}"
-    else:
-        titulo = "Lista de Profesores - Todas las Carreras"
-    
-    elements.append(Paragraph(titulo, title_style))
-    elements.append(Spacer(1, 12))
-    
-    # Información del reporte
-    fecha_reporte = datetime.now().strftime('%d/%m/%Y %H:%M')
-    elements.append(Paragraph(f"Fecha de generación: {fecha_reporte}", styles['Normal']))
-    elements.append(Spacer(1, 20))
     
     # Obtener profesores
     query = User.query.filter(
@@ -358,10 +375,10 @@ def generar_pdf_profesores(carrera_id=None, incluir_contacto=True):
     elements.append(Paragraph("Sistema de Gestión Académica", styles['Normal']))
     
     # Generar PDF
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
     pdf = buffer.getvalue()
     buffer.close()
-    
+
     return pdf
 
 def crear_tabla_profesores(profesores, incluir_contacto):

@@ -5,6 +5,7 @@ import logging
 import secrets
 import string
 import threading
+from collections import defaultdict
 from io import BytesIO, StringIO
 from datetime import datetime
 
@@ -41,6 +42,7 @@ def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
         'create_backup': _create_backup,
         'generate_schedules': _generate_schedules,
         'set_availability': _set_availability,
+        'get_professor_availability': _get_professor_availability,
         'get_my_subjects': _get_my_subjects,
         'get_my_groups': _get_my_groups,
         # New handlers
@@ -808,6 +810,132 @@ def _set_availability(args, user):
 
     estado = 'disponible' if disponible else 'no disponible'
     return _result(f'Disponibilidad actualizada: {dia.capitalize()} {horario.nombre} → {estado}')
+
+
+def _get_professor_availability(args, user):
+    """Query professor availability (configured + real free hours).
+
+    Uses the same approach as the admin view (hora_inicio.hour as grid key)
+    to ensure data matches exactly.
+    """
+    nombre = args.get('nombre_profesor', '').strip()
+    if not nombre:
+        return _result('Se requiere el nombre del profesor.')
+
+    # Search professor (reuse same logic as _get_schedule_professor)
+    profesores = User.query.filter(
+        (User.nombre.ilike(f'%{nombre}%')) | (User.apellido.ilike(f'%{nombre}%')) |
+        db.func.concat(User.nombre, ' ', User.apellido).ilike(f'%{nombre}%')
+    ).filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).all()
+
+    if not profesores:
+        return _result(f'No se encontró ningún profesor con el nombre "{nombre}".')
+
+    if len(profesores) > 1:
+        lista = '\n'.join([f"- {p.get_nombre_completo()}" for p in profesores[:10]])
+        return _result(f'Se encontraron varios profesores. Por favor sé más específico:\n{lista}')
+
+    profesor = profesores[0]
+
+    # Permission check for jefe_carrera
+    if user.is_jefe_carrera():
+        carrera_ids = user.get_carreras_jefe_ids()
+        prof_carreras = [c.id for c in profesor.carreras]
+        if not any(c in carrera_ids for c in prof_carreras):
+            return _result('No tienes permisos para ver la disponibilidad de este profesor.')
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+    dias_display = {'lunes': 'Lun', 'martes': 'Mar', 'miercoles': 'Mié', 'jueves': 'Jue', 'viernes': 'Vie'}
+
+    # Get actual time slots from the Gestión de Horarios module (not a fixed range)
+    horarios_sistema = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
+    if not horarios_sistema:
+        return _result('No hay horarios configurados en el sistema.')
+
+    # Build unique time slots sorted by hora_inicio, merging matutino/vespertino
+    # Each slot maps to the list of Horario IDs that share that time
+    slots_unicos = {}  # key: (hora_inicio, hora_fin) -> [horario_id, ...]
+    for h in horarios_sistema:
+        slot_key = (h.hora_inicio, h.hora_fin)
+        if slot_key not in slots_unicos:
+            slots_unicos[slot_key] = []
+        slots_unicos[slot_key].append(h.id)
+    # Sort by hora_inicio
+    slots_ordenados = sorted(slots_unicos.items(), key=lambda x: x[0][0])
+
+    # Build class map keyed by (horario_id, dia)
+    clases = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
+    clases_por_hid = {}  # key: (horario_id, dia) -> "materia (grupo)"
+    for c in clases:
+        if c.horario and c.materia:
+            clases_por_hid[(c.horario_id, c.dia_semana.lower())] = f'{c.materia.nombre} ({c.grupo})'
+
+    # Build availability map keyed by (horario_id, dia)
+    disponibilidades = DisponibilidadProfesor.query.filter_by(
+        profesor_id=profesor.id, activo=True
+    ).all()
+    disp_por_hid = {}  # key: (horario_id, dia) -> bool
+    for d in disponibilidades:
+        disp_por_hid[(d.horario_id, d.dia_semana.lower())] = d.disponible
+
+    # Build table using actual system time slots
+    rows = []
+    total_clase = 0
+    total_libre = 0
+    total_no_disp = 0
+
+    for (h_inicio, h_fin), horario_ids in slots_ordenados:
+        slot_label = f'{h_inicio.strftime("%H:%M")}-{h_fin.strftime("%H:%M")}'
+        cells = f'<td><strong>{slot_label}</strong></td>'
+
+        for dia in dias:
+            # Check ALL horario IDs for this time slot (handles matutino/vespertino)
+            clases_en_celda = []
+            es_disponible = None
+            for hid in horario_ids:
+                key = (hid, dia)
+                if key in clases_por_hid:
+                    clases_en_celda.append(clases_por_hid[key])
+                if key in disp_por_hid:
+                    if disp_por_hid[key] is False:
+                        es_disponible = False
+                    elif es_disponible is None:
+                        es_disponible = disp_por_hid[key]
+
+            if clases_en_celda:
+                clases_html = '<br>'.join(clases_en_celda)
+                cells += f'<td style="background:#fee2e2;color:#991b1b;font-size:9px">{clases_html}</td>'
+                total_clase += len(clases_en_celda)
+            elif es_disponible is False:
+                cells += '<td style="background:#fef3c7;color:#92400e">No disp.</td>'
+                total_no_disp += 1
+            elif es_disponible is True:
+                cells += '<td style="background:#d1fae5;color:#065f46">Libre</td>'
+                total_libre += 1
+            else:
+                cells += '<td style="background:#f3f4f6;color:#6b7280">Sin config.</td>'
+                total_libre += 1
+
+        rows.append(f'<tr>{cells}</tr>')
+
+    headers = ''.join([f'<th>{dias_display[d]}</th>' for d in dias])
+    html = f'''<table class="table table-sm table-bordered">
+<thead class="table-dark"><tr><th>Hora</th>{headers}</tr></thead>
+<tbody>{"".join(rows)}</tbody>
+</table>
+<div style="font-size:9px;margin-top:4px">
+<span style="background:#d1fae5;padding:1px 4px">Libre</span>
+<span style="background:#fee2e2;padding:1px 4px">Con clase</span>
+<span style="background:#fef3c7;padding:1px 4px">No disponible</span>
+<span style="background:#f3f4f6;padding:1px 4px">Sin configurar</span>
+</div>'''
+
+    text = (f'Disponibilidad de {profesor.get_nombre_completo()}:\n'
+            f'- Horas con clase: {total_clase}\n'
+            f'- Horas libres: {total_libre}\n'
+            f'- Horas no disponibles: {total_no_disp}')
+
+    return _result(text, html=html)
 
 
 def _get_my_subjects(args, user):
