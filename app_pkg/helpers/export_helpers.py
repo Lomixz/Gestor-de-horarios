@@ -260,7 +260,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     # ========== 8. FILAS DE HORARIOS (2 filas por hora) ==========
     horas = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
              '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
-             '19:00', '20:00', '21:00']
+             '19:00', '20:00']
 
     # Preparar datos de clases por día y hora
     clases_por_dia_hora = {}
@@ -297,8 +297,13 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
 
         # Hora (A - combinar 2 filas)
         ws.merge_cells(f'A{fila_inicio}:A{fila_fin}')
-        ws[f'A{fila_inicio}'] = hora
-        ws[f'A{fila_inicio}'].font = small_font
+        
+        # Formatear como rango de horas (ej: 07:00 - 08:00)
+        h_int = int(hora.split(':')[0])
+        hora_rango = f"{h_int:02d}:00 - {h_int+1:02d}:00"
+        
+        ws[f'A{fila_inicio}'] = hora_rango
+        ws[f'A{fila_inicio}'].font = tiny_font  # Usar tiny para que quepa el rango
         ws[f'A{fila_inicio}'].alignment = center_align
         ws[f'A{fila_inicio}'].border = thin_border
         ws[f'A{fila_fin}'].border = thin_border

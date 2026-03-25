@@ -7941,6 +7941,43 @@ def exportar_jefe_horarios_profesor_excel():
         flash(f"Error al generar el archivo Excel: {e}", "danger")
         return redirect(url_for('jefe/jefe_ver_horarios_profesores'))
 
+def _dibujar_encabezado_pdf_jefe(canvas, doc, titulo="Horarios"):
+    """Dibuja el encabezado institucional en cada página del PDF"""
+    canvas.saveState()
+    page_w, page_h = doc.pagesize
+    COLOR_TEAL = colors.Color(0, 0.518, 0.486) # #00847C
+    COLOR_GOLD = colors.Color(1, 0.839, 0)    # #FFD600
+    
+    # Barra superior teal
+    canvas.setFillColor(COLOR_TEAL)
+    canvas.rect(0, page_h - 60, page_w, 60, fill=1, stroke=0)
+    
+    # Línea dorada inferior
+    canvas.setFillColor(COLOR_GOLD)
+    canvas.rect(0, page_h - 63, page_w, 3, fill=1, stroke=0)
+    
+    # Logo
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        try:
+            canvas.drawImage(logo_path, 30, page_h - 55, width=60, height=45, preserveAspectRatio=True, mask='auto')
+        except:
+            pass
+            
+    # Títulos
+    canvas.setFillColor(colors.white)
+    canvas.setFont('Helvetica-Bold', 14)
+    canvas.drawCentredString(page_w / 2, page_h - 30, titulo)
+    canvas.setFont('Helvetica', 8)
+    canvas.drawCentredString(page_w / 2, page_h - 42, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+    
+    # Pie de página
+    canvas.setFillColor(colors.grey)
+    canvas.setFont('Helvetica-Oblique', 7)
+    canvas.drawCentredString(page_w / 2, 25, f'Página {canvas.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}')
+    
+    canvas.restoreState()
+
 @app.route('/jefe/horarios/profesores/exportar/pdf')
 @login_required
 def exportar_jefe_horarios_profesor_pdf():
@@ -7979,10 +8016,23 @@ def exportar_jefe_horarios_profesor_pdf():
             data.append(row_data)
         
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=75, bottomMargin=40)
         table = Table(data, hAlign='CENTER', colWidths=[1.5*inch]*6)
-        style = TableStyle([('BACKGROUND', (0,0), (-1,0), colors.grey),('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),('GRID', (0,0), (-1,-1), 1, colors.black)])
-        table.setStyle(style); doc.build([table]); buffer.seek(0)
+        style = TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.Color(0, 0.518, 0.486)),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ])
+        table.setStyle(style)
+        
+        # Generar con encabezado
+        def my_header(canvas, doc_obj):
+            _dibujar_encabezado_pdf_jefe(canvas, doc_obj, f"Horarios por Profesor - {current_user.get_carrera_codigo()}")
+
+        doc.build([table], onFirstPage=my_header, onLaterPages=my_header)
+        buffer.seek(0)
         return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
@@ -8207,7 +8257,11 @@ def exportar_jefe_horarios_grupo_pdf():
             elements.append(table)
             elements.append(Spacer(1, 30))
         
-        doc.build(elements)
+        # Generar con encabezado
+        def my_header(canvas, doc_obj):
+            _dibujar_encabezado_pdf_jefe(canvas, doc_obj, f"Horarios por Grupo - {current_user.get_carrera_codigo()}")
+
+        doc.build(elements, onFirstPage=my_header, onLaterPages=my_header)
         buffer.seek(0)
         return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
