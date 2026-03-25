@@ -236,7 +236,7 @@
                     <div class="grid-header">Jueves</div>
                     <div class="grid-header">Viernes</div>
                     
-                    {% for hora in range(7, 21) %}
+                    {% for hora in horas_sistema %}
                     <div class="hora-label">
                         <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
                         <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>

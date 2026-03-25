@@ -436,32 +436,99 @@ def rh_usuarios_baja():
 @app.route('/rh/usuarios-baja/exportar/csv')
 @login_required
 def rh_exportar_csv():
-    """Exportar usuarios dados de baja en CSV"""
+    """Exportar usuarios dados de baja en Excel con formato profesional"""
     if not current_user.is_recursos_humanos() and not current_user.is_admin():
         abort(403)
 
+    import os
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from app_pkg.helpers.export_helpers import convertir_imagen_para_excel
+
     usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
 
-    import csv
-    output = BytesIO()
-    import io
-    text_output = io.StringIO()
-    writer = csv.writer(text_output)
-    writer.writerow(['Username', 'Nombre', 'Apellido', 'Email', 'Teléfono', 'Rol',
-                     'Carreras', 'Materias', 'Fecha de Registro', 'Estado'])
-    for u in usuarios:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Usuarios Dados de Baja"
+
+    # Styles
+    verde = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+    header_font = Font(bold=True, name='Century Gothic', size=10, color="FFFFFF")
+    title_font = Font(bold=True, name='Century Gothic', size=14)
+    normal_font = Font(name='Century Gothic', size=10)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+
+    # Logo
+    logo_path = os.path.join('static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        try:
+            img = convertir_imagen_para_excel(logo_path)
+            if img:
+                img.width = 150
+                img.height = 55
+                ws.add_image(img, 'A1')
+        except Exception:
+            pass
+
+    # Title (offset to B to leave space for logo)
+    headers = ['Username', 'Nombre', 'Apellido', 'Email', 'Teléfono', 'Rol',
+               'Carreras', 'Materias', 'Fecha de Registro', 'Estado']
+    ws.merge_cells('B1:J1')
+    ws['B1'] = 'Reporte de Usuarios Dados de Baja'
+    ws['B1'].font = title_font
+    ws['B1'].alignment = center
+
+    ws.merge_cells('B2:J2')
+    ws['B2'] = f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+    ws['B2'].font = Font(name='Century Gothic', size=9, italic=True)
+    ws['B2'].alignment = center
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 20
+
+    # Headers (row 4)
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = verde
+        cell.alignment = center
+        cell.border = thin_border
+
+    # Data rows
+    for row_idx, u in enumerate(usuarios, 5):
         carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
         materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
         rol_display = Role.ROLES_DISPLAY.get(u.rol, u.rol)
         fecha = u.fecha_registro.strftime('%Y-%m-%d') if u.fecha_registro else 'N/A'
-        writer.writerow([u.username, u.nombre, u.apellido, u.email or 'N/A',
-                        getattr(u, 'telefono', 'N/A') or 'N/A', rol_display,
-                        carreras_str, materias_str, fecha, 'Dado de baja'])
+        row_data = [u.username, u.nombre, u.apellido, u.email or 'N/A',
+                    getattr(u, 'telefono', 'N/A') or 'N/A', rol_display,
+                    carreras_str, materias_str, fecha, 'Dado de baja']
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = normal_font
+            cell.alignment = left
+            cell.border = thin_border
+        # Alternate row color
+        if row_idx % 2 == 0:
+            for col_idx in range(1, len(row_data) + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = PatternFill(
+                    start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
 
-    output = BytesIO(text_output.getvalue().encode('utf-8-sig'))
+    # Column widths
+    col_widths = [14, 16, 16, 25, 14, 18, 22, 22, 16, 14]
+    for i, w in enumerate(col_widths):
+        ws.column_dimensions[chr(65 + i)].width = w
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
     return send_file(output, as_attachment=True,
-                    download_name='usuarios_dados_de_baja.csv',
-                    mimetype='text/csv')
+                    download_name='usuarios_dados_de_baja.xlsx',
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
 @app.route('/rh/usuarios-baja/exportar/pdf')
@@ -6661,7 +6728,11 @@ def admin_horario_profesores():
     if not current_user.is_admin(): abort(403)
     
     horarios_data = procesar_horarios(agrupar_por='profesor', incluir_ids=True)
-    return render_template('admin/admin_horario_profesores.html', horarios_data=horarios_data)
+    # Get unique hours from the system's configured time slots
+    horas_sistema = sorted(set(
+        h.hora_inicio.hour for h in Horario.query.filter_by(activo=True).all()
+    ))
+    return render_template('admin/admin_horario_profesores.html', horarios_data=horarios_data, horas_sistema=horas_sistema)
 
 @app.route('/admin/horarios/grupos')
 @login_required
@@ -7664,7 +7735,10 @@ def jefe_ver_horarios_profesores():
         return redirect(url_for('dashboard'))
 
     horarios_data = procesar_horarios(agrupar_por='profesor', carrera_ids=carrera_ids, incluir_ids=True)
-    return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data)
+    horas_sistema = sorted(set(
+        h.hora_inicio.hour for h in Horario.query.filter_by(activo=True).all()
+    ))
+    return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data, horas_sistema=horas_sistema)
 
 
 @app.route('/jefe/horarios/grupos')

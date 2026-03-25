@@ -258,9 +258,18 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         ws[f'{col}11'].border = thin_border
 
     # ========== 8. FILAS DE HORARIOS (2 filas por hora) ==========
-    horas = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-             '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
-             '19:00', '20:00']
+    # Use actual time slots from the system instead of hardcoded hours
+    from models import Horario as HorarioModel
+    horarios_sistema = HorarioModel.query.filter_by(activo=True).order_by(HorarioModel.hora_inicio).all()
+    horas_set = []
+    seen = set()
+    for hs in horarios_sistema:
+        h_str = f"{hs.hora_inicio.hour:02d}:00"
+        if h_str not in seen:
+            seen.add(h_str)
+            horas_set.append((h_str, hs.hora_inicio, hs.hora_fin))
+    # Build simple hour strings for matching, but keep full range for display
+    horas = [h[0] for h in horas_set]
 
     # Preparar datos de clases por día y hora
     clases_por_dia_hora = {}
@@ -370,7 +379,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     horas_dual = 0
     horas_investigacion = 0
 
-    if es_tc and profesor_id:
+    if profesor_id:
         horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_asesoria', 0) or 0)
         horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_tutoria', 0) or 0)
         horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_gestion', 0) or 0)
@@ -400,11 +409,11 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     # Filas de tipos de horas
     tipos_horas = [
         ('Impartición de Curso', horas_imparticion),
-        ('Asesoría', horas_asesoria if es_tc else ''),
-        ('Tutoría', horas_tutoria if es_tc else ''),
-        ('Apoyo a la Gestión', horas_gestion if es_tc else ''),
-        ('Dual', horas_dual if es_tc else ''),
-        ('Investigación', horas_investigacion if es_tc else ''),
+        ('Asesoría', horas_asesoria),
+        ('Tutoría', horas_tutoria),
+        ('Apoyo a la Gestión', horas_gestion),
+        ('Dual', horas_dual),
+        ('Investigación', horas_investigacion),
     ]
 
     for i, (tipo, horas_val) in enumerate(tipos_horas, 1):
@@ -786,12 +795,11 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         horas_gestion = 0
         horas_dual = 0
         horas_investigacion = 0
-        if es_tc:
-            horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_asesoria', 0) or 0)
-            horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_tutoria', 0) or 0)
-            horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_gestion', 0) or 0)
-            horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_dual', 0) or 0)
-            horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_investigacion', 0) or 0)
+        horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_asesoria', 0) or 0)
+        horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_tutoria', 0) or 0)
+        horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_gestion', 0) or 0)
+        horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_dual', 0) or 0)
+        horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_investigacion', 0) or 0)
         total_horas = horas_imparticion + horas_asesoria + horas_tutoria + horas_gestion + horas_dual + horas_investigacion
 
         # Nombres desde configuración
@@ -943,8 +951,19 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         # =====================================================================
         grid_data = [[Paragraph('<b>Horario</b>', label_white)] + [Paragraph(f'<b>{d}</b>', label_white) for d in dias_semana]]
 
-        for hora in range(7, 22):
-            hora_str = f"{hora:02d}:00"
+        # Use actual time slots from the system instead of hardcoded range
+        from models import Horario as HorarioModel
+        horarios_sistema_pdf = HorarioModel.query.filter_by(activo=True).order_by(HorarioModel.hora_inicio).all()
+        horas_pdf = []
+        seen_pdf = set()
+        for hs in horarios_sistema_pdf:
+            h_hour = hs.hora_inicio.hour
+            if h_hour not in seen_pdf:
+                seen_pdf.add(h_hour)
+                horas_pdf.append((h_hour, hs.hora_inicio, hs.hora_fin))
+
+        for hora, h_inicio, h_fin in horas_pdf:
+            hora_str = f"{h_inicio.strftime('%H:%M')} - {h_fin.strftime('%H:%M')}"
             row = [Paragraph(f'<b>{hora_str}</b>', label_style)]
 
             for dia in dias_semana:
@@ -983,11 +1002,11 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         # =====================================================================
         tipos_horas_pdf = [
             ('Impartición de Curso', horas_imparticion),
-            ('Asesoría', horas_asesoria if es_tc else ''),
-            ('Tutoría', horas_tutoria if es_tc else ''),
-            ('Apoyo a la Gestión', horas_gestion if es_tc else ''),
-            ('Dual', horas_dual if es_tc else ''),
-            ('Investigación', horas_investigacion if es_tc else ''),
+            ('Asesoría', horas_asesoria),
+            ('Tutoría', horas_tutoria),
+            ('Apoyo a la Gestión', horas_gestion),
+            ('Dual', horas_dual),
+            ('Investigación', horas_investigacion),
         ]
 
         horas_data = [

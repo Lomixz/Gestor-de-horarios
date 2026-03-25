@@ -31,7 +31,7 @@ def _get_redis():
         return None
 
 
-def _store_task_result(task_id, status, text='', html=None, download_url=None):
+def _store_task_result(task_id, status, text='', html=None, download_url=None, download_urls=None):
     """Store a chatbot task result in Redis."""
     r = _get_redis()
     if not r:
@@ -41,6 +41,7 @@ def _store_task_result(task_id, status, text='', html=None, download_url=None):
         'text': text or '',
         'html': html,
         'download_url': download_url,
+        'download_urls': download_urls,
     })
     r.setex(f'chatbot_task:{task_id}', TASK_TTL, data)
 
@@ -114,40 +115,71 @@ def chatbot_message():
     def _process_in_background():
         with app.app_context():
             try:
+                is_claude = provider_name == 'claude'
                 provider = get_provider(provider_name, **provider_kwargs)
                 response = provider.chat(messages, tools=tools if tools else None)
 
                 result_html = None
                 download_url = None
+                download_urls = None
 
-                if response.tool_calls:
-                    for tc in response.tool_calls:
-                        if not is_tool_allowed(role, tc.name):
-                            response.text = f'No tienes permisos para ejecutar la acción "{tc.name}".'
-                            break
+                # Support up to 5 sequential tool calls
+                max_tool_rounds = 5
+                round_count = 0
 
-                        user = db.session.get(User, user_id)
-                        tool_result = execute_tool(tc.name, tc.arguments, user)
+                while response.tool_calls and round_count < max_tool_rounds:
+                    round_count += 1
+                    tc = response.tool_calls[0]
 
-                        tool_result_text = tool_result['text']
-                        if tool_result.get('html'):
-                            result_html = tool_result['html']
-                        if tool_result.get('download_url'):
-                            download_url = tool_result['download_url']
+                    if not is_tool_allowed(role, tc.name):
+                        response.text = f'No tienes permisos para ejecutar la acción "{tc.name}".'
+                        break
 
-                        messages.append({'role': 'assistant', 'content': response.text or f'Ejecutando {tc.name}...'})
-                        messages.append({'role': 'user', 'content': f'[Resultado de {tc.name}]: {tool_result_text}'})
+                    user = db.session.get(User, user_id)
+                    tool_result = execute_tool(tc.name, tc.arguments, user)
 
-                        try:
-                            final_response = provider.chat(messages)
-                            response.text = final_response.text
-                        except Exception as e:
-                            logger.error(f"Error en segunda llamada LLM: {e}")
-                            response.text = tool_result_text
+                    tool_result_text = tool_result['text']
+                    if tool_result.get('html'):
+                        result_html = tool_result['html']
+                        # Tell the LLM a visual table is already shown — don't repeat data
+                        tool_result_text += '\n[NOTA: El sistema ya muestra una tabla visual con estos datos al usuario. NO repitas los datos en texto ni markdown. Solo da un breve resumen.]'
+                    if tool_result.get('download_urls'):
+                        download_urls = tool_result['download_urls']
+                    elif tool_result.get('download_url'):
+                        download_url = tool_result['download_url']
 
-                        break  # Process only the first tool call
+                    # Build follow-up messages with proper format per provider
+                    if is_claude and hasattr(response, 'raw_content') and tc.id:
+                        # Native Claude tool_use flow
+                        messages.append({
+                            'role': 'assistant',
+                            'content': response.raw_content,
+                        })
+                        messages.append({
+                            'role': 'tool_result',
+                            'tool_use_id': tc.id,
+                            'content': tool_result_text,
+                        })
+                    else:
+                        # Universal format for OpenAI, Gemini, Ollama
+                        messages.append({
+                            'role': 'assistant',
+                            'content': response.text or f'Ejecutando {tc.name}...'
+                        })
+                        messages.append({
+                            'role': 'user',
+                            'content': f'[Resultado de {tc.name}]: {tool_result_text}'
+                        })
 
-                _store_task_result(task_id, 'complete', response.text, result_html, download_url)
+                    try:
+                        # Pass tools so the LLM can chain additional calls
+                        response = provider.chat(messages, tools=tools if tools else None)
+                    except Exception as e:
+                        logger.error(f"Error en llamada LLM (round {round_count}): {e}")
+                        response.text = tool_result_text
+                        break
+
+                _store_task_result(task_id, 'complete', response.text, result_html, download_url, download_urls)
 
             except Exception as e:
                 logger.error(f"Error en chatbot background: {e}", exc_info=True)

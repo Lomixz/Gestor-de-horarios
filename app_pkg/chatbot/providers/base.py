@@ -7,6 +7,7 @@ from typing import List, Optional
 class ToolCall:
     name: str
     arguments: dict
+    id: str = ""  # tool_use_id (Claude) or tool_call_id (OpenAI)
 
 
 @dataclass

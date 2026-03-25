@@ -24,12 +24,28 @@ class ClaudeProvider(LLMProvider):
     def chat(self, messages: list, tools: list = None) -> LLMResponse:
         client = self._get_client()
 
-        # Extract system prompt
+        # Extract system prompt and build Claude-native messages
         system = None
         chat_messages = []
         for msg in messages:
             if msg['role'] == 'system':
                 system = msg['content']
+            elif msg['role'] == 'tool_result':
+                # Native tool_result block (sent by chatbot blueprint)
+                chat_messages.append({
+                    'role': 'user',
+                    'content': [{
+                        'type': 'tool_result',
+                        'tool_use_id': msg['tool_use_id'],
+                        'content': msg['content'],
+                    }]
+                })
+            elif msg['role'] == 'assistant' and isinstance(msg.get('content'), list):
+                # Assistant message with tool_use blocks
+                chat_messages.append({
+                    'role': 'assistant',
+                    'content': msg['content']
+                })
             else:
                 chat_messages.append({
                     'role': msg['role'],
@@ -57,16 +73,29 @@ class ClaudeProvider(LLMProvider):
         text = ''
         tool_calls = []
 
+        # Store raw content blocks for proper tool_use flow
+        raw_content = []
         for block in response.content:
             if block.type == 'text':
                 text += block.text
+                raw_content.append({'type': 'text', 'text': block.text})
             elif block.type == 'tool_use':
                 tool_calls.append(ToolCall(
                     name=block.name,
-                    arguments=block.input if block.input else {}
+                    arguments=block.input if block.input else {},
+                    id=block.id,
                 ))
+                raw_content.append({
+                    'type': 'tool_use',
+                    'id': block.id,
+                    'name': block.name,
+                    'input': block.input if block.input else {},
+                })
 
-        return LLMResponse(text=text, tool_calls=tool_calls)
+        resp = LLMResponse(text=text, tool_calls=tool_calls)
+        # Attach raw content for building proper follow-up messages
+        resp.raw_content = raw_content
+        return resp
 
     def test_connection(self) -> dict:
         try:

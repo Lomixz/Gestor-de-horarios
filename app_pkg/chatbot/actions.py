@@ -70,8 +70,8 @@ def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
         return {'text': f'Error al ejecutar la acción: {str(e)}', 'html': None, 'download_url': None}
 
 
-def _result(text, html=None, download_url=None):
-    return {'text': text, 'html': html, 'download_url': download_url}
+def _result(text, html=None, download_url=None, download_urls=None):
+    return {'text': text, 'html': html, 'download_url': download_url, 'download_urls': download_urls}
 
 
 # ---- Schedule queries ----
@@ -98,13 +98,25 @@ def _get_schedule_group(args, user):
     # Build HTML table
     html = _build_schedule_table_group(horarios, codigo)
 
-    # Generate Excel
-    download_url = _generate_group_excel(horarios, codigo, user)
+    # Generate Excel download
+    excel_url = _generate_group_excel(horarios, codigo, user)
+    downloads = []
+    if excel_url:
+        downloads.append({'url': excel_url, 'label': 'Excel'})
+
+    # Build text representation so the LLM can describe the schedule
+    text_lines = [f'Horario del grupo {codigo} ({grupo.carrera.nombre if grupo.carrera else ""}):']
+    for h in horarios:
+        dia = h.dia_semana.capitalize()
+        hora = f'{h.get_hora_inicio_str()}-{h.get_hora_fin_str()}'
+        materia = h.materia.nombre if h.materia else 'Sin materia'
+        prof = h.profesor.get_nombre_completo() if h.profesor else 'Sin profesor'
+        text_lines.append(f'- {dia} {hora}: {materia} ({prof})')
 
     return _result(
-        f'Horario del grupo {codigo} ({grupo.carrera.nombre if grupo.carrera else ""}):',
+        '\n'.join(text_lines),
         html=html,
-        download_url=download_url
+        download_urls=downloads if downloads else None,
     )
 
 
@@ -142,12 +154,22 @@ def _get_schedule_professor(args, user):
     horarios.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
 
     html = _build_schedule_table_professor(horarios, profesor)
-    download_url = _generate_professor_excel(profesor, user)
+
+    # Generate both Excel and PDF downloads
+    downloads = _generate_professor_downloads(profesor, user)
+
+    # Build text representation so the LLM can describe the schedule
+    text_lines = [f'Horario de {profesor.get_nombre_completo()}:']
+    for h in horarios:
+        dia = h.dia_semana.capitalize()
+        hora = f'{h.get_hora_inicio_str()}-{h.get_hora_fin_str()}'
+        materia = h.materia.nombre if h.materia else 'Sin materia'
+        text_lines.append(f'- {dia} {hora}: {materia} (Grupo: {h.grupo})')
 
     return _result(
-        f'Horario de {profesor.get_nombre_completo()}:',
+        '\n'.join(text_lines),
         html=html,
-        download_url=download_url
+        download_urls=downloads,
     )
 
 
@@ -159,9 +181,19 @@ def _get_my_schedule(args, user):
     horarios.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
 
     html = _build_schedule_table_professor(horarios, user)
-    download_url = _generate_professor_excel(user, user)
 
-    return _result('Tu horario:', html=html, download_url=download_url)
+    # Generate both Excel and PDF downloads
+    downloads = _generate_professor_downloads(user, user)
+
+    # Build text representation
+    text_lines = ['Tu horario:']
+    for h in horarios:
+        dia = h.dia_semana.capitalize()
+        hora = f'{h.get_hora_inicio_str()}-{h.get_hora_fin_str()}'
+        materia = h.materia.nombre if h.materia else 'Sin materia'
+        text_lines.append(f'- {dia} {hora}: {materia} (Grupo: {h.grupo})')
+
+    return _result('\n'.join(text_lines), html=html, download_urls=downloads)
 
 
 # ---- List queries ----
@@ -1449,26 +1481,33 @@ def _find_single_professor(nombre):
 # ---- HTML table builders ----
 
 def _build_schedule_table_group(horarios, grupo_codigo):
-    """Build an HTML schedule grid for a group."""
+    """Build an HTML schedule grid for a group (includes ALL system time slots)."""
     dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes'}
 
-    # Group by time slot and day
+    # Pre-populate grid with ALL system time slots (not just those with classes)
+    all_slots = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
     grid = {}
+    slot_order = []
+    for slot_h in all_slots:
+        slot_label = f'{slot_h.get_hora_inicio_str()} - {slot_h.get_hora_fin_str()}'
+        if slot_label not in grid:
+            grid[slot_label] = {d: '' for d in dias}
+            slot_order.append(slot_label)
+
+    # Fill in classes
     for h in horarios:
         slot = f'{h.get_hora_inicio_str()} - {h.get_hora_fin_str()}'
         dia = dias_map.get(h.dia_semana.lower(), h.dia_semana)
         if slot not in grid:
             grid[slot] = {d: '' for d in dias}
+            slot_order.append(slot)
         if h.materia and h.profesor:
             grid[slot][dia] = f'{h.materia.nombre}<br><small>{h.profesor.get_nombre_completo()}</small>'
 
-    # Sort slots by time
-    slots_sorted = sorted(grid.keys())
-
     rows = []
-    for slot in slots_sorted:
+    for slot in slot_order:
         cells = ''.join([f'<td>{grid[slot].get(d, "")}</td>' for d in dias])
         rows.append(f'<tr><td><strong>{slot}</strong></td>{cells}</tr>')
 
@@ -1480,24 +1519,33 @@ def _build_schedule_table_group(horarios, grupo_codigo):
 
 
 def _build_schedule_table_professor(horarios, profesor):
-    """Build an HTML schedule grid for a professor."""
+    """Build an HTML schedule grid for a professor (includes ALL system time slots)."""
     dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes'}
 
+    # Pre-populate grid with ALL system time slots (not just those with classes)
+    all_slots = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
     grid = {}
+    slot_order = []
+    for slot_h in all_slots:
+        slot_label = f'{slot_h.get_hora_inicio_str()} - {slot_h.get_hora_fin_str()}'
+        if slot_label not in grid:
+            grid[slot_label] = {d: '' for d in dias}
+            slot_order.append(slot_label)
+
+    # Fill in classes
     for h in horarios:
         slot = f'{h.get_hora_inicio_str()} - {h.get_hora_fin_str()}'
         dia = dias_map.get(h.dia_semana.lower(), h.dia_semana)
         if slot not in grid:
             grid[slot] = {d: '' for d in dias}
+            slot_order.append(slot)
         if h.materia:
             grid[slot][dia] = f'{h.materia.nombre}<br><small>Grupo: {h.grupo}</small>'
 
-    slots_sorted = sorted(grid.keys())
-
     rows = []
-    for slot in slots_sorted:
+    for slot in slot_order:
         cells = ''.join([f'<td>{grid[slot].get(d, "")}</td>' for d in dias])
         rows.append(f'<tr><td><strong>{slot}</strong></td>{cells}</tr>')
 
@@ -1592,6 +1640,34 @@ def _generate_professor_excel(profesor, user):
     except Exception as e:
         logger.error(f"Error generando Excel de profesor: {e}")
         return None
+
+
+def _generate_professor_downloads(profesor, user):
+    """Generate both Excel and PDF for a professor schedule. Returns list of {url, label}."""
+    downloads = []
+
+    # Excel
+    excel_url = _generate_professor_excel(profesor, user)
+    if excel_url:
+        downloads.append({'url': excel_url, 'label': 'Excel'})
+
+    # PDF
+    try:
+        from app_pkg.helpers.export_helpers import generar_pdf_profesor_buffer
+
+        buf, filename = generar_pdf_profesor_buffer(profesor.get_nombre_completo())
+        if buf is not None:
+            file_id = file_manager.save_file(
+                buf.getvalue(),
+                filename,
+                user.id,
+                'application/pdf'
+            )
+            downloads.append({'url': f'/api/chatbot/download/{file_id}', 'label': 'PDF'})
+    except Exception as e:
+        logger.error(f"Error generando PDF de profesor: {e}")
+
+    return downloads if downloads else None
 
 
 # ---- CSV generation helpers ----

@@ -70,8 +70,8 @@
                     <div class="grid-header">Jueves</div>
                     <div class="grid-header">Viernes</div>
                     
-                    <!-- Filas de horas (7:00 a 20:00 para cubrir ambos turnos) -->
-                    {% for hora in range(7, 21) %}
+                    <!-- Filas de horas (solo las configuradas en el sistema) -->
+                    {% for hora in horas_sistema %}
                     <div class="hora-label">
                         <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
                         <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>
