@@ -10,46 +10,46 @@
                 <i class="fas fa-tachometer-alt me-2"></i>
                 Dashboard
             </h2>
-            <span class="badge bg-primary fs-6">{{ current_user.get_rol_display() }}</span>
+            <span class="badge card-header-premium">{{ current_user.get_rol_display() }}</span>
         </div>
     </div>
 </div>
 
-<!-- Estadísticas Rápidas -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow-sm">
-            <div class="card-header bg-dark text-white">
-                <h5 class="mb-0">
-                    <i class="fas fa-chart-pie me-2"></i>
-                    Estadísticas Rápidas
-                </h5>
-            </div>
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-indigo">
             <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-md-3">
-                        <div class="border-end">
-                            <h3 class="text-primary mb-1">{{ user_count }}</h3>
-                            <p class="text-muted mb-0 small">Usuarios Totales</p>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="border-end">
-                            <h3 class="text-success mb-1">{{ admin_count }}</h3>
-                            <p class="text-muted mb-0 small">Administradores</p>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="border-end">
-                            <h3 class="text-warning mb-1">{{ jefe_count }}</h3>
-                            <p class="text-muted mb-0 small">Jefes de Carrera</p>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <h3 class="text-info mb-1">{{ profesor_count }}</h3>
-                        <p class="text-muted mb-0 small">Profesores</p>
-                    </div>
-                </div>
+                <div class="kpi-icon"><i class="fas fa-users"></i></div>
+                <div class="kpi-value">{{ user_count }}</div>
+                <div class="kpi-label">Usuarios Totales</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-rose">
+            <div class="card-body">
+                <div class="kpi-icon"><i class="fas fa-user-shield"></i></div>
+                <div class="kpi-value">{{ admin_count }}</div>
+                <div class="kpi-label">Administradores</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-amber">
+            <div class="card-body">
+                <div class="kpi-icon"><i class="fas fa-user-tie"></i></div>
+                <div class="kpi-value">{{ jefe_count }}</div>
+                <div class="kpi-label">Jefes de Carrera</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card kpi-card kpi-emerald">
+            <div class="card-body">
+                <div class="kpi-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+                <div class="kpi-value">{{ profesor_count }}</div>
+                <div class="kpi-label">Profesores</div>
             </div>
         </div>
     </div>
@@ -58,8 +58,8 @@
 <div class="row">
     <!-- Información del usuario -->
     <div class="col-md-4 mb-4">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
+        <div class="card shadow-premium border-0 overflow-hidden">
+            <div class="card-header card-header-premium">
                 <h5 class="mb-0">
                     <i class="fas fa-user me-2"></i>
                     Mi Información
@@ -174,7 +174,7 @@
                         <td><strong>Carrera(s):</strong></td>
                         <td>
                             {% for carrera in current_user.carreras %}
-                            <span class="badge bg-success me-1">{{ carrera.nombre }}</span>
+                            <span class="badge card-header-premium me-1 mb-1">{{ carrera.nombre }}</span>
                             {% endfor %}
                         </td>
                     </tr>
@@ -193,7 +193,7 @@
                         <td><strong>Carrera(s):</strong></td>
                         <td>
                             {% for carrera in current_user.carreras %}
-                            <span class="badge bg-info me-1">{{ carrera.nombre }}</span>
+                            <span class="badge card-header-premium me-1 mb-1">{{ carrera.nombre }}</span>
                             {% endfor %}
                         </td>
                     </tr>
@@ -210,8 +210,8 @@
 
     <!-- Opciones según el rol -->
     <div class="col-md-8 mb-4">
-        <div class="card h-100">
-            <div class="card-header bg-success text-white">
+        <div class="card shadow-premium border-0 overflow-hidden h-100">
+            <div class="card-header card-header-premium">
                 <h5 class="mb-0">
                     <i class="fas fa-cogs me-2"></i>
                     Opciones Disponibles
@@ -231,47 +231,47 @@
                                     <i class="fas fa-users fa-2x text-primary mb-2"></i>
                                     <h6>Gestión de Usuarios</h6>
                                     <p class="small text-muted">Administrar todos los usuarios del sistema</p>
-                                    <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary btn-sm">Acceder</a>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-success">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-clock fa-2x text-success mb-2"></i>
-                                    <h6>Gestión de Horarios</h6>
-                                    <p class="small text-muted">Configurar horarios matutino y vespertino</p>
-                                    <a href="{{ url_for('gestionar_horarios') }}" class="btn btn-success btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary-premium btn-sm">Acceder</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <div class="card border-info">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-chalkboard-teacher fa-2x text-info mb-2"></i>
+                                    <i class="fas fa-clock fa-2x text-info mb-2"></i>
+                                    <h6>Gestión de Horarios</h6>
+                                    <p class="small text-muted">Configurar horarios matutino y vespertino</p>
+                                    <a href="{{ url_for('gestionar_horarios') }}" class="btn btn-outline-info btn-sm">Gestionar</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-chalkboard-teacher fa-2x text-success mb-2"></i>
                                     <h6>Gestión de Profesores</h6>
                                     <p class="small text-muted">Administrar profesores y sus asignaciones</p>
-                                    <a href="{{ url_for('gestionar_profesores') }}" class="btn btn-info btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_profesores') }}" class="btn btn-outline-success btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <div class="card border-purple">
+                            <div class="card border-warning">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-graduation-cap fa-2x text-purple mb-2"></i>
+                                    <i class="fas fa-graduation-cap fa-2x text-warning mb-2"></i>
                                     <h6>Gestión de Carreras</h6>
                                     <p class="small text-muted">Administrar carreras y programas académicos</p>
-                                    <a href="{{ url_for('gestionar_carreras') }}" class="btn btn-purple btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_carreras') }}" class="btn btn-outline-warning btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <div class="card border-secondary">
+                            <div class="card border-danger">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-book fa-2x text-secondary mb-2"></i>
+                                    <i class="fas fa-book fa-2x text-danger mb-2"></i>
                                     <h6>Gestión de Materias</h6>
                                     <p class="small text-muted">Administrar materias por cuatrimestre y carrera</p>
-                                    <a href="{{ url_for('gestionar_materias') }}" class="btn btn-secondary btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_materias') }}" class="btn btn-outline-danger btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -281,100 +281,99 @@
                                     <i class="fas fa-layer-group fa-2x text-info mb-2"></i>
                                     <h6>Gestión de Grupos</h6>
                                     <p class="small text-muted">Administrar grupos académicos y asignar materias</p>
-                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-info btn-sm">Gestionar</a>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-danger">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-tasks fa-2x text-danger mb-2"></i>
-                                    <h6>Asignación Masiva de Materias</h6>
-                                    <p class="small text-muted">Asignar materias a múltiples profesores</p>
-                                    <a href="{{ url_for('asignacion_masiva_materias') }}" class="btn btn-danger btn-sm">Asignar</a>
+                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-outline-info btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <div class="card border-warning">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-chart-line fa-2x text-warning mb-2"></i>
-                                    <h6>Reportes del Sistema</h6>
-                                    <p class="small text-muted">Ver estadísticas y reportes generales</p>
-                                    <a href="{{ url_for('reportes_sistema') }}" class="btn btn-warning btn-sm">Ver Reportes</a>
+                                    <i class="fas fa-tasks fa-2x text-warning mb-2"></i>
+                                    <h6>Asignación Masiva de Materias</h6>
+                                    <p class="small text-muted">Asignar materias a múltiples profesores</p>
+                                    <a href="{{ url_for('asignacion_masiva_materias') }}" class="btn btn-outline-warning btn-sm">Asignar</a>
                                 </div>
                             </div>
                         </div>
-
-                        <div class="col-md-6 mb-3">
-                                    <div class="card border-primary">
-                                        <div class="card-body text-center">
-                                            <i class="fas fa-user-clock fa-2x text-primary mb-2"></i>
-                                            <h6>Horarios por Profesor</h6>
-                                            <p class="small text-muted">Consultar horario de cada profesor</p>
-                                            <a href="{{ url_for('admin_horario_profesores') }}" class="btn btn-primary btn-sm">Consultar</a>
-                                        </div>
-                                    </div>
-                                </div>
                         <div class="col-md-6 mb-3">
                             <div class="card border-success">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-users fa-2x text-success mb-2"></i>
-
-                                    <h6>Horarios por Grupo</h6>
-                                    <p class="small text-muted">Consultar horario de cada grupo</p>
-                                    <a href="{{ url_for('admin_horario_grupos') }}" class="btn btn-success btn-sm">Consultar</a>
+                                    <i class="fas fa-chart-line fa-2x text-success mb-2"></i>
+                                    <h6>Reportes del Sistema</h6>
+                                    <p class="small text-muted">Ver estadísticas y reportes generales</p>
+                                    <a href="{{ url_for('reportes_sistema') }}" class="btn btn-outline-success btn-sm">Ver Reportes</a>
                                 </div>
                             </div>
                         </div>
 
                         <div class="col-md-6 mb-3">
-                            <div class="card border-warning">
+                            <div class="card border-primary">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-calendar-check fa-2x text-warning mb-2"></i>
-                                    <h6>Disponibilidad de Profesores</h6>
-                                    <p class="small text-muted">Gestionar disponibilidad horaria de profesores</p>
-                                    <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-warning btn-sm">Gestionar</a>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <div class="card border-dark">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-calendar-alt fa-2x text-dark mb-2"></i>
-                                    <h6>Horarios Académicos</h6>
-                                    <p class="small text-muted">Generar y gestionar horarios de clases</p>
-                                    <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-dark btn-sm">Gestionar</a>
+                                    <i class="fas fa-user-clock fa-2x text-primary mb-2"></i>
+                                    <h6>Horarios por Profesor</h6>
+                                    <p class="small text-muted">Consultar horario de cada profesor</p>
+                                    <a href="{{ url_for('admin_horario_profesores') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <div class="card border-info">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-cog fa-2x text-info mb-2"></i>
-                                    <h6>Configuración</h6>
-                                    <p class="small text-muted">Configurar parámetros del sistema</p>
-                                    <a href="{{ url_for('configuracion_sistema') }}" class="btn btn-info btn-sm">Configurar</a>
+                                    <i class="fas fa-users fa-2x text-info mb-2"></i>
+                                    <h6>Horarios por Grupo</h6>
+                                    <p class="small text-muted">Consultar horario de cada grupo</p>
+                                    <a href="{{ url_for('admin_horario_grupos') }}" class="btn btn-outline-info btn-sm">Consultar</a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar-check fa-2x text-success mb-2"></i>
+                                    <h6>Disponibilidad de Profesores</h6>
+                                    <p class="small text-muted">Gestionar disponibilidad horaria de profesores</p>
+                                    <a href="{{ url_for('admin_disponibilidad_profesores') }}" class="btn btn-outline-success btn-sm">Gestionar</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-danger">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar-alt fa-2x text-danger mb-2"></i>
+                                    <h6>Horarios Académicos</h6>
+                                    <p class="small text-muted">Generar y gestionar horarios de clases</p>
+                                    <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-danger btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <div class="card border-secondary">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-history fa-2x text-secondary mb-2"></i>
-                                    <h6>Historial Versiones</h6>
-                                    <p class="small text-muted">Backups de horarios de todas las carreras</p>
-                                    <a href="{{ url_for('listar_versiones_admin') }}" class="btn btn-outline-secondary btn-sm">Ver</a>
+                                    <i class="fas fa-cog fa-2x text-secondary mb-2"></i>
+                                    <h6>Configuración</h6>
+                                    <p class="small text-muted">Configurar parámetros del sistema</p>
+                                    <a href="{{ url_for('configuracion_sistema') }}" class="btn btn-outline-secondary btn-sm">Configurar</a>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <div class="card border-purple" style="border-color: #6f42c1 !important;">
+                            <div class="card border-warning">
                                 <div class="card-body text-center">
-                                    <i class="fas fa-robot fa-2x mb-2" style="color: #6f42c1;"></i>
+                                    <i class="fas fa-history fa-2x text-warning mb-2"></i>
+                                    <h6>Historial Versiones</h6>
+                                    <p class="small text-muted">Backups de horarios de todas las carreras</p>
+                                    <a href="{{ url_for('listar_versiones_admin') }}" class="btn btn-outline-warning btn-sm">Ver</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-primary">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-robot fa-2x text-primary mb-2"></i>
                                     <h6>Chatbot Asistente</h6>
                                     <p class="small text-muted">Configurar el asistente inteligente con LLM</p>
-                                    <a href="{{ url_for('chatbot.chatbot_config') }}" class="btn btn-sm" style="background-color: #6f42c1; color: white;">Configurar</a>
+                                    <a href="{{ url_for('chatbot.chatbot_config') }}" class="btn btn-primary-premium btn-sm">Configurar</a>
                                 </div>
                             </div>
                         </div>
@@ -405,7 +404,7 @@
                                         <i class="fas fa-users fa-2x text-primary mb-2"></i>
                                         <h6>Gestión de Usuarios</h6>
                                         <p class="small text-muted">Consultar y exportar lista de usuarios activos</p>
-                                        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary btn-sm">Ver Usuarios</a>
+                                        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary-premium btn-sm">Ver Usuarios</a>
                                     </div>
                                 </div>
                             </div>
@@ -429,7 +428,7 @@
                         <h6 class="text-muted border-bottom pb-2 mb-3 panel-role-title">
                             <i class="fas fa-user-tie me-2"></i>Panel de Jefe de Carrera
                             {% if current_user.carreras %}
-                            <span class="badge bg-success ms-2 badge-responsive">{{ current_user.carreras|map(attribute='nombre')|join(', ') }}</span>
+                            <span class="badge card-header-premium ms-2 badge-responsive">{{ current_user.carreras|map(attribute='nombre')|join(', ') }}</span>
                             {% endif %}
                         </h6>
                     <div class="row">
@@ -439,7 +438,7 @@
                                     <i class="fas fa-chalkboard-teacher fa-2x text-primary mb-2"></i>
                                     <h6>Gestión de Profesores</h6>
                                     <p class="small text-muted">Administrar profesores de la carrera</p>
-                                    <a href="{{ url_for('gestionar_profesores_jefe') }}" class="btn btn-primary btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_profesores_jefe') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -449,7 +448,7 @@
                                     <i class="fas fa-book fa-2x text-success mb-2"></i>
                                     <h6>Plan de Estudios</h6>
                                     <p class="small text-muted">Revisar y modificar plan de estudios</p>
-                                    <a href="{{ url_for('gestionar_materias_jefe') }}" class="btn btn-success btn-sm">Ver Plan</a>
+                                    <a href="{{ url_for('gestionar_materias_jefe') }}" class="btn btn-primary-premium btn-sm">Ver Plan</a>
                                 </div>
                             </div>
                         </div>
@@ -459,7 +458,7 @@
                                     <i class="fas fa-layer-group fa-2x text-info mb-2"></i>
                                     <h6>Gestión de Grupos</h6>
                                     <p class="small text-muted">Administrar grupos académicos de tu carrera</p>
-                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-info btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -480,7 +479,7 @@
             
             <h6>Horarios de Profesores</h6>
             <p class="small text-muted">Ver horarios de los profesores de tu carrera</p>
-            <a href="{{ url_for('jefe_ver_horarios_profesores') }}" class="btn btn-primary btn-sm">Consultar</a>
+            <a href="{{ url_for('jefe_ver_horarios_profesores') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
         </div>
     </div>
 </div>
@@ -492,7 +491,7 @@
             
             <h6>Horarios por Grupo</h6>
             <p class="small text-muted">Ver horarios por grupo de tu carrera</p>
-            <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-success btn-sm">Consultar</a>
+            <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
         </div>
     </div>
 </div>
@@ -503,7 +502,7 @@
             <i class="fas fa-calendar-check fa-2x text-warning mb-2"></i>
             <h6>Disponibilidad de Profesores</h6>
             <p class="small text-muted">Gestionar disponibilidad horaria de profesores</p>
-            <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-warning btn-sm">Gestionar</a>
+            <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
         </div>
     </div>
 </div>
@@ -544,7 +543,7 @@
                     <div class="mb-4">
                         <h6 class="text-muted border-bottom pb-2 mb-3">
                             <i class="fas fa-chalkboard-teacher me-2"></i>Panel de Profesor
-                            <span class="badge bg-info ms-2">{{ current_user.get_tipo_profesor_display() }}</span>
+                            <span class="badge card-header-premium ms-2">{{ current_user.get_tipo_profesor_display() }}</span>
                         </h6>
                     <div class="row">
                         <div class="col-md-4 mb-3">
@@ -553,7 +552,7 @@
                                     <i class="fas fa-calendar-alt fa-2x text-success mb-2"></i>
                                     <h6>Mis Horarios</h6>
                                     <p class="small text-muted">Ver mis horarios y materias asignadas</p>
-                                    <a href="{{ url_for('profesor_horarios') }}" class="btn btn-success btn-sm">Ver Horarios</a>
+                                    <a href="{{ url_for('profesor_horarios') }}" class="btn btn-primary-premium btn-sm">Ver Horarios</a>
                                 </div>
                             </div>
                         </div>
@@ -563,7 +562,7 @@
                                     <i class="fas fa-clock fa-2x text-warning mb-2"></i>
                                     <h6>Mi Disponibilidad</h6>
                                     <p class="small text-muted">Ver y gestionar mi disponibilidad horaria</p>
-                                    <a href="{{ url_for('profesor_disponibilidad') }}" class="btn btn-warning btn-sm">Ver Disponibilidad</a>
+                                    <a href="{{ url_for('profesor_disponibilidad') }}" class="btn btn-primary-premium btn-sm">Ver Disponibilidad</a>
                                 </div>
                             </div>
                         </div>
@@ -573,7 +572,7 @@
                                     <i class="fas fa-book fa-2x text-info mb-2"></i>
                                     <h6>Mis Materias</h6>
                                     <p class="small text-muted">Ver materias que tengo asignadas</p>
-                                    <a href="{{ url_for('profesor_mis_materias') }}" class="btn btn-info btn-sm">Ver Materias</a>
+                                    <a href="{{ url_for('profesor_mis_materias') }}" class="btn btn-primary-premium btn-sm">Ver Materias</a>
                                 </div>
                             </div>
                         </div>
@@ -658,7 +657,7 @@ function abrirModalFirma() {
         <div class="modal fade" id="modalDibujarFirma" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
+                    <div class="modal-header card-header-premium ">
                         <h5 class="modal-title"><i class="fas fa-pen-fancy me-2"></i>Dibujar Mi Firma</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
@@ -681,11 +680,11 @@ function abrirModalFirma() {
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-warning btn-sm" id="btnLimpiarFirma">
+                        <button type="button" class="btn btn-primary-premium btn-sm" id="btnLimpiarFirma">
                             <i class="fas fa-eraser me-1"></i>Borrar
                         </button>
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" class="btn btn-primary btn-sm" id="btnGuardarFirma">
+                        <button type="button" class="btn btn-primary-premium btn-sm" id="btnGuardarFirma">
                             <i class="fas fa-save me-1"></i>Guardar
                         </button>
                     </div>

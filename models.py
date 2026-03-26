@@ -404,23 +404,14 @@ class User(UserMixin, db.Model):
         # Obtener IDs de todas las carreras del jefe
         carrera_ids = [c.id for c in self.carreras]
         
-        # Incluir tanto profesores asignados a las carreras como jefes de carrera
+        # Solo profesores (con tipo_profesor definido) asignados a las carreras del jefe
         profesores = User.query.filter(
             User.carreras.any(Carrera.id.in_(carrera_ids)),
             User.rol.in_(['profesor_completo', 'profesor_asignatura']),
             User.activo == True
         ).all()
-        
-        # Incluir otros jefes de carrera de las mismas carreras
-        jefes = User.query.filter(
-            User.carreras.any(Carrera.id.in_(carrera_ids)),
-            User.rol == 'jefe_carrera',
-            User.activo == True
-        ).all()
-        
-        # Combinar y eliminar duplicados
-        todos = list(set(profesores + jefes))
-        return todos
+
+        return profesores
     
     def get_materias_carrera(self):
         """Obtener materias de las carreras del jefe (solo para jefes de carrera)"""
