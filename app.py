@@ -7233,10 +7233,18 @@ def exportar_horarios_grupo_excel():
         sheet_name = grupo_nombre[:31]
         ws = wb.create_sheet(title=sheet_name)
         
-        # Determinar turno
+        # Determinar turno y rango de horas dinámico
         es_vespertino = 'V' in grupo_nombre[1:3]
-        hora_inicio = 13 if es_vespertino else 7
-        hora_fin = 21 if es_vespertino else 14
+        horas_inicio_list = [a.horario.hora_inicio.hour for a in asig_grupo if a.horario and a.horario.hora_inicio]
+        horas_fin_list = [a.horario.hora_fin.hour for a in asig_grupo if a.horario and a.horario.hora_fin]
+        if horas_inicio_list and horas_fin_list:
+            hora_inicio = min(horas_inicio_list)
+            hora_fin = max(horas_fin_list)
+        else:
+            hora_inicio = 13 if es_vespertino else 7
+            hora_fin = 20 if es_vespertino else 14
+        if hora_fin <= hora_inicio:
+            hora_fin = hora_inicio + 1
         tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asig_grupo)
         
         dias_cols = dias_orden.copy()
@@ -7422,13 +7430,21 @@ def exportar_horarios_grupo_pdf():
         # Obtener horarios del grupo
         asignaciones = HorarioAcademico.query.filter_by(grupo=grupo, activo=True).all()
         
-        # Determinar turno
+        # Determinar turno y rango de horas dinámico
         es_vespertino = 'V' in grupo[1:3]
-        hora_inicio_turno = 13 if es_vespertino else 7
-        hora_fin_turno = 21 if es_vespertino else 14
+        horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+        horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+        if horas_inicio_list and horas_fin_list:
+            hora_inicio_turno = min(horas_inicio_list)
+            hora_fin_turno = max(horas_fin_list)
+        else:
+            hora_inicio_turno = 13 if es_vespertino else 7
+            hora_fin_turno = 20 if es_vespertino else 14
+        if hora_fin_turno <= hora_inicio_turno:
+            hora_fin_turno = hora_inicio_turno + 1
         tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
         turno_texto = 'Vespertino' if es_vespertino else 'Matutino'
-        
+
         dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
         if tiene_sabado:
             dias_semana.append('Sábado')
@@ -7526,6 +7542,56 @@ def exportar_horarios_grupo_pdf():
     return send_file(buffer, as_attachment=True, download_name='horarios_por_grupo.pdf', mimetype='application/pdf')
 
 # ==========================================
+# EXPORTAR HORARIOS POR GRUPO (CSV) - TODOS
+# ==========================================
+@app.route('/admin/horarios/grupos/exportar/csv')
+@login_required
+def exportar_horarios_grupo_csv():
+    if not current_user.is_admin():
+        abort(403)
+
+    asignaciones = HorarioAcademico.query.filter_by(activo=True).all()
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    # Agrupar por grupo
+    grupos_data = {}
+    for a in asignaciones:
+        if not a.profesor or not a.materia or not a.horario or not a.grupo:
+            continue
+        if a.grupo not in grupos_data:
+            grupos_data[a.grupo] = []
+        grupos_data[a.grupo].append(a)
+
+    if not grupos_data:
+        flash('No hay horarios para exportar.', 'warning')
+        return redirect(url_for('admin_horario_grupos'))
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Grupo', 'Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for grupo_nombre in sorted(grupos_data.keys()):
+        asig_grupo = grupos_data[grupo_nombre]
+        for a in sorted(asig_grupo, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+            dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+            writer.writerow([
+                grupo_nombre,
+                dia,
+                a.get_hora_inicio_str(),
+                a.get_hora_fin_str(),
+                a.materia.nombre,
+                a.profesor.get_nombre_completo()
+            ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name='horarios_por_grupo.csv', mimetype='text/csv')
+
+# ==========================================
 # EXPORTAR HORARIO INDIVIDUAL POR GRUPO (NUEVA RUTA)
 # ==========================================
 @app.route('/admin/horarios/grupos/exportar-individual/<nombre_grupo>')
@@ -7541,18 +7607,26 @@ def exportar_horario_individual_excel(nombre_grupo):
         flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
         return redirect(url_for('admin_horario_grupos'))
 
-    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     # 3. Crear estructura de datos por hora
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
+
     dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
@@ -7652,18 +7726,26 @@ def exportar_horario_individual_pdf(nombre_grupo):
         flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
         return redirect(url_for('admin_horario_grupos'))
 
-    # 2. Determinar turno y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
-    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
     # 3. Crear PDF
@@ -7721,8 +7803,47 @@ def exportar_horario_individual_pdf(nombre_grupo):
     return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
 
 
+# ==========================================
+# EXPORTAR CSV INDIVIDUAL POR GRUPO (ADMIN)
+# ==========================================
+@app.route('/admin/horarios/grupos/exportar-csv/<nombre_grupo>')
+@login_required
+def exportar_horario_individual_csv(nombre_grupo):
+    if not current_user.is_admin():
+        abort(403)
+
+    asignaciones = HorarioAcademico.query.filter_by(grupo=nombre_grupo, activo=True).all()
+
+    if not asignaciones:
+        flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
+        return redirect(url_for('admin_horario_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for a in sorted(asignaciones, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+        dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+        writer.writerow([
+            dia,
+            a.get_hora_inicio_str(),
+            a.get_hora_fin_str(),
+            a.materia.nombre if a.materia else '',
+            a.profesor.get_nombre_completo() if a.profesor else ''
+        ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.csv', mimetype='text/csv')
+
+
 # ===================================================================
-# RUTAS PARA JEFES DE CARRERA 
+# RUTAS PARA JEFES DE CARRERA
 # ===================================================================
 
 @app.route('/jefe/horarios/profesores')
@@ -7776,13 +7897,21 @@ def exportar_jefe_horario_grupo_excel(nombre_grupo):
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
 
-    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     # 3. Crear estructura de datos por hora
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
@@ -7896,18 +8025,26 @@ def exportar_jefe_horario_grupo_pdf(nombre_grupo):
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
 
-    # 2. Determinar turno y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
-    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
     # 3. Crear PDF
@@ -7963,6 +8100,54 @@ def exportar_jefe_horario_grupo_pdf(nombre_grupo):
     doc.build(elements)
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
+
+
+# ==========================================
+# EXPORTAR CSV INDIVIDUAL POR GRUPO (JEFE)
+# ==========================================
+@app.route('/jefe/horarios/grupos/exportar-csv/<nombre_grupo>')
+@login_required
+def exportar_jefe_horario_grupo_csv(nombre_grupo):
+    if not current_user.is_jefe_carrera():
+        abort(403)
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.grupo == nombre_grupo,
+        HorarioAcademico.activo == True,
+        Materia.carrera_id.in_(carrera_ids)
+    ).all()
+
+    if not asignaciones:
+        flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
+        return redirect(url_for('jefe_ver_horarios_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for a in sorted(asignaciones, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+        dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+        writer.writerow([
+            dia,
+            a.get_hora_inicio_str(),
+            a.get_hora_fin_str(),
+            a.materia.nombre if a.materia else '',
+            a.profesor.get_nombre_completo() if a.profesor else ''
+        ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.csv', mimetype='text/csv')
 
 
 # --- Rutas de Exportación para Jefes ---
@@ -8170,17 +8355,25 @@ def exportar_jefe_horarios_grupo_excel():
             
             # Obtener horarios del grupo
             horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
-            
-            # Determinar turno y sábado
+
+            # Determinar turno y rango de horas dinámico
             es_vespertino = 'V' in grupo[1:3]
-            hora_inicio_turno = 13 if es_vespertino else 7
-            hora_fin_turno = 21 if es_vespertino else 14
+            horas_inicio_list = [a.horario.hora_inicio.hour for a in horarios_grupo if a.horario and a.horario.hora_inicio]
+            horas_fin_list = [a.horario.hora_fin.hour for a in horarios_grupo if a.horario and a.horario.hora_fin]
+            if horas_inicio_list and horas_fin_list:
+                hora_inicio_turno = min(horas_inicio_list)
+                hora_fin_turno = max(horas_fin_list)
+            else:
+                hora_inicio_turno = 13 if es_vespertino else 7
+                hora_fin_turno = 20 if es_vespertino else 14
+            if hora_fin_turno <= hora_inicio_turno:
+                hora_fin_turno = hora_inicio_turno + 1
             tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
-            
+
             dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
             if tiene_sabado:
                 dias_semana.append('Sábado')
-            
+
             # Encabezados
             headers = ['Hora'] + dias_semana
             for col, header in enumerate(headers, 1):
@@ -8278,16 +8471,24 @@ def exportar_jefe_horarios_grupo_pdf():
             # Obtener horarios del grupo
             horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
 
-            # Determinar turno y sábado
+            # Determinar turno y rango de horas dinámico
             es_vespertino = 'V' in grupo[1:3]
-            hora_inicio_turno = 13 if es_vespertino else 7
-            hora_fin_turno = 21 if es_vespertino else 14
+            horas_inicio_list = [a.horario.hora_inicio.hour for a in horarios_grupo if a.horario and a.horario.hora_inicio]
+            horas_fin_list = [a.horario.hora_fin.hour for a in horarios_grupo if a.horario and a.horario.hora_fin]
+            if horas_inicio_list and horas_fin_list:
+                hora_inicio_turno = min(horas_inicio_list)
+                hora_fin_turno = max(horas_fin_list)
+            else:
+                hora_inicio_turno = 13 if es_vespertino else 7
+                hora_fin_turno = 20 if es_vespertino else 14
+            if hora_fin_turno <= hora_inicio_turno:
+                hora_fin_turno = hora_inicio_turno + 1
             tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
-            
+
             dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
             if tiene_sabado:
                 dias_semana.append('Sábado')
-            
+
             # Título del grupo
             elements.append(Paragraph(f"Horario: {grupo}", title_style))
             elements.append(Spacer(1, 10))
@@ -8341,7 +8542,62 @@ def exportar_jefe_horarios_grupo_pdf():
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_grupos'))
-    
+
+# ==========================================
+# EXPORTAR HORARIOS POR GRUPO (CSV) - JEFE
+# ==========================================
+@app.route('/jefe/horarios/grupos/exportar/csv')
+@login_required
+def exportar_jefe_horarios_grupo_csv():
+    if not current_user.is_jefe_carrera():
+        abort(403)
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.activo == True,
+        Materia.carrera_id.in_(carrera_ids)
+    ).all()
+
+    if not asignaciones:
+        flash('No hay horarios para exportar.', 'warning')
+        return redirect(url_for('jefe_ver_horarios_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    grupos_unicos = sorted(set(a.grupo for a in asignaciones if a.grupo))
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Grupo', 'Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for grupo in grupos_unicos:
+        grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
+        if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
+            continue
+
+        horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
+        for a in sorted(horarios_grupo, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+            dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+            writer.writerow([
+                grupo,
+                dia,
+                a.get_hora_inicio_str(),
+                a.get_hora_fin_str(),
+                a.materia.nombre if a.materia else '',
+                a.profesor.get_nombre_completo() if a.profesor else ''
+            ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.csv', mimetype='text/csv')
+
 # =================================================================
 # RUTAS DE EXPORTACIÓN EN FORMATO FDA (ADMIN)
 # =================================================================

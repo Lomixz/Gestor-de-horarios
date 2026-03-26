@@ -437,6 +437,9 @@
             <a href="{{ url_for('exportar_horarios_grupo_pdf') }}" class="btn btn-danger btn-sm">
                 <i class="fas fa-file-pdf me-1"></i> Descargar Todo PDF
             </a>
+            <a href="{{ url_for('exportar_horarios_grupo_csv') }}" class="btn btn-info btn-sm">
+                <i class="fas fa-file-csv me-1"></i> Descargar Todo CSV
+            </a>
             <button class="btn btn-outline-danger btn-sm" id="toggleSeleccion">
                 <i class="fas fa-check-square me-1"></i> Seleccionar para Eliminar
             </button>
@@ -556,15 +559,20 @@
                         </span>
                     </h4>
                     <div class="acciones-grupo">
-                        <a href="{{ url_for('exportar_horario_individual_excel', nombre_grupo=grupo) }}" 
-                           class="btn-accion-grupo" 
+                        <a href="{{ url_for('exportar_horario_individual_excel', nombre_grupo=grupo) }}"
+                           class="btn-accion-grupo"
                            title="Exportar a Excel">
                             <i class="fas fa-file-excel"></i> Excel
                         </a>
-                        <a href="{{ url_for('exportar_horario_individual_pdf', nombre_grupo=grupo) }}" 
-                           class="btn-accion-grupo" 
+                        <a href="{{ url_for('exportar_horario_individual_pdf', nombre_grupo=grupo) }}"
+                           class="btn-accion-grupo"
                            title="Exportar a PDF">
                             <i class="fas fa-file-pdf"></i> PDF
+                        </a>
+                        <a href="{{ url_for('exportar_horario_individual_csv', nombre_grupo=grupo) }}"
+                           class="btn-accion-grupo"
+                           title="Exportar a CSV">
+                            <i class="fas fa-file-csv"></i> CSV
                         </a>
                         {% if grupo_id.value %}
                         <a href="{{ url_for('eliminar_horarios_grupo', grupo_id=grupo_id.value) }}"

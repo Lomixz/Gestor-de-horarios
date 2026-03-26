@@ -82,12 +82,35 @@ def chatbot_message():
     if not config.habilitado:
         return jsonify({'error': 'El chatbot no está habilitado.'}), 403
 
-    data = request.get_json()
-    if not data or not data.get('text', '').strip():
-        return jsonify({'error': 'Mensaje vacío.'}), 400
+    # Support both JSON and multipart/form-data (file uploads)
+    file_info = None
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        user_text = (request.form.get('text') or '').strip()
+        try:
+            history = json.loads(request.form.get('history', '[]'))
+        except (json.JSONDecodeError, TypeError):
+            history = []
+        uploaded_file = request.files.get('file')
+        if uploaded_file and uploaded_file.filename:
+            # Validate file size (5MB max)
+            uploaded_file.seek(0, 2)
+            file_size = uploaded_file.tell()
+            uploaded_file.seek(0)
+            if file_size > 5 * 1024 * 1024:
+                return jsonify({'error': 'El archivo es demasiado grande. Máximo 5MB.'}), 400
+            # Save uploaded file
+            file_data = uploaded_file.read()
+            file_id = file_manager.save_file(file_data, uploaded_file.filename, current_user.id, 'application/octet-stream')
+            file_info = {'file_id': file_id, 'filename': uploaded_file.filename}
+    else:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Mensaje vacío.'}), 400
+        user_text = (data.get('text') or '').strip()
+        history = data.get('history', [])
 
-    user_text = data['text'].strip()
-    history = data.get('history', [])
+    if not user_text and not file_info:
+        return jsonify({'error': 'Mensaje vacío.'}), 400
 
     # Capture everything needed before spawning thread
     user_id = current_user.id
@@ -104,7 +127,12 @@ def chatbot_message():
             'role': msg.get('role', 'user'),
             'content': msg.get('content', '')
         })
-    messages.append({'role': 'user', 'content': user_text})
+    # Add file context to user message so LLM knows about the attachment
+    user_content = user_text
+    if file_info:
+        file_note = f"\n\n[El usuario adjuntó un archivo: {file_info['filename']}]"
+        user_content = (user_text + file_note) if user_text else f"[El usuario adjuntó un archivo: {file_info['filename']}]"
+    messages.append({'role': 'user', 'content': user_content})
 
     # Generate task_id and store pending status
     task_id = str(uuid.uuid4())
@@ -136,7 +164,7 @@ def chatbot_message():
                         break
 
                     user = db.session.get(User, user_id)
-                    tool_result = execute_tool(tc.name, tc.arguments, user)
+                    tool_result = execute_tool(tc.name, tc.arguments, user, file_info=file_info)
 
                     tool_result_text = tool_result['text']
                     if tool_result.get('html'):

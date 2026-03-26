@@ -371,6 +371,199 @@ TOOLS = {
             'required': ['nombre', 'codigo', 'cuatrimestre', 'carrera_codigo']
         }
     },
+
+    # --- Import/Export tools ---
+    'import_data': {
+        'name': 'import_data',
+        'description': 'Importa datos masivamente desde un archivo CSV/Excel que el usuario adjuntó. IMPORTANTE: El usuario DEBE haber adjuntado un archivo en su mensaje. Antes de ejecutar, pregunta al usuario qué tipo de datos contiene el archivo si no es claro.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'tipo_importacion': {
+                    'type': 'string',
+                    'description': 'Tipo de datos a importar del archivo',
+                    'enum': ['profesores', 'materias', 'carreras', 'asignaciones_profesor', 'asignaciones_grupo']
+                },
+                'carrera_codigo': {
+                    'type': 'string',
+                    'description': 'Código de carrera por defecto para profesores/materias sin carrera especificada (opcional)'
+                },
+                'restar_horas': {
+                    'type': 'integer',
+                    'description': 'Horas a restar de horas_semanales de materias (opcional, default 0). Solo aplica para importación de materias.'
+                }
+            },
+            'required': ['tipo_importacion']
+        }
+    },
+    'download_import_template': {
+        'name': 'download_import_template',
+        'description': 'Genera y descarga una plantilla CSV para importación masiva de datos. Úsala cuando el usuario pida una plantilla o formato para subir datos.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'tipo': {
+                    'type': 'string',
+                    'description': 'Tipo de plantilla a descargar',
+                    'enum': ['profesores', 'materias', 'carreras', 'asignaciones_profesor', 'asignaciones_grupo']
+                }
+            },
+            'required': ['tipo']
+        }
+    },
+
+    # --- Group CRUD ---
+    'create_group': {
+        'name': 'create_group',
+        'description': 'Crea un nuevo grupo académico.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'carrera_codigo': {'type': 'string', 'description': 'Código de la carrera (ej: ING-SIS)'},
+                'cuatrimestre': {'type': 'integer', 'description': 'Número de cuatrimestre (1-10)'},
+                'turno': {'type': 'string', 'description': 'Turno del grupo', 'enum': ['M', 'V']},
+                'numero_grupo': {'type': 'integer', 'description': 'Número del grupo (1, 2, 3...)'}
+            },
+            'required': ['carrera_codigo', 'cuatrimestre', 'turno', 'numero_grupo']
+        }
+    },
+    'edit_group': {
+        'name': 'edit_group',
+        'description': 'Edita un grupo existente identificado por su código.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código del grupo a editar (ej: 1MSI1)'},
+                'cuatrimestre': {'type': 'integer', 'description': 'Nuevo cuatrimestre (opcional)'},
+                'turno': {'type': 'string', 'description': 'Nuevo turno (opcional)', 'enum': ['M', 'V']},
+                'numero_grupo': {'type': 'integer', 'description': 'Nuevo número de grupo (opcional)'}
+            },
+            'required': ['codigo']
+        }
+    },
+    'delete_group': {
+        'name': 'delete_group',
+        'description': 'Elimina un grupo académico (lo desactiva) junto con sus horarios.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código del grupo a eliminar'}
+            },
+            'required': ['codigo']
+        }
+    },
+
+    # --- Career/Subject edit+delete ---
+    'edit_career': {
+        'name': 'edit_career',
+        'description': 'Edita una carrera existente.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código actual de la carrera'},
+                'nombre': {'type': 'string', 'description': 'Nuevo nombre (opcional)'},
+                'descripcion': {'type': 'string', 'description': 'Nueva descripción (opcional)'},
+                'facultad': {'type': 'string', 'description': 'Nueva facultad (opcional)'}
+            },
+            'required': ['codigo']
+        }
+    },
+    'delete_career': {
+        'name': 'delete_career',
+        'description': 'Elimina (desactiva) una carrera del sistema.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código de la carrera a eliminar'}
+            },
+            'required': ['codigo']
+        }
+    },
+    'edit_subject': {
+        'name': 'edit_subject',
+        'description': 'Edita una materia existente.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código actual de la materia'},
+                'nombre': {'type': 'string', 'description': 'Nuevo nombre (opcional)'},
+                'cuatrimestre': {'type': 'integer', 'description': 'Nuevo cuatrimestre (opcional)'},
+                'creditos': {'type': 'integer', 'description': 'Nuevos créditos (opcional)'},
+                'horas_semanales': {'type': 'integer', 'description': 'Nuevas horas semanales (opcional)'}
+            },
+            'required': ['codigo']
+        }
+    },
+    'delete_subject': {
+        'name': 'delete_subject',
+        'description': 'Elimina (desactiva) una materia del sistema.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'codigo': {'type': 'string', 'description': 'Código de la materia a eliminar'}
+            },
+            'required': ['codigo']
+        }
+    },
+
+    # --- Assignments ---
+    'assign_subject_to_professor': {
+        'name': 'assign_subject_to_professor',
+        'description': 'Asigna una materia a un profesor.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'nombre_profesor': {'type': 'string', 'description': 'Nombre completo o parcial del profesor'},
+                'materia_codigo': {'type': 'string', 'description': 'Código de la materia a asignar'}
+            },
+            'required': ['nombre_profesor', 'materia_codigo']
+        }
+    },
+    'assign_professor_to_group': {
+        'name': 'assign_professor_to_group',
+        'description': 'Asigna un profesor a un grupo para impartir una materia específica.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'nombre_profesor': {'type': 'string', 'description': 'Nombre completo o parcial del profesor'},
+                'grupo_codigo': {'type': 'string', 'description': 'Código del grupo'},
+                'materia_codigo': {'type': 'string', 'description': 'Código de la materia a impartir'}
+            },
+            'required': ['nombre_profesor', 'grupo_codigo', 'materia_codigo']
+        }
+    },
+
+    # --- Schedule version management ---
+    'list_schedule_versions': {
+        'name': 'list_schedule_versions',
+        'description': 'Lista las versiones de horarios guardadas (backups).',
+        'parameters': {
+            'type': 'object',
+            'properties': {}
+        }
+    },
+    'restore_schedule_version': {
+        'name': 'restore_schedule_version',
+        'description': 'Restaura una versión anterior de horarios. IMPORTANTE: Esto reemplazará los horarios activos actuales.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'version_id': {'type': 'integer', 'description': 'ID de la versión a restaurar'}
+            },
+            'required': ['version_id']
+        }
+    },
+    'delete_schedule': {
+        'name': 'delete_schedule',
+        'description': 'Elimina los horarios activos de un grupo específico.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'grupo_codigo': {'type': 'string', 'description': 'Código del grupo cuyos horarios se eliminarán'}
+            },
+            'required': ['grupo_codigo']
+        }
+    },
 }
 
 # Tools available per role
@@ -384,6 +577,13 @@ ROLE_TOOLS = {
         'check_generation_progress',
         'create_career', 'list_careers', 'create_subject',
         'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
+        # New tools
+        'import_data', 'download_import_template',
+        'create_group', 'edit_group', 'delete_group',
+        'edit_career', 'delete_career',
+        'edit_subject', 'delete_subject',
+        'assign_subject_to_professor', 'assign_professor_to_group',
+        'list_schedule_versions', 'restore_schedule_version', 'delete_schedule',
     ],
     'jefe_carrera': [
         'get_schedule_group', 'get_schedule_professor',
@@ -392,11 +592,18 @@ ROLE_TOOLS = {
         'get_stats', 'generate_schedules', 'check_generation_progress',
         'list_careers',
         'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
+        # New tools
+        'import_data', 'download_import_template',
+        'create_group', 'edit_group',
+        'create_subject', 'edit_subject',
+        'assign_subject_to_professor', 'assign_professor_to_group',
+        'list_schedule_versions', 'restore_schedule_version', 'delete_schedule',
     ],
     'recursos_humanos': [
         'list_users', 'list_professors', 'list_careers',
         'get_stats', 'get_schedule_group', 'get_schedule_professor',
         'export_schedule_excel', 'export_schedule_pdf', 'export_schedule_csv',
+        'download_import_template',
     ],
     'profesor_completo': [
         'get_my_schedule', 'set_availability',
@@ -419,11 +626,15 @@ Tus capacidades incluyen:
 - Consultar disponibilidad y horas libres de un profesor
 - Listar grupos, profesores y materias
 - Crear, editar y desactivar usuarios (pide TODOS los campos obligatorios antes de ejecutar: username, password, nombre, apellido, email, rol; para profesores/jefe también las carreras)
-- Crear carreras y materias
+- Crear, editar y eliminar carreras, materias y grupos
 - Listar usuarios y carreras
+- Asignar materias a profesores y profesores a grupos
 - Generar horarios para un grupo específico, una carrera completa, o todos los grupos, y consultar su progreso
+- Gestionar versiones de horarios (listar, restaurar, eliminar horarios de un grupo)
 - Generar backups del sistema
 - Exportar horarios en Excel y PDF (formato FDA oficial)
+- Importar datos masivamente desde archivos CSV/Excel (profesores, materias, carreras, asignaciones)
+- Descargar plantillas CSV para importación
 - Ver estadísticas del sistema
 
 Reglas:
@@ -433,6 +644,8 @@ Reglas:
 - Para acciones de escritura (crear usuario, carrera, materia), pide TODOS los campos requeridos antes de ejecutar.
 - Puedes ofrecer descargas en Excel, PDF o CSV cuando el usuario consulte horarios.
 - IMPORTANTE: Cuando el usuario pide un horario, SIEMPRE usa la herramienta correspondiente inmediatamente (get_schedule_professor, get_schedule_group, get_my_schedule). NO preguntes en qué formato lo quiere antes de ejecutar la herramienta. El sistema mostrará automáticamente una tabla visual y botones para descargar en Excel y PDF. Después de que la herramienta devuelva los datos, solo responde con un breve resumen (ej: "Aquí tienes el horario de X."). NO repitas los datos del horario en texto ni en tablas markdown porque el sistema ya los muestra visualmente.
+- Cuando el usuario adjunte un archivo, pregunta qué tipo de datos contiene si no es claro por el contexto o nombre del archivo. Luego usa import_data con el tipo correcto.
+- Cuando el usuario pida una plantilla o formato para importar datos, usa download_import_template.
 
 IMPORTANTE - RESTRICCIÓN ESTRICTA:
 - SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
@@ -446,9 +659,14 @@ Tus capacidades incluyen:
 - Consultar horarios de grupos y profesores de tus carreras
 - Consultar disponibilidad y horas libres de profesores de tus carreras
 - Listar grupos, profesores y materias de tus carreras
+- Crear y editar grupos y materias de tus carreras
+- Asignar materias a profesores y profesores a grupos
 - Generar horarios y consultar progreso de generación
+- Gestionar versiones de horarios (listar, restaurar, eliminar horarios de un grupo)
 - Listar carreras
 - Exportar horarios en Excel y PDF
+- Importar datos masivamente desde archivos CSV/Excel (profesores, materias, asignaciones)
+- Descargar plantillas CSV para importación
 - Ver estadísticas de tus carreras
 
 Reglas:
@@ -457,6 +675,8 @@ Reglas:
 - Si pide algo fuera de sus carreras, indícale que no tiene permisos para ello.
 - Puedes ofrecer descargas en Excel, PDF o CSV cuando consulte horarios.
 - IMPORTANTE: Cuando el usuario pide un horario, SIEMPRE usa la herramienta correspondiente inmediatamente (get_schedule_professor, get_schedule_group, get_my_schedule). NO preguntes en qué formato lo quiere antes de ejecutar la herramienta. El sistema mostrará automáticamente una tabla visual y botones para descargar en Excel y PDF. Después de que la herramienta devuelva los datos, solo responde con un breve resumen (ej: "Aquí tienes el horario de X."). NO repitas los datos del horario en texto ni en tablas markdown porque el sistema ya los muestra visualmente.
+- Cuando el usuario adjunte un archivo, pregunta qué tipo de datos contiene si no es claro. Luego usa import_data.
+- Cuando el usuario pida una plantilla o formato para importar datos, usa download_import_template.
 
 IMPORTANTE - RESTRICCIÓN ESTRICTA:
 - SOLO responde preguntas relacionadas con el sistema de gestión de horarios académicos.
@@ -531,10 +751,12 @@ SUGGESTION_CHIPS = {
     'admin': [
         'Ver estadísticas', 'Listar usuarios', 'Crear usuario',
         'Generar horarios', 'Crear carrera', 'Listar carreras',
+        'Importar datos', 'Descargar plantilla',
     ],
     'jefe_carrera': [
         'Grupos de mi carrera', 'Generar horarios',
         'Profesores de mi carrera', 'Estadísticas',
+        'Importar datos', 'Descargar plantilla',
     ],
     'recursos_humanos': [
         'Listar usuarios', 'Listar profesores', 'Estadísticas',

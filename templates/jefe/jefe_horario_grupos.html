@@ -231,13 +231,17 @@
                     </span>
                 </h4>
                 <div class="acciones-grupo">
-                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}" 
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}"
                        class="btn-accion-grupo" title="Exportar a Excel">
                         <i class="fas fa-file-excel"></i> Excel
                     </a>
-                    <a href="{{ url_for('exportar_jefe_horario_grupo_pdf', nombre_grupo=grupo) }}" 
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_pdf', nombre_grupo=grupo) }}"
                        class="btn-accion-grupo" title="Exportar a PDF">
                         <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_csv', nombre_grupo=grupo) }}"
+                       class="btn-accion-grupo" title="Exportar a CSV">
+                        <i class="fas fa-file-csv"></i> CSV
                     </a>
                 </div>
             </div>

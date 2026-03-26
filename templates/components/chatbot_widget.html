@@ -285,6 +285,58 @@
     cursor: not-allowed;
 }
 
+#chatbot-attach {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: #6c757d;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+#chatbot-attach:hover { background: #5a6268; }
+#chatbot-attach.has-file { background: #198754; }
+
+#chatbot-file-preview {
+    display: none;
+    padding: 6px 12px;
+    background: #e9ecef;
+    border-top: 1px solid #dee2e6;
+    font-size: 12px;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+#chatbot-file-preview.visible { display: flex; }
+#chatbot-file-preview .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #495057;
+}
+#chatbot-file-preview .file-remove {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+}
+
+.chat-msg .file-indicator {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    opacity: 0.85;
+}
+.chat-msg .file-indicator i { margin-right: 3px; }
+
 /* Mobile responsive */
 @media (max-width: 480px) {
     #chatbot-panel {
@@ -316,8 +368,15 @@
         <div class="chat-msg bot">¡Hola! Soy tu asistente del sistema de horarios. ¿En qué puedo ayudarte?</div>
     </div>
     <div id="chatbot-suggestions"></div>
+    <div id="chatbot-file-preview">
+        <i class="fas fa-file-alt text-primary"></i>
+        <span class="file-name" id="chatbot-file-name"></span>
+        <button class="file-remove" id="chatbot-file-remove" title="Quitar archivo"><i class="fas fa-times"></i></button>
+    </div>
     <div id="chatbot-input-area">
         <input type="text" id="chatbot-input" placeholder="Escribe un mensaje..." autocomplete="off">
+        <input type="file" id="chatbot-file-input" accept=".csv,.xlsx,.xls" style="display:none;">
+        <button id="chatbot-attach" title="Adjuntar archivo CSV/Excel"><i class="fas fa-paperclip"></i></button>
         <button id="chatbot-send"><i class="fas fa-paper-plane"></i></button>
     </div>
 </div>
@@ -338,11 +397,17 @@
     var messagesDiv = document.getElementById('chatbot-messages');
     var suggestionsDiv = document.getElementById('chatbot-suggestions');
     var badge = document.getElementById('chatbot-badge');
+    var fileInput = document.getElementById('chatbot-file-input');
+    var attachBtn = document.getElementById('chatbot-attach');
+    var filePreview = document.getElementById('chatbot-file-preview');
+    var fileName = document.getElementById('chatbot-file-name');
+    var fileRemove = document.getElementById('chatbot-file-remove');
 
     var history = [];
     var isWaiting = false;
     var unreadCount = 0;
     var pollTimer = null;
+    var MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
     // --- Markdown formatter ---
     function formatMarkdown(text) {
@@ -487,12 +552,41 @@
 
     sendBtn.addEventListener('click', sendMessage);
 
+    // File attachment handlers
+    attachBtn.addEventListener('click', function() { fileInput.click(); });
+    fileInput.addEventListener('change', function() {
+        var file = fileInput.files[0];
+        if (!file) return;
+        if (file.size > MAX_FILE_SIZE) {
+            appendMessage('bot', 'El archivo es demasiado grande. Máximo 5MB.');
+            fileInput.value = '';
+            return;
+        }
+        fileName.textContent = file.name;
+        filePreview.classList.add('visible');
+        attachBtn.classList.add('has-file');
+    });
+    fileRemove.addEventListener('click', function() {
+        fileInput.value = '';
+        filePreview.classList.remove('visible');
+        attachBtn.classList.remove('has-file');
+    });
+
+    function clearFileAttachment() {
+        fileInput.value = '';
+        filePreview.classList.remove('visible');
+        attachBtn.classList.remove('has-file');
+    }
+
     function sendMessage() {
         var text = input.value.trim();
-        if (!text || isWaiting) return;
+        var file = fileInput.files[0];
+        if ((!text && !file) || isWaiting) return;
 
-        appendMessage('user', text);
-        history.push({role: 'user', content: text});
+        var displayText = text || '';
+        var attachedFileName = file ? file.name : null;
+        appendMessage('user', displayText, null, null, false, null, attachedFileName);
+        history.push({role: 'user', content: displayText + (attachedFileName ? '\n[Archivo adjunto: ' + attachedFileName + ']' : '')});
         saveHistory();
         input.value = '';
 
@@ -500,14 +594,26 @@
         sendBtn.disabled = true;
         showTyping();
 
-        secureFetch('/api/chatbot/message', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                text: text,
-                history: history.slice(-MAX_HISTORY_CONTEXT)
-            })
-        })
+        var fetchOpts;
+        if (file) {
+            var formData = new FormData();
+            formData.append('text', displayText);
+            formData.append('history', JSON.stringify(history.slice(-MAX_HISTORY_CONTEXT)));
+            formData.append('file', file);
+            fetchOpts = { method: 'POST', body: formData };
+            clearFileAttachment();
+        } else {
+            fetchOpts = {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    text: displayText,
+                    history: history.slice(-MAX_HISTORY_CONTEXT)
+                })
+            };
+        }
+
+        secureFetch('/api/chatbot/message', fetchOpts)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.task_id) {
@@ -587,7 +693,7 @@
         scrollToBottom();
     }
 
-    function appendMessage(type, text, html, downloadUrl, isRestore, downloadUrls) {
+    function appendMessage(type, text, html, downloadUrl, isRestore, downloadUrls, attachedFile) {
         var div = document.createElement('div');
         div.className = 'chat-msg ' + type;
 
@@ -596,6 +702,10 @@
         } else {
             var safeText = text ? text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '';
             div.innerHTML = safeText;
+            if (attachedFile) {
+                div.innerHTML += '<span class="file-indicator"><i class="fas fa-paperclip"></i>' +
+                    attachedFile.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>';
+            }
         }
 
         if (html) {

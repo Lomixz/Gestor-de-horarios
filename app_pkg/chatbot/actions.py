@@ -2,6 +2,7 @@
 import csv
 import json
 import logging
+import os
 import secrets
 import string
 import threading
@@ -14,6 +15,13 @@ from models import (
     HorarioAcademico, DisponibilidadProfesor, AsignacionProfesorGrupo,
     VersionHorario, BackupHistory, Role,
 )
+from utils import (
+    procesar_archivo_profesores, procesar_archivo_materias,
+    procesar_archivo_carreras, procesar_archivo_asignaciones,
+    procesar_archivo_asignaciones_grupo,
+    generar_plantilla_csv, generar_plantilla_csv_carreras,
+    generar_plantilla_csv_asignaciones, generar_plantilla_csv_asignaciones_grupo,
+)
 from app_pkg.helpers.schedule_helpers import procesar_horarios, obtener_periodo_actual
 from app_pkg.helpers.generation_helpers import (
     generar_horarios_masivos_con_progreso,
@@ -24,7 +32,7 @@ from . import file_manager
 logger = logging.getLogger('sistema_academico')
 
 
-def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
+def execute_tool(tool_name: str, arguments: dict, user: User, file_info: dict = None) -> dict:
     """Execute a tool action and return the result.
 
     Returns:
@@ -45,7 +53,6 @@ def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
         'get_professor_availability': _get_professor_availability,
         'get_my_subjects': _get_my_subjects,
         'get_my_groups': _get_my_groups,
-        # New handlers
         'export_schedule_excel': _export_schedule_excel,
         'export_schedule_pdf': _export_schedule_pdf,
         'export_schedule_csv': _export_schedule_csv,
@@ -57,13 +64,37 @@ def execute_tool(tool_name: str, arguments: dict, user: User) -> dict:
         'create_career': _create_career,
         'list_careers': _list_careers,
         'create_subject': _create_subject,
+        # Import tools
+        'import_data': _import_data,
+        'download_import_template': _download_import_template,
+        # Group CRUD
+        'create_group': _create_group,
+        'edit_group': _edit_group,
+        'delete_group': _delete_group,
+        # Career/Subject edit+delete
+        'edit_career': _edit_career,
+        'delete_career': _delete_career,
+        'edit_subject': _edit_subject,
+        'delete_subject': _delete_subject,
+        # Assignments
+        'assign_subject_to_professor': _assign_subject_to_professor,
+        'assign_professor_to_group': _assign_professor_to_group,
+        # Schedule versions
+        'list_schedule_versions': _list_schedule_versions,
+        'restore_schedule_version': _restore_schedule_version,
+        'delete_schedule': _delete_schedule,
     }
+
+    # Tools that need file_info
+    FILE_TOOLS = {'import_data'}
 
     handler = handlers.get(tool_name)
     if not handler:
         return {'text': f'Herramienta "{tool_name}" no encontrada.', 'html': None, 'download_url': None}
 
     try:
+        if tool_name in FILE_TOOLS:
+            return handler(arguments, user, file_info)
         return handler(arguments, user)
     except Exception as e:
         logger.error(f"Error ejecutando tool {tool_name}: {e}", exc_info=True)
@@ -1735,3 +1766,479 @@ def _generate_professor_csv(profesor, user):
     except Exception as e:
         logger.error(f"Error generando CSV de profesor: {e}")
         return None
+
+
+# ---- Import tools ----
+
+class _FileWrapper:
+    """Wraps bytes data as a file-like object with .filename for Werkzeug compat."""
+
+    def __init__(self, data: bytes, filename: str):
+        self._stream = BytesIO(data)
+        self.filename = filename
+
+    def read(self, *args):
+        return self._stream.read(*args)
+
+    def seek(self, *args):
+        return self._stream.seek(*args)
+
+    def tell(self):
+        return self._stream.tell()
+
+
+def _import_data(args, user, file_info=None):
+    """Import data from an uploaded CSV/Excel file."""
+    if not file_info:
+        return _result('No se detectó un archivo adjunto. Por favor adjunta un archivo CSV o Excel y vuelve a intentarlo.')
+
+    tipo = args.get('tipo_importacion', '')
+    if not tipo:
+        return _result('Debes especificar el tipo de importación: profesores, materias, carreras, asignaciones_profesor o asignaciones_grupo.')
+
+    # Retrieve the uploaded file
+    info = file_manager.get_file(file_info['file_id'], user.id)
+    if not info:
+        return _result('No se pudo recuperar el archivo adjunto. Puede haber expirado. Adjúntalo de nuevo.')
+
+    try:
+        with open(info['path'], 'rb') as f:
+            file_data = f.read()
+    except OSError:
+        return _result('Error al leer el archivo adjunto.')
+
+    archivo = _FileWrapper(file_data, file_info['filename'])
+    carrera_codigo = args.get('carrera_codigo')
+    carrera_defecto_id = None
+    if carrera_codigo:
+        carrera = Carrera.query.filter_by(codigo=carrera_codigo.upper()).first()
+        if carrera:
+            carrera_defecto_id = carrera.id
+
+    try:
+        if tipo == 'profesores':
+            resultado = procesar_archivo_profesores(archivo, carrera_defecto_id=carrera_defecto_id)
+            text = f"Importación de profesores completada.\n"
+            text += f"- Procesados: {resultado.get('procesados', 0)}\n"
+            text += f"- Creados: {resultado.get('creados', 0)}\n"
+            text += f"- Actualizados: {resultado.get('actualizados', 0)}\n"
+            if resultado.get('usuarios_creados'):
+                text += f"\nUsuarios creados con contraseñas temporales:\n"
+                for u in resultado['usuarios_creados'][:20]:
+                    text += f"  - {u.get('nombre', '')} {u.get('apellido', '')}: usuario={u.get('username', '')}, contraseña={u.get('password', '')}\n"
+                if len(resultado['usuarios_creados']) > 20:
+                    text += f"  ... y {len(resultado['usuarios_creados']) - 20} más\n"
+
+        elif tipo == 'materias':
+            restar_horas = args.get('restar_horas', 0)
+            resultado = procesar_archivo_materias(archivo, carrera_defecto_id=carrera_defecto_id, restar_horas=restar_horas)
+            text = f"Importación de materias completada.\n"
+            text += f"- Procesados: {resultado.get('procesados', 0)}\n"
+            text += f"- Creados: {resultado.get('creados', 0)}\n"
+            text += f"- Actualizados: {resultado.get('actualizados', 0)}\n"
+
+        elif tipo == 'carreras':
+            resultado = procesar_archivo_carreras(archivo, user.id)
+            text = f"Importación de carreras completada.\n"
+            text += f"- Procesados: {resultado.get('procesados', 0)}\n"
+            text += f"- Creados: {resultado.get('creados', 0)}\n"
+            text += f"- Actualizados: {resultado.get('actualizados', 0)}\n"
+
+        elif tipo == 'asignaciones_profesor':
+            resultado = procesar_archivo_asignaciones(archivo)
+            text = f"Importación de asignaciones profesor-materia completada.\n"
+            text += f"- Procesados: {resultado.get('procesados', 0)}\n"
+            text += f"- Asignados: {resultado.get('asignados', 0)}\n"
+            text += f"- Ya asignados: {resultado.get('ya_asignados', 0)}\n"
+
+        elif tipo == 'asignaciones_grupo':
+            resultado = procesar_archivo_asignaciones_grupo(archivo)
+            text = f"Importación de asignaciones grupo-materia completada.\n"
+            text += f"- Procesados: {resultado.get('procesados', 0)}\n"
+            text += f"- Creados: {resultado.get('asignaciones_creadas', 0)}\n"
+
+        else:
+            return _result(f'Tipo de importación no válido: {tipo}')
+
+        # Add errors if any
+        errores = resultado.get('errores', [])
+        if errores:
+            text += f"\nErrores ({len(errores)}):\n"
+            for err in errores[:10]:
+                text += f"  - {err}\n"
+            if len(errores) > 10:
+                text += f"  ... y {len(errores) - 10} errores más\n"
+
+        if resultado.get('mensaje'):
+            text += f"\n{resultado['mensaje']}"
+
+        return _result(text)
+
+    except Exception as e:
+        logger.error(f"Error en importación {tipo}: {e}", exc_info=True)
+        return _result(f'Error al procesar el archivo: {str(e)}')
+
+
+def _download_import_template(args, user):
+    """Generate and return a download URL for a CSV import template."""
+    tipo = args.get('tipo', '')
+    templates = {
+        'profesores': ('plantilla_profesores.csv', lambda: """nombre,apellido_paterno,apellido_materno,email,telefono,rol,tipo_profesor,carrera_codigo
+Juan,Pérez,García,juan.perez@universidad.edu,555-1234,profesor,profesor_completo,IRO
+María,González,López,maria.gonzalez@universidad.edu,555-5678,profesor,profesor_asignatura,IRO
+Carlos,Rodríguez,Martínez,carlos.rodriguez@universidad.edu,555-9012,jefe_carrera,,IRO
+"""),
+        'materias': ('plantilla_materias.csv', lambda: """nombre,codigo,cuatrimestre,carrera_codigo,creditos,horas_semanales,descripcion
+Cálculo Diferencial,MAT-101,1,ING-SIS,5,4,Curso de cálculo básico
+Programación I,PROG-101,1,ING-SIS,4,5,Introducción a la programación
+"""),
+        'carreras': ('plantilla_carreras.csv', generar_plantilla_csv_carreras),
+        'asignaciones_profesor': ('plantilla_asignaciones.csv', generar_plantilla_csv_asignaciones),
+        'asignaciones_grupo': ('plantilla_asignaciones_grupos.csv', generar_plantilla_csv_asignaciones_grupo),
+    }
+
+    if tipo not in templates:
+        return _result(f'Tipo de plantilla no válido: {tipo}. Opciones: profesores, materias, carreras, asignaciones_profesor, asignaciones_grupo.')
+
+    filename, generator = templates[tipo]
+    content = generator()
+    csv_bytes = content.encode('utf-8-sig')
+    file_id = file_manager.save_file(csv_bytes, filename, user.id, 'text/csv')
+    return _result(
+        f'Plantilla de {tipo} lista para descargar.',
+        download_url=f'/api/chatbot/download/{file_id}'
+    )
+
+
+# ---- Group CRUD ----
+
+def _create_group(args, user):
+    """Create a new academic group."""
+    carrera_codigo = args.get('carrera_codigo', '').upper()
+    cuatrimestre = args.get('cuatrimestre')
+    turno = args.get('turno', 'M').upper()
+    numero_grupo = args.get('numero_grupo', 1)
+
+    carrera = Carrera.query.filter_by(codigo=carrera_codigo, activa=True).first()
+    if not carrera:
+        return _result(f'No se encontró la carrera con código "{carrera_codigo}".')
+
+    if turno not in ('M', 'V'):
+        return _result('El turno debe ser "M" (Matutino) o "V" (Vespertino).')
+
+    if not cuatrimestre or cuatrimestre < 1 or cuatrimestre > 10:
+        return _result('El cuatrimestre debe ser un número entre 1 y 10.')
+
+    # Check if group already exists
+    codigo = f"{cuatrimestre}{turno}{carrera_codigo}{numero_grupo}"
+    existing = Grupo.query.filter_by(codigo=codigo).first()
+    if existing:
+        if existing.activo:
+            return _result(f'Ya existe un grupo con código "{codigo}".')
+        else:
+            existing.activo = True
+            db.session.commit()
+            return _result(f'Grupo "{codigo}" reactivado exitosamente.')
+
+    grupo = Grupo(
+        codigo=codigo,
+        numero_grupo=numero_grupo,
+        turno=turno,
+        cuatrimestre=cuatrimestre,
+        carrera_id=carrera.id,
+        activo=True,
+        creado_por=user.id,
+    )
+    db.session.add(grupo)
+    db.session.commit()
+    return _result(f'Grupo "{codigo}" creado exitosamente (Carrera: {carrera.nombre}, Cuatrimestre: {cuatrimestre}, Turno: {"Matutino" if turno == "M" else "Vespertino"}).')
+
+
+def _edit_group(args, user):
+    """Edit an existing group."""
+    codigo = args.get('codigo', '').upper()
+    grupo = Grupo.query.filter_by(codigo=codigo).first()
+    if not grupo:
+        return _result(f'No se encontró el grupo con código "{codigo}".')
+
+    changes = []
+    if 'cuatrimestre' in args and args['cuatrimestre']:
+        grupo.cuatrimestre = args['cuatrimestre']
+        changes.append(f'cuatrimestre={args["cuatrimestre"]}')
+    if 'turno' in args and args['turno']:
+        grupo.turno = args['turno'].upper()
+        changes.append(f'turno={grupo.turno}')
+    if 'numero_grupo' in args and args['numero_grupo']:
+        grupo.numero_grupo = args['numero_grupo']
+        changes.append(f'numero_grupo={args["numero_grupo"]}')
+
+    if not changes:
+        return _result('No se especificaron cambios.')
+
+    db.session.commit()
+    return _result(f'Grupo "{codigo}" actualizado: {", ".join(changes)}.')
+
+
+def _delete_group(args, user):
+    """Soft-delete a group."""
+    codigo = args.get('codigo', '').upper()
+    grupo = Grupo.query.filter_by(codigo=codigo).first()
+    if not grupo:
+        return _result(f'No se encontró el grupo con código "{codigo}".')
+
+    if not grupo.activo:
+        return _result(f'El grupo "{codigo}" ya está desactivado.')
+
+    grupo.activo = False
+    # Also deactivate associated schedules
+    HorarioAcademico.query.filter_by(grupo=codigo, activo=True).update({'activo': False})
+    db.session.commit()
+    return _result(f'Grupo "{codigo}" eliminado (desactivado) exitosamente junto con sus horarios asociados.')
+
+
+# ---- Career/Subject edit+delete ----
+
+def _edit_career(args, user):
+    """Edit an existing career."""
+    codigo = args.get('codigo', '').upper()
+    carrera = Carrera.query.filter_by(codigo=codigo).first()
+    if not carrera:
+        return _result(f'No se encontró la carrera con código "{codigo}".')
+
+    changes = []
+    if 'nombre' in args and args['nombre']:
+        carrera.nombre = args['nombre']
+        changes.append(f'nombre="{args["nombre"]}"')
+    if 'descripcion' in args and args['descripcion']:
+        carrera.descripcion = args['descripcion']
+        changes.append('descripción actualizada')
+    if 'facultad' in args and args['facultad']:
+        carrera.facultad = args['facultad']
+        changes.append(f'facultad="{args["facultad"]}"')
+
+    if not changes:
+        return _result('No se especificaron cambios.')
+
+    db.session.commit()
+    return _result(f'Carrera "{codigo}" actualizada: {", ".join(changes)}.')
+
+
+def _delete_career(args, user):
+    """Soft-delete a career."""
+    codigo = args.get('codigo', '').upper()
+    carrera = Carrera.query.filter_by(codigo=codigo).first()
+    if not carrera:
+        return _result(f'No se encontró la carrera con código "{codigo}".')
+
+    if not carrera.activa:
+        return _result(f'La carrera "{codigo}" ya está desactivada.')
+
+    carrera.activa = False
+    db.session.commit()
+    return _result(f'Carrera "{codigo}" ({carrera.nombre}) eliminada (desactivada) exitosamente.')
+
+
+def _edit_subject(args, user):
+    """Edit an existing subject."""
+    codigo = args.get('codigo', '').upper()
+    materia = Materia.query.filter_by(codigo=codigo).first()
+    if not materia:
+        return _result(f'No se encontró la materia con código "{codigo}".')
+
+    changes = []
+    if 'nombre' in args and args['nombre']:
+        materia.nombre = args['nombre']
+        changes.append(f'nombre="{args["nombre"]}"')
+    if 'cuatrimestre' in args and args['cuatrimestre'] is not None:
+        materia.cuatrimestre = args['cuatrimestre']
+        changes.append(f'cuatrimestre={args["cuatrimestre"]}')
+    if 'creditos' in args and args['creditos'] is not None:
+        materia.creditos = args['creditos']
+        changes.append(f'créditos={args["creditos"]}')
+    if 'horas_semanales' in args and args['horas_semanales'] is not None:
+        materia.horas_semanales = args['horas_semanales']
+        changes.append(f'horas_semanales={args["horas_semanales"]}')
+
+    if not changes:
+        return _result('No se especificaron cambios.')
+
+    db.session.commit()
+    return _result(f'Materia "{codigo}" actualizada: {", ".join(changes)}.')
+
+
+def _delete_subject(args, user):
+    """Soft-delete a subject."""
+    codigo = args.get('codigo', '').upper()
+    materia = Materia.query.filter_by(codigo=codigo).first()
+    if not materia:
+        return _result(f'No se encontró la materia con código "{codigo}".')
+
+    if not materia.activa:
+        return _result(f'La materia "{codigo}" ya está desactivada.')
+
+    materia.activa = False
+    db.session.commit()
+    return _result(f'Materia "{codigo}" ({materia.nombre}) eliminada (desactivada) exitosamente.')
+
+
+# ---- Assignments ----
+
+def _assign_subject_to_professor(args, user):
+    """Assign a subject to a professor (many-to-many)."""
+    nombre = args.get('nombre_profesor', '')
+    materia_codigo = args.get('materia_codigo', '').upper()
+
+    result = _find_single_professor(nombre)
+    if isinstance(result, dict):
+        return result
+    profesor = result
+
+    materia = Materia.query.filter_by(codigo=materia_codigo, activa=True).first()
+    if not materia:
+        return _result(f'No se encontró la materia con código "{materia_codigo}".')
+
+    if materia in profesor.materias:
+        return _result(f'La materia "{materia.nombre}" ya está asignada al profesor {profesor.get_nombre_completo()}.')
+
+    profesor.materias.append(materia)
+    db.session.commit()
+    return _result(f'Materia "{materia.nombre}" ({materia_codigo}) asignada exitosamente al profesor {profesor.get_nombre_completo()}.')
+
+
+def _assign_professor_to_group(args, user):
+    """Assign a professor to teach a subject in a specific group."""
+    nombre = args.get('nombre_profesor', '')
+    grupo_codigo = args.get('grupo_codigo', '').upper()
+    materia_codigo = args.get('materia_codigo', '').upper()
+
+    result = _find_single_professor(nombre)
+    if isinstance(result, dict):
+        return result
+    profesor = result
+
+    grupo = Grupo.query.filter_by(codigo=grupo_codigo, activo=True).first()
+    if not grupo:
+        return _result(f'No se encontró el grupo con código "{grupo_codigo}".')
+
+    materia = Materia.query.filter_by(codigo=materia_codigo, activa=True).first()
+    if not materia:
+        return _result(f'No se encontró la materia con código "{materia_codigo}".')
+
+    # Check if assignment already exists
+    existing = AsignacionProfesorGrupo.query.filter_by(
+        profesor_id=profesor.id, materia_id=materia.id, grupo_id=grupo.id
+    ).first()
+    if existing:
+        if existing.activo:
+            return _result(f'El profesor {profesor.get_nombre_completo()} ya está asignado a la materia "{materia.nombre}" en el grupo "{grupo_codigo}".')
+        else:
+            existing.activo = True
+            db.session.commit()
+            return _result(f'Asignación reactivada: {profesor.get_nombre_completo()} → {materia.nombre} en grupo {grupo_codigo}.')
+
+    asignacion = AsignacionProfesorGrupo(
+        profesor_id=profesor.id,
+        materia_id=materia.id,
+        grupo_id=grupo.id,
+        horas_semanales=materia.horas_semanales or 3,
+        periodo_academico=obtener_periodo_actual()[0],
+        activo=True,
+        creado_por=user.id,
+    )
+    db.session.add(asignacion)
+    db.session.commit()
+    return _result(f'Profesor {profesor.get_nombre_completo()} asignado a "{materia.nombre}" en grupo {grupo_codigo} ({materia.horas_semanales or 3} hrs/sem).')
+
+
+# ---- Schedule version management ----
+
+def _list_schedule_versions(args, user):
+    """List saved schedule versions."""
+    versions = VersionHorario.query.filter_by(activo=True).order_by(VersionHorario.fecha_creacion.desc()).limit(20).all()
+    if not versions:
+        return _result('No hay versiones de horarios guardadas.')
+
+    html = '<table class="table table-sm table-striped"><thead><tr>'
+    html += '<th>ID</th><th>Nombre</th><th>Fecha</th><th>Registros</th><th>Grupos</th></tr></thead><tbody>'
+    text_lines = ['Versiones de horarios guardadas:']
+
+    for v in versions:
+        fecha = v.fecha_creacion.strftime('%Y-%m-%d %H:%M') if v.fecha_creacion else 'N/A'
+        num_registros = v.total_horarios or 0
+        grupos = v.grupos_afectados or 'N/A'
+        html += f'<tr><td>{v.id}</td><td>{v.nombre_version}</td><td>{fecha}</td><td>{num_registros}</td><td>{grupos}</td></tr>'
+        text_lines.append(f'  - ID {v.id}: {v.nombre_version} ({fecha}, {num_registros} registros)')
+
+    html += '</tbody></table>'
+    return _result('\n'.join(text_lines), html=html)
+
+
+def _restore_schedule_version(args, user):
+    """Restore a schedule version."""
+    version_id = args.get('version_id')
+    if not version_id:
+        return _result('Debes proporcionar el ID de la versión a restaurar.')
+
+    version = db.session.get(VersionHorario, version_id)
+    if not version:
+        return _result(f'No se encontró la versión con ID {version_id}.')
+
+    try:
+        data = json.loads(version.datos_horarios) if version.datos_horarios else []
+        if not data:
+            return _result('La versión no contiene datos de horarios.')
+
+        # Deactivate current active schedules for affected groups
+        grupos_afectados = version.grupos_afectados.split(',') if version.grupos_afectados else []
+        if grupos_afectados:
+            for gc in grupos_afectados:
+                gc = gc.strip()
+                if gc:
+                    HorarioAcademico.query.filter_by(grupo=gc, activo=True).update({'activo': False})
+        else:
+            HorarioAcademico.query.filter_by(activo=True).update({'activo': False})
+
+        # Restore from version data
+        restored = 0
+        for item in data:
+            horario = HorarioAcademico(
+                profesor_id=item.get('profesor_id'),
+                materia_id=item.get('materia_id'),
+                horario_id=item.get('horario_id'),
+                dia_semana=item.get('dia_semana'),
+                grupo=item.get('grupo'),
+                periodo_academico=item.get('periodo_academico', ''),
+                version_nombre=version.nombre_version,
+                activo=True,
+                creado_por=user.id,
+            )
+            db.session.add(horario)
+            restored += 1
+
+        version.restaurado = True
+        version.fecha_restauracion = datetime.utcnow()
+        db.session.commit()
+        return _result(f'Versión "{version.nombre_version}" restaurada exitosamente. Se restauraron {restored} horarios.')
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error restaurando versión {version_id}: {e}", exc_info=True)
+        return _result(f'Error al restaurar la versión: {str(e)}')
+
+
+def _delete_schedule(args, user):
+    """Delete active schedules for a specific group."""
+    grupo_codigo = args.get('grupo_codigo', '').upper()
+    if not grupo_codigo:
+        return _result('Debes proporcionar el código del grupo.')
+
+    grupo = Grupo.query.filter_by(codigo=grupo_codigo).first()
+    if not grupo:
+        return _result(f'No se encontró el grupo con código "{grupo_codigo}".')
+
+    count = HorarioAcademico.query.filter_by(grupo=grupo_codigo, activo=True).update({'activo': False})
+    db.session.commit()
+
+    if count == 0:
+        return _result(f'No había horarios activos para el grupo "{grupo_codigo}".')
+    return _result(f'Se eliminaron (desactivaron) {count} horarios del grupo "{grupo_codigo}".')
