@@ -24,7 +24,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-book"></i>
                                 </span>
-                                {{ form.nombre(class="form-control", placeholder="Ej: Introducción a la Programación") }}
+                                {{ form.nombre(class="form-control", placeholder="Ej: Introducción a la Programación", maxlength="200") }}
                             </div>
                             {% if form.nombre.errors %}
                                 {% for error in form.nombre.errors %}
@@ -39,7 +39,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-code"></i>
                                 </span>
-                                {{ form.codigo(class="form-control", placeholder="Ej: ISI-101, MAT-201") }}
+                                {{ form.codigo(class="form-control", placeholder="Ej: ISI-101, MAT-201", maxlength="20") }}
                             </div>
                             {% if form.codigo.errors %}
                                 {% for error in form.codigo.errors %}
@@ -55,7 +55,7 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-calendar"></i>
                                     </span>
-                                    {{ form.cuatrimestre(class="form-control") }}
+                                    {{ form.cuatrimestre(class="form-control", type="number", min="0", max="10") }}
                                 </div>
                                 {% if form.cuatrimestre.errors %}
                                     {% for error in form.cuatrimestre.errors %}
@@ -70,7 +70,7 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-star"></i>
                                     </span>
-                                    {{ form.creditos(class="form-control") }}
+                                    {{ form.creditos(class="form-control", type="number", min="1", max="10") }}
                                 </div>
                                 {% if form.creditos.errors %}
                                     {% for error in form.creditos.errors %}
@@ -87,7 +87,7 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-clock"></i>
                                     </span>
-                                    {{ form.horas_semanales(class="form-control") }}
+                                    {{ form.horas_semanales(class="form-control", type="number", min="1", max="50") }}
                                     <span class="input-group-text">h/semana</span>
                                 </div>
                                 {% if form.horas_semanales.errors %}
@@ -158,7 +158,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <p><strong>Fecha de Creación:</strong></p>
-                            <p class="text-muted">{{ materia.fecha_creacion.strftime('%d/%m/%Y %H:%M') }}</p>
+                            <p class="text-muted">{{ materia.fecha_creacion.strftime('%d/%m/%Y %H:%M') if materia.fecha_creacion else 'N/A' }}</p>
                         </div>
                         <div class="col-md-6">
                             <p><strong>Horas Semanales:</strong></p>

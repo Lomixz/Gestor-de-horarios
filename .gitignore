@@ -14,13 +14,10 @@ env/
 horarios/
 .env
 
-# Base de datos
-*.db
-instance/*.db
-
 # Archivos temporales/prueba
 test_*.xlsx
 plan.md
+Version anterior/
 
 # Archivos sensibles
 backups/
@@ -37,3 +34,5 @@ static/uploads/
 # OS
 .DS_Store
 Thumbs.db
+.claude/
+tmp/

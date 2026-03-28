@@ -291,11 +291,26 @@
                                 <input type="text" class="form-control" id="fecha_inicio_periodo"
                                        value="{{ config_excel.fecha_inicio_periodo or '' }}"
                                        placeholder="Ej: 12 DE ENERO">
-                                <div class="form-text">Fecha que aparecerá en el campo "Fecha de Inicio" del documento exportado (Ej: 12 DE ENERO)</div>
+                                <div class="form-text">Fecha que aparecera en el campo "Fecha de Inicio" del documento exportado (Ej: 12 DE ENERO)</div>
                             </div>
 
                             <hr class="my-3">
 
+                            <!-- Toggle de Firmas Digitales -->
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="firmas_habilitadas"
+                                           {% if config_excel.firmas_habilitadas == 'true' or config_excel.firmas_habilitadas == True %}checked{% endif %}
+                                           onchange="toggleFirmasSection()">
+                                    <label class="form-check-label fw-bold" for="firmas_habilitadas">
+                                        <i class="fas fa-signature me-1"></i>
+                                        Habilitar firmas digitales en exportaciones
+                                    </label>
+                                </div>
+                                <div class="form-text">Cuando esta deshabilitado, las firmas no se incluiran en los documentos exportados</div>
+                            </div>
+
+                            <div id="firmasSection">
                             <!-- Director Académico (Autorizó) -->
                             <div class="col-12">
                                 <h6 class="text-primary mb-3">
@@ -370,6 +385,7 @@
                                 </div>
                             </div>
                         </div>
+                        </div><!-- cierre firmasSection -->
 
                         <hr class="my-4">
 
@@ -436,6 +452,20 @@
                                     <option value="0">Nunca</option>
                                 </select>
                             </div>
+
+                            <!-- Toggle Firmas de Usuario -->
+                            <div class="col-12">
+                                <hr class="my-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="firmas_usuario_habilitadas"
+                                           {% if firmas_usuario_habilitadas == 'true' or firmas_usuario_habilitadas == True %}checked{% endif %}>
+                                    <label class="form-check-label fw-bold" for="firmas_usuario_habilitadas">
+                                        <i class="fas fa-signature me-1"></i>
+                                        Permitir a los usuarios subir y dibujar firmas digitales
+                                    </label>
+                                </div>
+                                <div class="form-text">Cuando está deshabilitado, los usuarios no podrán subir ni dibujar su firma en su perfil</div>
+                            </div>
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
@@ -477,170 +507,15 @@
                     </div>
 
                     <form id="databaseForm">
-                        <!-- Tipo de Base de Datos -->
+                        <!-- Estado de Conexión -->
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
-                                <label for="db_type" class="form-label fw-bold">Tipo de Base de Datos</label>
-                                <select class="form-select form-select-lg" id="db_type" onchange="toggleDatabaseConfig()">
-                                    <option value="sqlite" selected>SQLite (Archivo Local)</option>
-                                    <option value="postgresql">PostgreSQL</option>
-                                    <option value="mysql">MySQL</option>
-                                    <option value="mariadb">MariaDB</option>
-                                </select>
-                                <div class="form-text">Selecciona el tipo de base de datos que deseas usar</div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label for="db_status" class="form-label fw-bold">Estado de Conexión</label>
+                                <label for="db_status" class="form-label fw-bold">Estado de Conexion</label>
                                 <div class="input-group">
                                     <span class="input-group-text" id="status-icon">
                                         <i class="fas fa-circle text-success" id="status-dot"></i>
                                     </span>
-                                    <input type="text" class="form-control" id="db_status" value="Conectado" readonly>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Configuración SQLite -->
-                        <div id="sqlite-config" class="database-config">
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary mb-3">
-                                        <i class="fas fa-file me-2"></i>
-                                        Configuración SQLite
-                                    </h6>
-                                </div>
-                                <div class="col-md-8">
-                                    <label for="sqlite_path" class="form-label">Ruta del Archivo de Base de Datos</label>
-                                    <input type="text" class="form-control" id="sqlite_path" value="instance/sistema_academico.db" readonly>
-                                    <div class="form-text">Ruta relativa al directorio del proyecto</div>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="sqlite_backup_freq" class="form-label">Frecuencia de Backup</label>
-                                    <select class="form-select" id="sqlite_backup_freq">
-                                        <option value="daily" selected>Diario</option>
-                                        <option value="weekly">Semanal</option>
-                                        <option value="monthly">Mensual</option>
-                                        <option value="manual">Manual</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Configuración PostgreSQL -->
-                        <div id="postgresql-config" class="database-config" style="display: none;">
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary mb-3">
-                                        <i class="fas fa-server me-2"></i>
-                                        Configuración PostgreSQL
-                                    </h6>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="pg_host" class="form-label">Host/Servidor</label>
-                                    <input type="text" class="form-control" id="pg_host" placeholder="localhost" value="localhost">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="pg_port" class="form-label">Puerto</label>
-                                    <input type="number" class="form-control" id="pg_port" placeholder="5432" value="5432">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="pg_ssl" class="form-label">SSL</label>
-                                    <select class="form-select" id="pg_ssl">
-                                        <option value="require" selected>Requerir</option>
-                                        <option value="prefer">Preferir</option>
-                                        <option value="disable">Deshabilitar</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="pg_database" class="form-label">Nombre de Base de Datos</label>
-                                    <input type="text" class="form-control" id="pg_database" placeholder="sistema_academico" value="sistema_academico">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="pg_username" class="form-label">Usuario</label>
-                                    <input type="text" class="form-control" id="pg_username" placeholder="postgres" value="postgres">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="pg_password" class="form-label">Contraseña</label>
-                                    <input type="password" class="form-control" id="pg_password" placeholder="Contraseña">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Configuración MySQL -->
-                        <div id="mysql-config" class="database-config" style="display: none;">
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary mb-3">
-                                        <i class="fas fa-server me-2"></i>
-                                        Configuración MySQL
-                                    </h6>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="mysql_host" class="form-label">Host/Servidor</label>
-                                    <input type="text" class="form-control" id="mysql_host" placeholder="localhost" value="localhost">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="mysql_port" class="form-label">Puerto</label>
-                                    <input type="number" class="form-control" id="mysql_port" placeholder="3306" value="3306">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="mysql_ssl" class="form-label">SSL</label>
-                                    <select class="form-select" id="mysql_ssl">
-                                        <option value="true" selected>Habilitado</option>
-                                        <option value="false">Deshabilitado</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mysql_database" class="form-label">Nombre de Base de Datos</label>
-                                    <input type="text" class="form-control" id="mysql_database" placeholder="sistema_academico" value="sistema_academico">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mysql_username" class="form-label">Usuario</label>
-                                    <input type="text" class="form-control" id="mysql_username" placeholder="root" value="root">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mysql_password" class="form-label">Contraseña</label>
-                                    <input type="password" class="form-control" id="mysql_password" placeholder="Contraseña">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Configuración MariaDB -->
-                        <div id="mariadb-config" class="database-config" style="display: none;">
-                            <div class="row g-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary mb-3">
-                                        <i class="fas fa-server me-2"></i>
-                                        Configuración MariaDB
-                                    </h6>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="mariadb_host" class="form-label">Host/Servidor</label>
-                                    <input type="text" class="form-control" id="mariadb_host" placeholder="localhost" value="localhost">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="mariadb_port" class="form-label">Puerto</label>
-                                    <input type="number" class="form-control" id="mariadb_port" placeholder="3306" value="3306">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="mariadb_ssl" class="form-label">SSL</label>
-                                    <select class="form-select" id="mariadb_ssl">
-                                        <option value="true" selected>Habilitado</option>
-                                        <option value="false">Deshabilitado</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mariadb_database" class="form-label">Nombre de Base de Datos</label>
-                                    <input type="text" class="form-control" id="mariadb_database" placeholder="sistema_academico" value="sistema_academico">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mariadb_username" class="form-label">Usuario</label>
-                                    <input type="text" class="form-control" id="mariadb_username" placeholder="root" value="root">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="mariadb_password" class="form-label">Contraseña</label>
-                                    <input type="password" class="form-control" id="mariadb_password" placeholder="Contraseña">
+                                    <input type="text" class="form-control" id="db_status" value="PostgreSQL - Conectado" readonly>
                                 </div>
                             </div>
                         </div>
@@ -703,17 +578,7 @@
                             </div>
                         </div>
 
-                        <div class="d-flex justify-content-between mt-4">
-                            <div>
-                                <button type="button" class="btn btn-outline-secondary me-2" onclick="verLogs()">
-                                    <i class="fas fa-file-alt me-1"></i>
-                                    Ver Logs
-                                </button>
-                                <button type="button" class="btn btn-outline-info" onclick="optimizarBD()">
-                                    <i class="fas fa-wrench me-1"></i>
-                                    Optimizar BD
-                                </button>
-                            </div>
+                        <div class="d-flex justify-content-end mt-4">
                             <div>
                                 <button type="button" class="btn btn-primary me-2" onclick="guardarDatabase()">
                                     <i class="fas fa-save me-1"></i>
@@ -727,6 +592,33 @@
                         </div>
                     </form>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para eliminar backup -->
+<div class="modal fade" id="modalEliminarBackup" tabindex="-1" aria-labelledby="modalEliminarBackupLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarBackupLabel">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Eliminar Backup
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-1">¿Está seguro de que desea eliminar este backup permanentemente?</p>
+                <p class="text-muted small mb-0"><strong id="backupFilenameLabel"></strong></p>
+                <p class="text-danger mt-3 mb-0"><i class="fas fa-info-circle me-1"></i>Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-danger" id="btnConfirmarEliminar">
+                    <i class="fas fa-trash me-1"></i>Eliminar
+                </button>
             </div>
         </div>
     </div>
@@ -781,10 +673,26 @@ function guardarSeguridad() {
         password_min_length: document.getElementById('password_min_length').value,
         max_login_attempts: document.getElementById('max_login_attempts').value,
         session_timeout: document.getElementById('session_timeout').value,
-        password_change_required: document.getElementById('password_change_required').value
+        password_change_required: document.getElementById('password_change_required').value,
+        firmas_usuario_habilitadas: document.getElementById('firmas_usuario_habilitadas').checked
     };
 
-    mostrarMensaje('Configuración de seguridad guardada exitosamente', 'success');
+    secureFetch('/admin/configuracion/seguridad', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            mostrarMensaje(data.message, 'success');
+        } else {
+            mostrarMensaje(data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        mostrarMensaje('Error de conexión: ' + error.message, 'danger');
+    });
 }
 
 function guardarCargaHoraria() {
@@ -835,39 +743,7 @@ function guardarCargaHoraria() {
     });
 }
 
-function toggleDatabaseConfig() {
-    const dbType = document.getElementById('db_type').value;
-    const configs = ['sqlite-config', 'postgresql-config', 'mysql-config', 'mariadb-config'];
-
-    // Ocultar todas las configuraciones
-    configs.forEach(config => {
-        document.getElementById(config).style.display = 'none';
-    });
-
-    // Mostrar la configuración seleccionada
-    document.getElementById(`${dbType}-config`).style.display = 'block';
-
-    // Actualizar estado de conexión
-    updateConnectionStatus();
-}
-
-function updateConnectionStatus() {
-    const statusDot = document.getElementById('status-dot');
-    const statusText = document.getElementById('db_status');
-
-    // Simular verificación de conexión
-    statusDot.className = 'fas fa-circle text-warning';
-    statusText.value = 'Verificando...';
-
-    setTimeout(() => {
-        // Simular resultado de conexión exitosa
-        statusDot.className = 'fas fa-circle text-success';
-        statusText.value = 'Conectado';
-    }, 1000);
-}
-
 function testConnection() {
-    const dbType = document.getElementById('db_type').value;
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('db_status');
 
@@ -876,65 +752,33 @@ function testConnection() {
 
     mostrarMensaje('Probando conexión a la base de datos...', 'info');
 
-    // Simular prueba de conexión
-    setTimeout(() => {
-        const success = Math.random() > 0.2; // 80% de éxito
-        if (success) {
+    secureFetch('/admin/configuracion/test-connection', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
             statusDot.className = 'fas fa-circle text-success';
-            statusText.value = 'Conexión exitosa';
+            statusText.value = 'PostgreSQL - Conectado';
             mostrarMensaje('Conexión a la base de datos exitosa', 'success');
         } else {
             statusDot.className = 'fas fa-circle text-danger';
             statusText.value = 'Error de conexión';
-            mostrarMensaje('Error al conectar con la base de datos. Verifique la configuración.', 'danger');
+            mostrarMensaje('Error al conectar con la base de datos: ' + data.message, 'danger');
         }
-    }, 2000);
+    })
+    .catch(error => {
+        statusDot.className = 'fas fa-circle text-danger';
+        statusText.value = 'Error de conexión';
+        mostrarMensaje('Error de conexión: ' + error.message, 'danger');
+    });
 }
 
 function guardarDatabase() {
-    const dbType = document.getElementById('db_type').value;
     let configData = {
-        db_type: dbType,
+        db_type: 'postgresql',
         backup_frequency: document.getElementById('backup_frequency').value,
         backup_retention: document.getElementById('backup_retention').value,
         backup_location: document.getElementById('backup_location').value
     };
-
-    // Agregar configuración específica del tipo de BD
-    if (dbType === 'sqlite') {
-        configData.sqlite_path = document.getElementById('sqlite_path').value;
-        configData.sqlite_backup_freq = document.getElementById('sqlite_backup_freq').value;
-    } else if (dbType === 'postgresql') {
-        configData = {
-            ...configData,
-            host: document.getElementById('pg_host').value,
-            port: document.getElementById('pg_port').value,
-            database: document.getElementById('pg_database').value,
-            username: document.getElementById('pg_username').value,
-            password: document.getElementById('pg_password').value,
-            ssl: document.getElementById('pg_ssl').value
-        };
-    } else if (dbType === 'mysql') {
-        configData = {
-            ...configData,
-            host: document.getElementById('mysql_host').value,
-            port: document.getElementById('mysql_port').value,
-            database: document.getElementById('mysql_database').value,
-            username: document.getElementById('mysql_username').value,
-            password: document.getElementById('mysql_password').value,
-            ssl: document.getElementById('mysql_ssl').value
-        };
-    } else if (dbType === 'mariadb') {
-        configData = {
-            ...configData,
-            host: document.getElementById('mariadb_host').value,
-            port: document.getElementById('mariadb_port').value,
-            database: document.getElementById('mariadb_database').value,
-            username: document.getElementById('mariadb_username').value,
-            password: document.getElementById('mariadb_password').value,
-            ssl: document.getElementById('mariadb_ssl').value
-        };
-    }
 
     // Enviar configuración al servidor
     secureFetch('/admin/configuracion/database', {
@@ -995,9 +839,14 @@ function loadBackupHistory() {
                         <td>${backup.tamano}</td>
                         <td><span class="badge bg-success">${backup.estado}</span></td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary" onclick="descargarBackup('${backup.filename}')">
-                                <i class="fas fa-download"></i>
-                            </button>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="descargarBackup('${backup.filename}')" title="Descargar">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarBackup('${backup.filename}')" title="Eliminar">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 `).join('');
@@ -1021,35 +870,63 @@ function loadBackupHistory() {
 }
 
 function descargarBackup(filename) {
-    mostrarMensaje(`Descargando backup: ${filename}`, 'info');
+    mostrarMensaje('Preparando descarga...', 'info');
 
-    // Simular descarga
-    setTimeout(() => {
-        mostrarMensaje('Backup descargado exitosamente', 'success');
-    }, 1000);
-}
-
-function verLogs() {
-    window.open('/admin/configuracion/logs', '_blank');
-}
-
-function optimizarBD() {
-    mostrarMensaje('Optimizando base de datos...', 'info');
-
-    secureFetch('/admin/configuracion/optimize', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            mostrarMensaje('Base de datos optimizada exitosamente', 'success');
-        } else {
-            mostrarMensaje('Error al optimizar base de datos: ' + data.message, 'danger');
+    fetch(`/admin/configuracion/backup/${filename}`)
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'Error al descargar el backup');
+            });
         }
+        return response.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        mostrarMensaje('Backup descargado exitosamente: ' + filename, 'success');
     })
     .catch(error => {
-        mostrarMensaje('Error de conexión: ' + error.message, 'danger');
+        mostrarMensaje(error.message, 'danger');
     });
+}
+
+function eliminarBackup(filename) {
+    document.getElementById('backupFilenameLabel').textContent = filename;
+    const modalEl = document.getElementById('modalEliminarBackup');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    const btnConfirmar = document.getElementById('btnConfirmarEliminar');
+
+    // Remover listener anterior para evitar duplicados
+    const btnNuevo = btnConfirmar.cloneNode(true);
+    btnConfirmar.parentNode.replaceChild(btnNuevo, btnConfirmar);
+
+    btnNuevo.addEventListener('click', function () {
+        modal.hide();
+        secureFetch(`/admin/configuracion/backup/${filename}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarMensaje('Backup eliminado exitosamente', 'success');
+                loadBackupHistory();
+            } else {
+                mostrarMensaje('Error al eliminar backup: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            mostrarMensaje('Error de conexión: ' + error.message, 'danger');
+        });
+    });
+
+    modal.show();
 }
 
 function reiniciarSistema() {
@@ -1174,8 +1051,55 @@ function eliminarFirmaResponsable() {
     });
 }
 
+function toggleDatabaseConfig() {
+    // Esta función se mantiene por compatibilidad con el evento load,
+    // pero en la interfaz actual solo se usa PostgreSQL.
+    console.log('Sección de base de datos inicializada');
+}
+
+function updateConnectionStatus() {
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('db_status');
+    
+    if (statusDot && statusText) {
+        statusDot.className = 'fas fa-circle text-warning';
+        statusText.value = 'Verificando...';
+        
+        secureFetch('/admin/configuracion/test-connection', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                statusDot.className = 'fas fa-circle text-success';
+                statusText.value = 'PostgreSQL - Conectado';
+            } else {
+                statusDot.className = 'fas fa-circle text-danger';
+                statusText.value = 'Error de conexión';
+            }
+        })
+        .catch(err => {
+            console.error('Error al actualizar estado:', err);
+            statusDot.className = 'fas fa-circle text-danger';
+            statusText.value = 'Error de conexión';
+        });
+    }
+}
+
+
+function toggleFirmasSection() {
+    const checked = document.getElementById('firmas_habilitadas').checked;
+    const section = document.getElementById('firmasSection');
+    if (section) {
+        section.style.display = checked ? '' : 'none';
+    }
+}
+// Ejecutar al cargar la pagina
+document.addEventListener('DOMContentLoaded', function() { toggleFirmasSection(); });
+
 function guardarConfigExcel() {
     const formData = new FormData();
+
+    // Agregar toggle de firmas
+    formData.append('firmas_habilitadas', document.getElementById('firmas_habilitadas').checked ? 'true' : 'false');
 
     // Agregar nombres
     formData.append('director_academico_nombre', document.getElementById('director_academico_nombre').value);
@@ -1214,10 +1138,17 @@ function guardarConfigExcel() {
 // Cargar configuración al iniciar
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Configuración del sistema cargada');
-    toggleDatabaseConfig(); // Configurar la interfaz inicial
-    loadBackupHistory(); // Cargar historial de backups
-    updateConnectionStatus(); // Actualizar estado de conexión
-    cargarConfiguracionHorarios(); // Cargar configuración de horarios
+    
+    // Ejecutar funciones de inicialización de forma segura
+    try {
+        if (typeof toggleDatabaseConfig === 'function') toggleDatabaseConfig();
+        if (typeof loadBackupHistory === 'function') loadBackupHistory();
+        if (typeof updateConnectionStatus === 'function') updateConnectionStatus();
+        if (typeof cargarConfiguracionHorarios === 'function') cargarConfiguracionHorarios();
+        if (typeof toggleFirmasSection === 'function') toggleFirmasSection();
+    } catch (e) {
+        console.error('Error durante la inicialización:', e);
+    }
 });
 </script>
 {% endblock %}

@@ -1,6 +1,36 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: gestor_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sistema_academico
+      POSTGRES_USER: gestor_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gestor_secret_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Puerto NO expuesto al host para evitar conflictos con PostgreSQL local.
+    # web y celery_worker se conectan via red interna de Docker.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gestor_user -d sistema_academico"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: gestor_redis
+    restart: unless-stopped
+    # Puerto NO expuesto al host para evitar conflictos con Redis local.
+    # Los servicios web y celery_worker se conectan por la red interna de Docker.
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   web:
     build: .
     container_name: sistema_login
@@ -8,16 +38,12 @@ services:
     ports:
       - "5001:5001"
     volumes:
-      # Persist SQLite database
       - ./instance:/app/instance
-      # Persist User uploads
       - ./static/uploads:/app/static/uploads
-      # Persistencia de los horarios PDF generados
       - ./horarios:/app/horarios
-      # Persist logs
       - ./logs:/app/logs
-      # Persist backups
       - ./backups:/app/backups
+      - ./tmp/chatbot_exports:/app/tmp/chatbot_exports
     env_file:
       - path: .env
         required: false
@@ -25,3 +51,43 @@ services:
       - FLASK_APP=app.py
       - FLASK_DEBUG=0
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://gestor_user:${POSTGRES_PASSWORD:-gestor_secret_2024}@db:5432/sistema_academico
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker:
+    build: .
+    container_name: gestor_celery_worker
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./instance:/app/instance
+      - ./static/uploads:/app/static/uploads
+      - ./horarios:/app/horarios
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - FLASK_APP=app.py
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://gestor_user:${POSTGRES_PASSWORD:-gestor_secret_2024}@db:5432/sistema_academico
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

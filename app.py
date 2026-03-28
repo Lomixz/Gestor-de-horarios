@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape
@@ -6,7 +6,7 @@ from sqlalchemy import func, text
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
-from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role
+from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role, ChatbotConfig
 from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm, 
                    CarreraForm, ImportarProfesoresForm, FiltrarProfesoresForm, ExportarProfesoresForm,
                    MateriaForm, ImportarMateriasForm, FiltrarMateriasForm, ExportarMateriasForm,
@@ -42,102 +42,39 @@ import threading
 import time
 import json
 
+# ==========================================
+# Helper functions re-exported from app_pkg/helpers
+# ==========================================
+from app_pkg.helpers.export_helpers import (
+    convertir_imagen_para_excel,
+    generar_excel_formato_fda,
+    _generar_excel_horario_profesor,
+    _generar_pdf_horario_profesor,
+)
+from app_pkg.helpers.profesor_helpers import (
+    obtener_limite_horas_profesor,
+    obtener_horas_actuales_profesor,
+    validar_carga_horaria_profesor,
+    allowed_file,
+    ALLOWED_EXTENSIONS,
+    ALLOWED_MIME_TYPES,
+)
+from app_pkg.helpers.schedule_helpers import (
+    procesar_horarios,
+    procesar_horarios_formato_fda,
+    obtener_periodo_actual,
+)
 
-def convertir_imagen_para_excel(ruta_imagen):
-    """
-    Convierte imágenes en formatos no soportados por openpyxl (como .webp)
-    a PNG en memoria y devuelve un XlImage compatible.
-    Retorna None si no se puede procesar.
-    """
-    try:
-        ext = os.path.splitext(ruta_imagen)[1].lower()
-        if ext in ('.webp', '.bmp', '.tiff', '.tif'):
-            # Convertir a PNG en memoria
-            pil_img = PILImage.open(ruta_imagen)
-            if pil_img.mode in ('RGBA', 'LA', 'P'):
-                pil_img = pil_img.convert('RGBA')
-            else:
-                pil_img = pil_img.convert('RGB')
-            img_buffer = BytesIO()
-            pil_img.save(img_buffer, format='PNG')
-            img_buffer.seek(0)
-            return XlImage(img_buffer)
-        else:
-            return XlImage(ruta_imagen)
-    except Exception as e:
-        logger.error(f"Error al convertir imagen: {e}")
-        return None
-
-
-# Variable global para tracking del progreso de generación masiva
-generacion_progreso = {
-    'activo': False,
-    'total_grupos': 0,
-    'grupos_procesados': 0,
-    'grupo_actual': '',
-    'codigo_grupo': '',
-    'horarios_generados': 0,
-    'mensaje': '',
-    'completado': False,
-    'exito': False,
-    'iniciado': False
-}
-
-# Lock para acceso thread-safe
-progreso_lock = threading.Lock()
+# Progress tracking — moved to app_pkg/helpers/generation_helpers.py
+from app_pkg.helpers.generation_helpers import (
+    _generacion_progreso_fallback as generacion_progreso,
+    _progreso_lock as progreso_lock,
+    _get_progress_tracker,
+    generar_horarios_masivos_con_progreso,
+    _crear_backup_generacion,
+)
 
 import re
-
-
-# ==========================================
-# FUNCIONES AUXILIARES DE CARGA HORARIA
-# ==========================================
-def obtener_limite_horas_profesor(tipo_profesor):
-    """
-    Obtiene el límite de horas semanales para un tipo de profesor.
-    Los valores se configuran desde el panel de administración.
-    """
-    from models import ConfiguracionSistema
-    
-    tipo_lower = (tipo_profesor or '').lower().strip()
-    
-    if 'tiempo completo' in tipo_lower or 'tiempo_completo' in tipo_lower:
-        return ConfiguracionSistema.get_config('horas_tiempo_completo', 40)
-    elif 'asignatura' in tipo_lower:
-        return ConfiguracionSistema.get_config('horas_asignatura', 20)
-    elif 'medio tiempo' in tipo_lower or 'medio_tiempo' in tipo_lower:
-        return ConfiguracionSistema.get_config('horas_medio_tiempo', 20)
-    else:
-        # Tipo no reconocido: usar límite de asignatura como default
-        return ConfiguracionSistema.get_config('horas_asignatura', 20)
-
-
-def obtener_horas_actuales_profesor(profesor_id):
-    """
-    Calcula las horas actuales asignadas a un profesor.
-    """
-    from models import HorarioAcademico
-    return HorarioAcademico.query.filter_by(profesor_id=profesor_id, activo=True).count()
-
-
-def validar_carga_horaria_profesor(profesor):
-    """
-    Valida si un profesor puede recibir más horas de clase.
-    Retorna tuple: (puede_asignar, horas_actuales, limite, horas_disponibles)
-    """
-    from models import ConfiguracionSistema
-    
-    horas_actuales = obtener_horas_actuales_profesor(profesor.id)
-    limite = obtener_limite_horas_profesor(profesor.tipo_profesor)
-    limite_absoluto = ConfiguracionSistema.get_config('horas_limite_absoluto', 50)
-    
-    # El límite efectivo es el menor entre el límite del tipo y el absoluto
-    limite_efectivo = min(limite, limite_absoluto)
-    horas_disponibles = max(0, limite_efectivo - horas_actuales)
-    puede_asignar = horas_disponibles > 0
-    
-    return (puede_asignar, horas_actuales, limite_efectivo, horas_disponibles)
-
 
 app = Flask(__name__)
 
@@ -201,6 +138,11 @@ def load_user(user_id):
     """Cargar usuario por ID para Flask-Login"""
     return User.query.get(int(user_id))
 
+# Register blueprints
+from app_pkg.blueprints.api import api_bp
+app.register_blueprint(api_bp)
+
+
 # Security headers
 @app.after_request
 def set_security_headers(response):
@@ -233,6 +175,8 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
+                import uuid as _uuid
+                session['chatbot_login_token'] = str(_uuid.uuid4())
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
 
                 # Verificar si el usuario requiere cambio de contraseña
@@ -257,7 +201,7 @@ def login():
     return render_template('login.html', form=form)
 
 @app.route('/register', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
+@limiter.limit("20 per minute")
 def register():
     """Página de registro"""
     if current_user.is_authenticated:
@@ -267,17 +211,20 @@ def register():
     
     # Obtener horarios para el formulario de disponibilidad
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+
+    if request.method == 'POST' and not form.validate_on_submit():
+        logger.warning(f"Register form validation failed: {form.errors}")
+
     if form.validate_on_submit():
         try:
             # Obtener el rol final (considerando tipo de profesor)
             rol_final = form.get_final_rol()
-            
+
             # Para profesores y jefes de carrera, obtener las carreras seleccionadas
             carreras = []
             if rol_final in ['profesor_completo', 'profesor_asignatura', 'jefe_carrera'] and form.carrera.data:
                 carreras = Carrera.query.filter(Carrera.id.in_(form.carrera.data)).all()
-            
+
             # Crear nuevo usuario - ahora todos usan la relación many-to-many carreras
             user = User(
                 username=form.username.data,
@@ -289,14 +236,14 @@ def register():
                 telefono=form.telefono.data if form.telefono.data else None,
                 carreras=carreras
             )
-            
+
             db.session.add(user)
             db.session.commit()
-            
+
             # Procesar disponibilidad si es profesor
             if rol_final in ['profesor_completo', 'profesor_asignatura']:
                 dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-                
+
                 for horario in horarios:
                     for dia in dias:
                         # Verificar si el checkbox fue marcado
@@ -309,19 +256,24 @@ def register():
                                 disponible=True
                             )
                             db.session.add(disponibilidad)
-                
+
                 db.session.commit()
-            
-            flash(f'¡Registro exitoso! Bienvenido, {user.get_nombre_completo()}.', 'success')
-            
-            # Iniciar sesión automáticamente después del registro
-            login_user(user)
-            return redirect(url_for('dashboard'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash('Error al crear la cuenta. Inténtalo de nuevo.', 'error')
-            logger.error(f"Error en registro: {e}")
+            import traceback
+            logger.error(f"Error en registro: {e}\n{traceback.format_exc()}")
+            return render_template('register.html', form=form, horarios=horarios)
+
+        # Usuario creado exitosamente — login automático fuera del try/except
+        nombre_completo = f"{user.nombre} {user.apellido}"
+        flash(f'¡Registro exitoso! Bienvenido, {nombre_completo}.', 'success')
+        login_user(user, remember=True)
+        import uuid as _uuid
+        session['chatbot_login_token'] = str(_uuid.uuid4())
+        audit_logger.info(f"REGISTER user={user.username} rol={user.rol} ip={request.remote_addr}")
+        return redirect(url_for('dashboard'))
     
     return render_template('register.html', form=form, horarios=horarios)
 
@@ -362,810 +314,9 @@ def cambiar_password_obligatorio():
     
     return render_template('cambiar_password_obligatorio.html', form=form)
 
-# ==========================================
-# FUNCIÓN CENTRAL PARA PROCESAR HORARIOS
-# ==========================================
-def procesar_horarios(agrupar_por='profesor', carrera_id=None, incluir_ids=False):
-    """
-    Función centralizada para obtener y procesar los horarios académicos.
-    
-    :param agrupar_por: 'profesor' o 'grupo'. Define cómo se agruparán los datos.
-    :param carrera_id: Opcional. Si se provee un ID, filtra los horarios para esa carrera.
-    :param incluir_ids: Si True, incluye los IDs de los horarios para acciones
-    :return: Un diccionario con los horarios organizados.
-    """
-    
-    # 1. Consulta base a la base de datos
-    query = HorarioAcademico.query.filter_by(activo=True)
-    
-    # 2. Si se especifica una carrera_id, filtramos los resultados
-    if carrera_id:
-        query = query.join(Materia).filter(Materia.carrera_id == carrera_id)
-        
-    asignaciones = query.all()
-    
-    # 3. Ordenamos los resultados en Python
-    asignaciones.sort(key=lambda h: (h.get_dia_orden(), h.horario.hora_inicio))
-    
-    # 4. Diccionario para almacenar el resultado final
-    datos_organizados = {}
-    
-    # Mapeo de días para asegurar formato correcto
-    dias_map = {
-        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
-        'jueves': 'Jueves', 'viernes': 'Viernes'
-    }
-
-    # 5. Iteramos sobre cada asignación para construir el diccionario
-    for a in asignaciones:
-        if not all([a.profesor, a.materia, a.horario]):
-            continue
-
-        clave_agrupacion = None
-        info_clase_html = ""
-        
-        # Lógica para agrupar por PROFESOR
-        if agrupar_por == 'profesor':
-            clave_agrupacion = a.profesor.get_nombre_completo()
-            # Obtener código del grupo para mostrar junto con la materia
-            grupo_codigo = a.grupo if a.grupo else ""
-            # Obtener la hora de inicio como entero para la cuadrícula
-            hora_inicio_int = a.horario.hora_inicio.hour if a.horario.hora_inicio else 7
-            
-            if incluir_ids:
-                info_clase_html = {
-                    'id': a.id,
-                    'html': f"{escape(a.materia.nombre)}<br><small class='text-muted'>{escape(a.materia.codigo)}</small><br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
-                    'grupo': grupo_codigo,
-                    'hora_inicio': hora_inicio_int,
-                    'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                }
-            else:
-                info_clase_html = (
-                    f"{escape(a.materia.nombre)}<br>"
-                    f"<small class='text-muted'>{escape(a.materia.codigo)}</small><br>"
-                    f"<span class='badge bg-primary bg-opacity-25 text-primary' style='font-size:0.65rem;'>Grupo: {escape(grupo_codigo)}</span><br>"
-                    f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                )
-
-        # Lógica para agrupar por GRUPO
-        elif agrupar_por == 'grupo':
-            # CORREGIDO: Usar el campo 'grupo' del HorarioAcademico en lugar de materia.grupos
-            grupo_codigo = a.grupo
-            
-            if grupo_codigo:
-                # Buscar el objeto Grupo por su código para filtrar por carrera si es necesario
-                grupo = Grupo.query.filter_by(codigo=grupo_codigo).first()
-                
-                if grupo and (carrera_id is None or grupo.carrera_id == carrera_id):
-                    clave_agrupacion = grupo_codigo
-                    # Obtener la hora de inicio como entero para la cuadrícula
-                    hora_inicio_int = a.horario.hora_inicio.hour if a.horario.hora_inicio else 7
-                    if incluir_ids:
-                        info_clase_html = {
-                            'id': a.id,
-                            'grupo_id': grupo.id,
-                            'hora_inicio': hora_inicio_int,
-                            'materia': a.materia.nombre,
-                            'profesor': a.profesor.get_nombre_completo(),
-                            'hora_texto': f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}",
-                            'html': f"{escape(a.materia.nombre)}<br>Prof: {escape(a.profesor.get_nombre_completo())}<br>{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                        }
-                    else:
-                        info_clase_html = (
-                            f"{escape(a.materia.nombre)}<br>"
-                            f"Prof: {escape(a.profesor.get_nombre_completo())}<br>"
-                            f"{a.get_hora_inicio_str()} - {a.get_hora_fin_str()}"
-                        )
-
-        # Si encontramos una clave válida, la agregamos al diccionario
-        if clave_agrupacion:
-            if clave_agrupacion not in datos_organizados:
-                datos_organizados[clave_agrupacion] = {d: [] for d in dias_map.values()}
-            
-            dia_correcto = dias_map.get(a.dia_semana.lower())
-            if dia_correcto:
-                datos_organizados[clave_agrupacion][dia_correcto].append(info_clase_html)
-
-    # 6. Ordenamos el diccionario final si es por grupo para una mejor presentación
-    if agrupar_por == 'grupo':
-        # Importamos re aquí si no está arriba o usamos la función auxiliar si tenemos
-        import re
-        def natural_keys(text):
-            return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
-            
-        datos_ordenados = {k: datos_organizados[k] for k in sorted(datos_organizados.keys(), key=natural_keys)}
-        return datos_ordenados
-        
-    return datos_organizados
-
-
 # =================================================================
 # FUNCIÓN "CEREBRO" PARA OBTENER DATOS DETALLADOS (FORMATO FDA)
 # =================================================================
-
-def procesar_horarios_formato_fda(carrera_id=None):
-    """
-    Obtiene los datos de horarios con todos los detalles necesarios 
-    para generar el formato de Carga Horaria (FDA).
-    """
-    query = HorarioAcademico.query.filter_by(activo=True)
-    
-    if carrera_id:
-        query = query.join(Materia).filter(Materia.carrera_id == carrera_id)
-        
-    asignaciones = query.all()
-    
-    horarios_por_profesor = {}
-    
-    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
-
-    for a in asignaciones:
-        if not all([a.profesor, a.materia, a.horario, a.materia.carrera]):
-            continue
-
-        profesor_nombre = a.profesor.get_nombre_completo()
-        
-        if profesor_nombre not in horarios_por_profesor:
-            info_profesor = {
-                'id': a.profesor.id,
-                'nombre_completo': a.profesor.get_nombre_completo(),
-                'es_tc': getattr(a.profesor, 'rol', '') == 'profesor_completo'
-            }
-            horarios_por_profesor[profesor_nombre] = {
-                'info': info_profesor,
-                'clases': []
-            }
-        
-        duracion_horas = (a.horario.hora_fin.hour - a.horario.hora_inicio.hour) + (a.horario.hora_fin.minute - a.horario.hora_inicio.minute) / 60.0
-        
-        # CORREGIDO: Usar el campo 'grupo' del HorarioAcademico directamente
-        grupo_codigo = a.grupo if a.grupo else "N/A"
-
-        dia_correcto = dias_map.get(a.dia_semana.lower())
-        if not dia_correcto: continue
-
-        detalle_clase = {
-            'clave': a.materia.codigo, 'asignatura': a.materia.nombre, 'grupo': grupo_codigo,
-            'dia_raw': a.dia_semana.lower(), 'hora_inicio': a.get_hora_inicio_str(),
-            'hora_fin': a.get_hora_fin_str(), 'horas_totales': duracion_horas,
-            'carrera': a.materia.carrera.codigo
-        }
-        horarios_por_profesor[profesor_nombre]['clases'].append(detalle_clase)
-
-    for data in horarios_por_profesor.values():
-        data['clases'].sort(key=lambda c: (['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'].index(c['dia_raw']), c['hora_inicio']))
-
-    return horarios_por_profesor
-
-# =================================================================
-# FUNCIÓN PARA OBTENER EL PERIODO ACADÉMICO ACTUAL
-# =================================================================
-def obtener_periodo_actual():
-    """
-    Calcula el periodo académico automáticamente basado en el mes actual.
-
-    Periodos:
-    - Enero-Abril: Meses 1-4 → "ENERO - ABRIL"
-    - Mayo-Agosto: Meses 5-8 → "MAYO - AGOSTO"
-    - Septiembre-Diciembre: Meses 9-12 → "SEPTIEMBRE - DICIEMBRE"
-
-    Returns:
-        tuple: (periodo_texto, año_texto)
-    """
-    ahora = datetime.now()
-    mes = ahora.month
-    año = ahora.year
-
-    if 1 <= mes <= 4:
-        return "ENERO - ABRIL", str(año)
-    elif 5 <= mes <= 8:
-        return "MAYO - AGOSTO", str(año)
-    else:  # 9 <= mes <= 12
-        return "SEPTIEMBRE - DICIEMBRE", f"{año} - {año + 1}"
-
-
-# =================================================================
-# FUNCIÓN PARA GENERAR EL REPORTE FDA EN EXCEL (FORMATO EXACTO PLANTILLA UPTEX)
-# =================================================================
-def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
-    """
-    Genera Excel con formato EXACTO de la plantilla HORARIO ACTUAL.xlsx de UPTEX.
-    Replica fielmente: logo, colores verdes #00B050, estructura de celdas combinadas,
-    tabla de horarios con 2 filas por hora, sección de firmas.
-
-    Args:
-        datos_profesor: Diccionario con info del profesor y sus clases
-        periodo: Periodo académico (opcional, se calcula automáticamente)
-        año: Año del plan (opcional, se calcula automáticamente)
-
-    Returns:
-        BytesIO: Buffer con el archivo Excel generado
-    """
-    from models import ConfiguracionSistema
-
-    # Obtener periodo automáticamente si no se especifica
-    if periodo is None or año is None:
-        periodo, año = obtener_periodo_actual()
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Hoja1"
-
-    # ========== COLOR VERDE EXACTO DE LA PLANTILLA (#00B050) ==========
-    verde_uptex = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
-
-    # ========== ESTILOS ==========
-    titulo_font = Font(bold=True, name='Century Gothic', size=14, color="FFFFFF")
-    header_font = Font(bold=True, name='Century Gothic', size=10)
-    normal_font = Font(name='Century Gothic', size=10)
-    small_font = Font(name='Century Gothic', size=9)
-    tiny_font = Font(name='Century Gothic', size=8)
-
-    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
-
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
-
-    # ========== ANCHOS DE COLUMNA (EXACTOS DE LA PLANTILLA) ==========
-    ws.column_dimensions['A'].width = 9.5
-    ws.column_dimensions['B'].width = 22.0
-    ws.column_dimensions['C'].width = 22.0
-    ws.column_dimensions['D'].width = 22.0
-    ws.column_dimensions['E'].width = 22.0
-    ws.column_dimensions['F'].width = 15.5
-    ws.column_dimensions['G'].width = 0.5  # Columna casi oculta
-    ws.column_dimensions['H'].width = 7
-    ws.column_dimensions['I'].width = 13
-    ws.column_dimensions['J'].width = 17
-    ws.column_dimensions['K'].width = 13
-    ws.column_dimensions['L'].width = 13
-
-    # ========== 1. LOGO UPTEX (A1) ==========
-    logo_path = os.path.join('static', 'images', 'logo.png')
-    if os.path.exists(logo_path):
-        try:
-            img = convertir_imagen_para_excel(logo_path)
-            if img:
-                img.width = 150
-                img.height = 55
-                ws.add_image(img, 'A1')
-        except Exception as e:
-            logger.error(f"Error al cargar logo: {e}")
-
-    # ========== 2. FILA 1: "Carga Horaria" (B1:L1 - verde) ==========
-    ws.merge_cells('B1:L1')
-    ws['B1'] = "Carga Horaria"
-    ws['B1'].font = titulo_font
-    ws['B1'].alignment = center_align
-    ws['B1'].fill = verde_uptex
-    for col in ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}1'].fill = verde_uptex
-
-    # ========== 3. FILA 2: Área, Vigencia, Código (verde con texto blanco) ==========
-    label_verde_font = Font(bold=True, name='Century Gothic', size=10, color="FFFFFF")
-
-    ws.merge_cells('B2:C2')
-    ws['B2'] = "Área: Dirección Academica"
-    ws['B2'].font = label_verde_font
-    ws['B2'].alignment = center_align
-    ws['B2'].fill = verde_uptex
-    ws['C2'].fill = verde_uptex
-
-    ws.merge_cells('D2:E2')
-    ws['D2'] = "Vigencia: "
-    ws['D2'].font = label_verde_font
-    ws['D2'].alignment = center_align
-    ws['D2'].fill = verde_uptex
-    ws['E2'].fill = verde_uptex
-
-    ws.merge_cells('F2:L2')
-    ws['F2'] = "Código: FDA-02.5"
-    ws['F2'].font = label_verde_font
-    ws['F2'].alignment = center_align
-    ws['F2'].fill = verde_uptex
-    for col in ['G', 'H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}2'].fill = verde_uptex
-
-    # ========== 4. FILA 4: Nombre, Prof. Asignatura, Prof. TC ==========
-    ws['A4'] = "Nombre:"
-    ws['A4'].font = header_font
-
-    ws.merge_cells('B4:E4')
-    ws['B4'] = datos_profesor['info']['nombre_completo']
-    ws['B4'].font = normal_font
-
-    ws['F4'] = "Prof. Asignatura"
-    ws['F4'].font = label_verde_font
-    ws['F4'].fill = verde_uptex
-    ws['F4'].alignment = center_align
-
-    ws['H4'] = "x" if not datos_profesor['info']['es_tc'] else ""
-    ws['H4'].font = normal_font
-    ws['H4'].alignment = center_align
-    ws['H4'].border = thin_border
-
-    ws.merge_cells('J4:K4')
-    ws['J4'] = "Prof. Tiempo Completo"
-    ws['J4'].font = label_verde_font
-    ws['J4'].fill = verde_uptex
-    ws['J4'].alignment = center_align
-    ws['K4'].fill = verde_uptex
-
-    ws['L4'] = "X" if datos_profesor['info']['es_tc'] else ""
-    ws['L4'].font = normal_font
-    ws['L4'].alignment = center_align
-    ws['L4'].border = thin_border
-
-    # ========== 5. FILA 6: Periodo, Fecha de Inicio, Plan de Estudios ==========
-    ws['A6'] = "Periodo:"
-    ws['A6'].font = header_font
-
-    ws['B6'] = periodo
-    ws['B6'].font = normal_font
-    ws['B6'].alignment = center_align
-
-    ws['C6'] = "Fecha de Inicio:"
-    ws['C6'].font = header_font
-
-    # Obtener fecha de inicio desde configuración del sistema
-    config_fecha_inicio = ConfiguracionSistema.query.filter_by(clave='fecha_inicio_periodo').first()
-    fecha_inicio_valor = config_fecha_inicio.valor if config_fecha_inicio and config_fecha_inicio.valor else ""
-
-    ws.merge_cells('D6:E6')
-    ws['D6'] = fecha_inicio_valor
-    ws['D6'].font = normal_font
-    ws['D6'].alignment = center_align
-
-    ws['F6'] = "Plan de Estudios:"
-    ws['F6'].font = header_font
-
-    ws.merge_cells('G6:L6')
-    ws['G6'] = año
-    ws['G6'].font = normal_font
-    ws['G6'].alignment = center_align
-
-    # ========== 6. FILA 8-9: Instrucciones ==========
-    ws.merge_cells('A8:L9')
-    ws['A8'] = "Instrucciones: Introducir nombre de la Asignatura, Salón y Grupo dentro de la celda correspondiente al día y la hora que será impartida."
-    ws['A8'].font = Font(bold=True, name='Century Gothic', size=8)
-    ws['A8'].alignment = left_align
-    ws['A8'].alignment = left_align
-
-    # ========== 7. FILA 11: ENCABEZADOS DE TABLA (verde) ==========
-    # Horario
-    ws['A11'] = "Horario "
-    ws['A11'].font = header_font
-    ws['A11'].alignment = center_align
-    ws['A11'].fill = verde_uptex
-    ws['A11'].border = thin_border
-
-    # Lunes a Jueves
-    for col, dia in [('B', 'Lunes '), ('C', 'Martes'), ('D', 'Miercoles'), ('E', 'Jueves ')]:
-        ws[f'{col}11'] = dia
-        ws[f'{col}11'].font = header_font
-        ws[f'{col}11'].alignment = center_align
-        ws[f'{col}11'].fill = verde_uptex
-        ws[f'{col}11'].border = thin_border
-
-    # Viernes (F11:H11)
-    ws.merge_cells('F11:H11')
-    ws['F11'] = "Viernes "
-    ws['F11'].font = header_font
-    ws['F11'].alignment = center_align
-    ws['F11'].fill = verde_uptex
-    ws['F11'].border = thin_border
-    for col in ['G', 'H']:
-        ws[f'{col}11'].fill = verde_uptex
-        ws[f'{col}11'].border = thin_border
-
-    # Sábado (I11:L11)
-    ws.merge_cells('I11:L11')
-    ws['I11'] = "Sábado "
-    ws['I11'].font = header_font
-    ws['I11'].alignment = center_align
-    ws['I11'].fill = verde_uptex
-    ws['I11'].border = thin_border
-    for col in ['J', 'K', 'L']:
-        ws[f'{col}11'].fill = verde_uptex
-        ws[f'{col}11'].border = thin_border
-
-    # ========== 8. FILAS DE HORARIOS (2 filas por hora) ==========
-    horas = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-             '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
-             '19:00', '20:00', '21:00']
-
-    # Preparar datos de clases por día y hora
-    clases_por_dia_hora = {}
-    for clase in datos_profesor['clases']:
-        dia_raw = clase['dia_raw'].lower()
-        hora_inicio = clase['hora_inicio']
-
-        if dia_raw == 'miércoles':
-            dia_raw = 'miercoles'
-        if dia_raw == 'sábado':
-            dia_raw = 'sabado'
-
-        try:
-            h_ini = int(hora_inicio.split(':')[0])
-            hora_fin = clase['hora_fin']
-            h_fin = int(hora_fin.split(':')[0])
-            for h in range(h_ini, h_fin):
-                hora_key = f"{h:02d}:00"
-                key = (dia_raw, hora_key)
-                if key not in clases_por_dia_hora:
-                    clases_por_dia_hora[key] = clase
-        except:
-            pass
-
-    dia_col_map = {
-        'lunes': 'B', 'martes': 'C', 'miercoles': 'D',
-        'jueves': 'E', 'viernes': 'F', 'sabado': 'I'
-    }
-
-    fila_actual = 12
-    for hora in horas:
-        fila_inicio = fila_actual
-        fila_fin = fila_actual + 1
-
-        # Hora (A - combinar 2 filas)
-        ws.merge_cells(f'A{fila_inicio}:A{fila_fin}')
-        ws[f'A{fila_inicio}'] = hora
-        ws[f'A{fila_inicio}'].font = small_font
-        ws[f'A{fila_inicio}'].alignment = center_align
-        ws[f'A{fila_inicio}'].border = thin_border
-        ws[f'A{fila_fin}'].border = thin_border
-
-        # Lunes a Jueves (combinar 2 filas cada uno)
-        for dia, col in [('lunes', 'B'), ('martes', 'C'), ('miercoles', 'D'), ('jueves', 'E')]:
-            ws.merge_cells(f'{col}{fila_inicio}:{col}{fila_fin}')
-            key = (dia, hora)
-            if key in clases_por_dia_hora:
-                clase = clases_por_dia_hora[key]
-                ws[f'{col}{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-            ws[f'{col}{fila_inicio}'].font = tiny_font
-            ws[f'{col}{fila_inicio}'].alignment = center_align
-            ws[f'{col}{fila_inicio}'].border = thin_border
-            ws[f'{col}{fila_fin}'].border = thin_border
-
-        # Viernes (F:H - combinar)
-        ws.merge_cells(f'F{fila_inicio}:H{fila_fin}')
-        key = ('viernes', hora)
-        if key in clases_por_dia_hora:
-            clase = clases_por_dia_hora[key]
-            ws[f'F{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-        ws[f'F{fila_inicio}'].font = tiny_font
-        ws[f'F{fila_inicio}'].alignment = center_align
-        ws[f'F{fila_inicio}'].border = thin_border
-        for col in ['G', 'H']:
-            ws[f'{col}{fila_inicio}'].border = thin_border
-            ws[f'{col}{fila_fin}'].border = thin_border
-        ws[f'F{fila_fin}'].border = thin_border
-
-        # Sábado (I:L - combinar)
-        ws.merge_cells(f'I{fila_inicio}:L{fila_fin}')
-        key = ('sabado', hora)
-        if key in clases_por_dia_hora:
-            clase = clases_por_dia_hora[key]
-            ws[f'I{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-        ws[f'I{fila_inicio}'].font = tiny_font
-        ws[f'I{fila_inicio}'].alignment = center_align
-        ws[f'I{fila_inicio}'].border = thin_border
-        for col in ['J', 'K', 'L']:
-            ws[f'{col}{fila_inicio}'].border = thin_border
-            ws[f'{col}{fila_fin}'].border = thin_border
-        ws[f'I{fila_fin}'].border = thin_border
-
-        fila_actual += 2
-
-    # ========== 9. ALTURA DE FILAS ==========
-    for row in range(12, fila_actual):
-        ws.row_dimensions[row].height = 20
-
-    # ========== 10. TABLA DE TIPO DE HORAS ==========
-    # Calcular total de horas
-    # Calcular horas de impartición de curso (suma real de horas)
-    horas_imparticion = sum(c['horas_totales'] for c in datos_profesor['clases'])
-    horas_imparticion = int(horas_imparticion) if horas_imparticion == int(horas_imparticion) else horas_imparticion
-
-    # Obtener horas adicionales de TC desde configuración (solo para profesores TC)
-    profesor_id = datos_profesor['info'].get('id')
-    es_tc = datos_profesor['info'].get('es_tc', False)
-    
-    horas_asesoria = 0
-    horas_tutoria = 0
-    horas_gestion = 0
-    horas_dual = 0
-    horas_investigacion = 0
-    
-    if es_tc and profesor_id:
-        horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_asesoria', 0) or 0)
-        horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_tutoria', 0) or 0)
-        horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_gestion', 0) or 0)
-        horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_dual', 0) or 0)
-        horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_investigacion', 0) or 0)
-
-    total_horas = horas_imparticion + horas_asesoria + horas_tutoria + horas_gestion + horas_dual + horas_investigacion
-
-    fila_tabla = fila_actual + 1
-
-    # Header de la tabla (verde)
-    ws.merge_cells(f'A{fila_tabla}:B{fila_tabla}')
-    ws[f'A{fila_tabla}'] = "Tipo de Horas"
-    ws[f'A{fila_tabla}'].font = Font(bold=True, name='Century Gothic', size=10, color="FFFFFF")
-    ws[f'A{fila_tabla}'].alignment = center_align
-    ws[f'A{fila_tabla}'].fill = verde_uptex
-    ws[f'A{fila_tabla}'].border = thin_border
-    ws[f'B{fila_tabla}'].fill = verde_uptex
-    ws[f'B{fila_tabla}'].border = thin_border
-
-    ws[f'C{fila_tabla}'] = "Horas"
-    ws[f'C{fila_tabla}'].font = Font(bold=True, name='Century Gothic', size=10, color="FFFFFF")
-    ws[f'C{fila_tabla}'].alignment = center_align
-    ws[f'C{fila_tabla}'].fill = verde_uptex
-    ws[f'C{fila_tabla}'].border = thin_border
-
-    # Filas de tipos de horas
-    tipos_horas = [
-        ('Impartición de Curso', horas_imparticion),
-        ('Asesoría', horas_asesoria if es_tc else ''),
-        ('Tutoría', horas_tutoria if es_tc else ''),
-        ('Apoyo a la Gestión', horas_gestion if es_tc else ''),
-        ('Dual', horas_dual if es_tc else ''),
-        ('Investigación', horas_investigacion if es_tc else ''),
-    ]
-
-    for i, (tipo, horas_val) in enumerate(tipos_horas, 1):
-        fila_tipo = fila_tabla + i
-        ws.merge_cells(f'A{fila_tipo}:B{fila_tipo}')
-        ws[f'A{fila_tipo}'] = tipo
-        ws[f'A{fila_tipo}'].font = normal_font
-        ws[f'A{fila_tipo}'].alignment = left_align
-        ws[f'A{fila_tipo}'].border = thin_border
-        ws[f'B{fila_tipo}'].border = thin_border
-        # Mostrar 0 como vacío para que se vea más limpio
-        ws[f'C{fila_tipo}'] = horas_val if horas_val != 0 else ''
-        ws[f'C{fila_tipo}'].font = normal_font
-        ws[f'C{fila_tipo}'].alignment = center_align
-        ws[f'C{fila_tipo}'].border = thin_border
-
-    # Total de horas
-    fila_total = fila_tabla + len(tipos_horas) + 1
-    ws.merge_cells(f'A{fila_total}:B{fila_total}')
-    ws[f'A{fila_total}'] = "Total de Horas"
-    ws[f'A{fila_total}'].font = header_font
-    ws[f'A{fila_total}'].alignment = Alignment(horizontal='right', vertical='center')
-    ws[f'A{fila_total}'].border = thin_border
-    ws[f'B{fila_total}'].border = thin_border
-    ws[f'C{fila_total}'] = total_horas
-    ws[f'C{fila_total}'].font = header_font
-    ws[f'C{fila_total}'].alignment = center_align
-    ws[f'C{fila_total}'].border = thin_border
-
-    # Nota
-    fila_nota = fila_total + 1
-    ws.merge_cells(f'A{fila_nota}:E{fila_nota}')
-    ws[f'A{fila_nota}'] = "*Solo llenar en caso de ser Profesor de Tiempo Completo"
-    ws[f'A{fila_nota}'].font = Font(italic=True, name='Century Gothic', size=7)
-
-    # ========== 11. SECCIÓN DE FIRMAS ==========
-    gris_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-    firma_header_font = Font(bold=True, name='Century Gothic', size=10)
-
-    fila_firma = fila_nota + 2
-
-    config_director = ConfiguracionSistema.query.filter_by(clave='director_academico_nombre').first()
-    config_responsable = ConfiguracionSistema.query.filter_by(clave='responsable_pa_nombre').first()
-
-    nombre_director = config_director.valor if config_director and config_director.valor else ""
-    nombre_responsable = config_responsable.valor if config_responsable and config_responsable.valor else ""
-
-    # Encabezados de firma con fondo gris
-    # Elaboró
-    ws.merge_cells(f'A{fila_firma}:C{fila_firma}')
-    ws[f'A{fila_firma}'] = "Elaboró:"
-    ws[f'A{fila_firma}'].font = firma_header_font
-    ws[f'A{fila_firma}'].alignment = center_align
-    ws[f'A{fila_firma}'].fill = gris_fill
-    ws[f'A{fila_firma}'].border = thin_border
-    for col in ['B', 'C']:
-        ws[f'{col}{fila_firma}'].fill = gris_fill
-        ws[f'{col}{fila_firma}'].border = thin_border
-
-    # Autorizó
-    ws.merge_cells(f'D{fila_firma}:F{fila_firma}')
-    ws[f'D{fila_firma}'] = "Autorizó:"
-    ws[f'D{fila_firma}'].font = firma_header_font
-    ws[f'D{fila_firma}'].alignment = center_align
-    ws[f'D{fila_firma}'].fill = gris_fill
-    ws[f'D{fila_firma}'].border = thin_border
-    for col in ['E', 'F']:
-        ws[f'{col}{fila_firma}'].fill = gris_fill
-        ws[f'{col}{fila_firma}'].border = thin_border
-
-    # Recibió
-    ws.merge_cells(f'G{fila_firma}:L{fila_firma}')
-    ws[f'G{fila_firma}'] = "Recibió:"
-    ws[f'G{fila_firma}'].font = firma_header_font
-    ws[f'G{fila_firma}'].alignment = center_align
-    ws[f'G{fila_firma}'].fill = gris_fill
-    ws[f'G{fila_firma}'].border = thin_border
-    for col in ['H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_firma}'].fill = gris_fill
-        ws[f'{col}{fila_firma}'].border = thin_border
-
-    # Nombres
-    fila_nombres = fila_firma + 1
-    ws.merge_cells(f'A{fila_nombres}:C{fila_nombres}')
-    ws[f'A{fila_nombres}'] = datos_profesor['info']['nombre_completo']
-    ws[f'A{fila_nombres}'].font = normal_font
-    ws[f'A{fila_nombres}'].alignment = center_align
-    ws[f'A{fila_nombres}'].border = thin_border
-    for col in ['B', 'C']:
-        ws[f'{col}{fila_nombres}'].border = thin_border
-
-    ws.merge_cells(f'D{fila_nombres}:F{fila_nombres}')
-    ws[f'D{fila_nombres}'] = nombre_director
-    ws[f'D{fila_nombres}'].font = normal_font
-    ws[f'D{fila_nombres}'].alignment = center_align
-    ws[f'D{fila_nombres}'].border = thin_border
-    for col in ['E', 'F']:
-        ws[f'{col}{fila_nombres}'].border = thin_border
-
-    ws.merge_cells(f'G{fila_nombres}:L{fila_nombres}')
-    ws[f'G{fila_nombres}'] = nombre_responsable
-    ws[f'G{fila_nombres}'].font = normal_font
-    ws[f'G{fila_nombres}'].alignment = center_align
-    ws[f'G{fila_nombres}'].border = thin_border
-    for col in ['H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_nombres}'].border = thin_border
-
-    # Cargos
-    fila_cargos = fila_nombres + 1
-    cargo_profesor = "PROFESOR DE TIEMPO COMPLETO" if datos_profesor['info']['es_tc'] else "PROFESOR DE ASIGNATURA"
-
-    ws.merge_cells(f'A{fila_cargos}:C{fila_cargos}')
-    ws[f'A{fila_cargos}'] = cargo_profesor
-    ws[f'A{fila_cargos}'].font = normal_font
-    ws[f'A{fila_cargos}'].alignment = center_align
-    ws[f'A{fila_cargos}'].border = thin_border
-    for col in ['B', 'C']:
-        ws[f'{col}{fila_cargos}'].border = thin_border
-
-    ws.merge_cells(f'D{fila_cargos}:F{fila_cargos}')
-    ws[f'D{fila_cargos}'] = "Director Académico"
-    ws[f'D{fila_cargos}'].font = normal_font
-    ws[f'D{fila_cargos}'].alignment = center_align
-    ws[f'D{fila_cargos}'].border = thin_border
-    for col in ['E', 'F']:
-        ws[f'{col}{fila_cargos}'].border = thin_border
-
-    ws.merge_cells(f'G{fila_cargos}:L{fila_cargos}')
-    ws[f'G{fila_cargos}'] = "Responsable del PA"
-    ws[f'G{fila_cargos}'].font = normal_font
-    ws[f'G{fila_cargos}'].alignment = center_align
-    ws[f'G{fila_cargos}'].border = thin_border
-    for col in ['H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_cargos}'].border = thin_border
-
-    # Espacio para firma (fila vacía con bordes)
-    fila_espacio = fila_cargos + 1
-    ws.row_dimensions[fila_espacio].height = 45
-    ws.merge_cells(f'A{fila_espacio}:C{fila_espacio}')
-    ws.merge_cells(f'D{fila_espacio}:F{fila_espacio}')
-    ws.merge_cells(f'G{fila_espacio}:L{fila_espacio}')
-    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_espacio}'].border = thin_border
-
-    # Fila extra de espacio para que la firma no tape cargos
-    fila_espacio2 = fila_espacio + 1
-    ws.row_dimensions[fila_espacio2].height = 15
-    ws.merge_cells(f'A{fila_espacio2}:C{fila_espacio2}')
-    ws.merge_cells(f'D{fila_espacio2}:F{fila_espacio2}')
-    ws.merge_cells(f'G{fila_espacio2}:L{fila_espacio2}')
-    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_espacio2}'].border = thin_border
-
-    # Etiquetas "Firma"
-    fila_label_firma = fila_espacio2 + 1
-    ws.merge_cells(f'A{fila_label_firma}:C{fila_label_firma}')
-    ws[f'A{fila_label_firma}'] = "Firma"
-    ws[f'A{fila_label_firma}'].font = normal_font
-    ws[f'A{fila_label_firma}'].alignment = center_align
-    ws[f'A{fila_label_firma}'].border = thin_border
-    for col in ['B', 'C']:
-        ws[f'{col}{fila_label_firma}'].border = thin_border
-
-    ws.merge_cells(f'D{fila_label_firma}:F{fila_label_firma}')
-    ws[f'D{fila_label_firma}'] = "Firma"
-    ws[f'D{fila_label_firma}'].font = normal_font
-    ws[f'D{fila_label_firma}'].alignment = center_align
-    ws[f'D{fila_label_firma}'].border = thin_border
-    for col in ['E', 'F']:
-        ws[f'{col}{fila_label_firma}'].border = thin_border
-
-    ws.merge_cells(f'G{fila_label_firma}:L{fila_label_firma}')
-    ws[f'G{fila_label_firma}'] = "Firma"
-    ws[f'G{fila_label_firma}'].font = normal_font
-    ws[f'G{fila_label_firma}'].alignment = center_align
-    ws[f'G{fila_label_firma}'].border = thin_border
-    for col in ['H', 'I', 'J', 'K', 'L']:
-        ws[f'{col}{fila_label_firma}'].border = thin_border
-
-    # ========== 12. INSERTAR FIRMAS DIGITALES SI EXISTEN ==========
-    fila_firma_img = fila_espacio
-    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker as AnchorMk
-    from openpyxl.drawing.xdr import XDRPositiveSize2D
-    from openpyxl.utils.units import pixels_to_EMU
-
-    firma_w = 140   # píxeles
-    firma_h = 45    # píxeles
-    firma_ext = XDRPositiveSize2D(pixels_to_EMU(firma_w), pixels_to_EMU(firma_h))
-    row_idx = fila_firma_img - 1  # 0-based row index
-    row_off = pixels_to_EMU(3)    # pequeño margen superior
-
-    # Anchos de columna en px (aprox 7.5 px por char width en Excel)
-    # A=9.5, B=17.2, C=18.2 → total A-C ≈ 337px → center offset = (337-140)/2 ≈ 98px
-    # A es ~71px, así que empezamos en col B (idx=1) con offset = 98-71 = 27px
-    # D=17.3, E=16.0, F=15.5 → total D-F ≈ 366px → center offset = (366-140)/2 ≈ 113px  
-    # D es ~130px, así que empezamos en col D (idx=3) con offset = 113px
-    # G=0.5, H=7, I=13, J=17, K=13, L=13 → total ≈ 479px → center offset = (479-140)/2 ≈ 170px
-    # G(4)+H(53)+I(98)=155px, así que empezamos en col J (idx=9) con offset = 170-155 = 15px
-
-    def crear_anchor_firma(col_idx, col_off_px):
-        marker = AnchorMk(col=col_idx, colOff=pixels_to_EMU(col_off_px), row=row_idx, rowOff=row_off)
-        return OneCellAnchor(_from=marker, ext=firma_ext)
-
-    # 1. Firma del profesor (Elaboró) — centrada en A-C
-    profesor = User.query.get(datos_profesor['info']['id'])
-    if profesor and profesor.firma:
-        firma_path = os.path.join('static', 'uploads', 'firmas', profesor.firma)
-        if os.path.exists(firma_path):
-            try:
-                firma_img = convertir_imagen_para_excel(firma_path)
-                if firma_img:
-                    firma_img.anchor = crear_anchor_firma(1, 55)
-                    ws.add_image(firma_img)
-            except Exception as e:
-                logger.error(f"Error al cargar firma del profesor: {e}")
-
-    # 2. Firma del Director Académico (Autorizó) — centrada en D-F
-    config_firma_director = ConfiguracionSistema.query.filter_by(clave='director_academico_firma').first()
-    if config_firma_director and config_firma_director.valor:
-        firma_director_path = os.path.join('static', 'uploads', 'firmas', config_firma_director.valor)
-        if os.path.exists(firma_director_path):
-            try:
-                firma_dir_img = convertir_imagen_para_excel(firma_director_path)
-                if firma_dir_img:
-                    firma_dir_img.anchor = crear_anchor_firma(3, 113)
-                    ws.add_image(firma_dir_img)
-            except Exception as e:
-                logger.error(f"Error al cargar firma del director: {e}")
-
-    # 3. Firma del Responsable del PA (Recibió) — centrada en G-L
-    config_firma_responsable = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
-    if config_firma_responsable and config_firma_responsable.valor:
-        firma_resp_path = os.path.join('static', 'uploads', 'firmas', config_firma_responsable.valor)
-        if os.path.exists(firma_resp_path):
-            try:
-                firma_resp_img = convertir_imagen_para_excel(firma_resp_path)
-                if firma_resp_img:
-                    firma_resp_img.anchor = crear_anchor_firma(9, 15)
-                    ws.add_image(firma_resp_img)
-            except Exception as e:
-                logger.error(f"Error al cargar firma del responsable: {e}")
-
-    # ========== 13. GUARDAR EN BUFFER ==========
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
-
 
 @app.route('/dashboard')
 @login_required
@@ -1179,11 +330,15 @@ def dashboard():
     profesor_asignatura_count = User.query.filter_by(rol='profesor_asignatura').count()
     profesor_count = profesor_completo_count + profesor_asignatura_count
     
+    from models import ConfiguracionSistema
+    firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
+
     return render_template('dashboard.html',
                          user_count=user_count,
                          admin_count=admin_count,
                          jefe_count=jefe_count,
-                         profesor_count=profesor_count)
+                         profesor_count=profesor_count,
+                         firmas_usuario_habilitadas=firmas_usuario_habilitadas)
 
 @app.route('/logout')
 @login_required
@@ -1229,7 +384,246 @@ def admin_panel():
 #                          profesores=profesores, 
 #                          materias=materias,
 #                          horarios_academicos=horarios_academicos,
-#                          carrera=current_user.carrera)
+#                          carrera=current_user.primera_carrera)
+
+# ==========================================
+# MÓDULO DE RECURSOS HUMANOS
+# ==========================================
+
+@app.route('/rh/usuarios-baja')
+@login_required
+def rh_usuarios_baja():
+    """Ver usuarios dados de baja (Recursos Humanos)"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Filtros
+    buscar = request.args.get('buscar', '').strip()
+    filtro_rol = request.args.get('rol', '')
+    filtro_carrera = request.args.get('carrera_id', type=int)
+
+    # Query base: usuarios inactivos
+    query = User.query.filter(User.activo == False)
+
+    if buscar:
+        query = query.filter(
+            db.or_(
+                User.nombre.ilike(f'%{buscar}%'),
+                User.apellido.ilike(f'%{buscar}%'),
+                User.username.ilike(f'%{buscar}%'),
+                User.email.ilike(f'%{buscar}%')
+            )
+        )
+    if filtro_rol:
+        query = query.filter(User.rol == filtro_rol)
+    if filtro_carrera:
+        query = query.filter(User.carreras.any(Carrera.id == filtro_carrera))
+
+    usuarios = query.order_by(User.apellido, User.nombre).all()
+    carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
+
+    return render_template('rh/usuarios_baja.html',
+                         usuarios=usuarios,
+                         carreras=carreras,
+                         buscar=buscar,
+                         filtro_rol=filtro_rol,
+                         filtro_carrera=filtro_carrera)
+
+
+@app.route('/rh/usuarios-baja/exportar/csv')
+@login_required
+def rh_exportar_csv():
+    """Exportar usuarios dados de baja en Excel con formato profesional"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        abort(403)
+
+    import os
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from app_pkg.helpers.export_helpers import convertir_imagen_para_excel
+
+    usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Usuarios Dados de Baja"
+
+    # Styles
+    verde = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+    header_font = Font(bold=True, name='Century Gothic', size=10, color="FFFFFF")
+    title_font = Font(bold=True, name='Century Gothic', size=14)
+    normal_font = Font(name='Century Gothic', size=10)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    left = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+
+    # Logo
+    logo_path = os.path.join('static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        try:
+            img = convertir_imagen_para_excel(logo_path)
+            if img:
+                img.width = 150
+                img.height = 55
+                ws.add_image(img, 'A1')
+        except Exception:
+            pass
+
+    # Title (offset to B to leave space for logo)
+    headers = ['Username', 'Nombre', 'Apellido', 'Email', 'Teléfono', 'Rol',
+               'Carreras', 'Materias', 'Fecha de Registro', 'Estado']
+    ws.merge_cells('B1:J1')
+    ws['B1'] = 'Reporte de Usuarios Dados de Baja'
+    ws['B1'].font = title_font
+    ws['B1'].alignment = center
+
+    ws.merge_cells('B2:J2')
+    ws['B2'] = f'Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+    ws['B2'].font = Font(name='Century Gothic', size=9, italic=True)
+    ws['B2'].alignment = center
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 20
+
+    # Headers (row 4)
+    for col_idx, h in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = verde
+        cell.alignment = center
+        cell.border = thin_border
+
+    # Data rows
+    for row_idx, u in enumerate(usuarios, 5):
+        carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
+        materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
+        rol_display = Role.ROLES_DISPLAY.get(u.rol, u.rol)
+        fecha = u.fecha_registro.strftime('%Y-%m-%d') if u.fecha_registro else 'N/A'
+        row_data = [u.username, u.nombre, u.apellido, u.email or 'N/A',
+                    getattr(u, 'telefono', 'N/A') or 'N/A', rol_display,
+                    carreras_str, materias_str, fecha, 'Dado de baja']
+        for col_idx, val in enumerate(row_data, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = normal_font
+            cell.alignment = left
+            cell.border = thin_border
+        # Alternate row color
+        if row_idx % 2 == 0:
+            for col_idx in range(1, len(row_data) + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = PatternFill(
+                    start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+
+    # Column widths
+    col_widths = [14, 16, 16, 25, 14, 18, 22, 22, 16, 14]
+    for i, w in enumerate(col_widths):
+        ws.column_dimensions[chr(65 + i)].width = w
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, as_attachment=True,
+                    download_name='usuarios_dados_de_baja.xlsx',
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/rh/usuarios-baja/exportar/pdf')
+@login_required
+def rh_exportar_pdf():
+    """Exportar usuarios dados de baja en PDF"""
+    if not current_user.is_recursos_humanos() and not current_user.is_admin():
+        abort(403)
+
+    import os
+
+    usuarios = User.query.filter(User.activo == False).order_by(User.apellido, User.nombre).all()
+
+    buffer = BytesIO()
+    page_w, page_h = landscape(letter)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=30, rightMargin=30)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 14)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Reporte de Usuarios Dados de Baja')
+        canvas_obj.setFont('Helvetica', 9)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 48, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
+    styles = getSampleStyleSheet()
+    styleN = ParagraphStyle('CellStyle', parent=styles['BodyText'], fontSize=7, leading=9)
+
+    elements = []
+
+    data = [['Username', 'Nombre', 'Apellido', 'Email', 'Rol', 'Carreras', 'Materias', 'Fecha']]
+    for u in usuarios:
+        carreras_str = ', '.join([c.nombre for c in u.carreras]) if u.carreras else 'N/A'
+        materias_str = ', '.join([m.nombre for m in u.materias]) if u.materias else 'N/A'
+        rol_display = Role.ROLES_DISPLAY.get(u.rol, u.rol)
+        fecha = u.fecha_registro.strftime('%Y-%m-%d') if u.fecha_registro else 'N/A'
+        data.append([
+            Paragraph(u.username, styleN),
+            Paragraph(u.nombre or '', styleN),
+            Paragraph(u.apellido or '', styleN),
+            Paragraph(u.email or 'N/A', styleN),
+            Paragraph(rol_display, styleN),
+            Paragraph(carreras_str, styleN),
+            Paragraph(materias_str, styleN),
+            Paragraph(fecha, styleN)
+        ])
+
+    if len(data) == 1:
+        elements.append(Paragraph("No hay usuarios dados de baja.", styles['Normal']))
+    else:
+        # Use available width to distribute columns proportionally
+        avail_w = page_w - 60  # 30 left + 30 right margins
+        col_widths = [avail_w*0.09, avail_w*0.10, avail_w*0.10, avail_w*0.16, avail_w*0.11, avail_w*0.18, avail_w*0.18, avail_w*0.08]
+        table = Table(data, hAlign='CENTER', colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3c72')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+        elements.append(table)
+
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True,
+                    download_name='usuarios_dados_de_baja.pdf',
+                    mimetype='application/pdf')
+
 
 # ==========================================
 # GESTIÓN DE PROFESORES PARA JEFES DE CARRERA
@@ -1516,7 +910,7 @@ def disponibilidad_profesores_jefe():
     
     return render_template('jefe/disponibilidad_profesores.html',
                          profesores=profesores,
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          total_profesores=total_profesores,
                          profesores_con_disponibilidad=profesores_con_disponibilidad)
 
@@ -1586,7 +980,7 @@ def editar_disponibilidad_profesor_jefe(id):
                          profesor=profesor,
                          horarios=horarios,
                          disponibilidad_dict=disponibilidad_dict,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 @app.route('/jefe-carrera/profesor/<int:id>/disponibilidad/ver')
 @login_required
@@ -1624,7 +1018,7 @@ def ver_disponibilidad_profesor_jefe(id):
                          profesor=profesor,
                          horarios=horarios,
                          disponibilidad_dict=disponibilidad_dict,
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          total_horas_disponibles=total_horas_disponibles)
 
 # ==========================================
@@ -1758,7 +1152,7 @@ def asignacion_masiva_materias_jefe():
                          cargas_profesores=cargas_profesores,
                          filtro_cuatrimestre=cuatrimestre,
                          solo_disponibles=solo_disponibles,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 # ==========================================
 # GESTIÓN DE MATERIAS PARA JEFES DE CARRERA
@@ -1805,7 +1199,7 @@ def gestionar_materias_jefe():
     
     return render_template('jefe/materias.html', 
                          materias=materias, 
-                         carrera=current_user.carrera,
+                         carrera=current_user.primera_carrera,
                          filtros_activos={
                              'ciclo': ciclo,
                              'cuatrimestre': cuatrimestre
@@ -1901,7 +1295,7 @@ def gestionar_horarios_academicos_jefe():
     return render_template('jefe/horarios_academicos.html', 
                          horarios_academicos=horarios_academicos, 
                          grupos_unicos=grupos_unicos,
-                         carrera=current_user.carrera)
+                         carrera=current_user.primera_carrera)
 
 @app.route('/jefe-carrera/horario-academico/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -2279,8 +1673,8 @@ def eliminar_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para eliminar este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -2304,8 +1698,8 @@ def gestionar_materias_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para gestionar las materias de este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -2338,8 +1732,8 @@ def ver_materias_grupo(id):
     
     grupo = Grupo.query.get_or_404(id)
     
-    # Si es jefe de carrera, verificar que el grupo pertenezca a su carrera
-    if current_user.is_jefe_carrera():
+    # Si es jefe de carrera (y no admin), verificar que el grupo pertenezca a su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         if not current_user.tiene_carrera(grupo.carrera_id):
             flash('No tienes permisos para ver las materias de este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
@@ -2358,15 +1752,15 @@ def asignacion_masiva_materias_grupos():
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
     
-    # Si es jefe de carrera, filtrar por su carrera
-    if current_user.is_jefe_carrera():
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     # Obtener carreras para el filtro
     if current_user.is_admin():
         carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
     else:
-        carreras = [current_user.carrera]
+        carreras = list(current_user.carreras) if current_user.carreras else []
     
     grupos = []
     materias = []
@@ -2575,11 +1969,11 @@ def exportar_asignaciones_grupos():
     
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
-    
-    # Si es jefe de carrera, forzar su carrera
-    if current_user.is_jefe_carrera():
+
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     from utils import exportar_asignaciones_grupo_csv
     contenido_csv = exportar_asignaciones_grupo_csv(carrera_id, cuatrimestre)
     
@@ -2608,11 +2002,11 @@ def auto_asignar_materias_grupos():
     
     carrera_id = request.form.get('carrera_id', type=int)
     cuatrimestre = request.form.get('cuatrimestre', type=int)
-    
-    # Si es jefe de carrera, forzar su carrera
-    if current_user.is_jefe_carrera():
+
+    # Si es solo jefe de carrera (no admin), forzar su carrera
+    if current_user.is_jefe_carrera() and not current_user.is_admin():
         carrera_id = current_user.primera_carrera_id
-    
+
     if not carrera_id or not cuatrimestre:
         return jsonify({'exito': False, 'mensaje': 'Faltan parámetros'}), 400
     
@@ -4516,7 +3910,7 @@ def generar_horarios_masivo():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    from generador_horarios import generar_horarios_masivos
+    from generador_horarios_mejorado import generar_horarios_secuencial
     from datetime import datetime
     
     # Obtener todos los grupos activos organizados por carrera y cuatrimestre
@@ -4577,9 +3971,9 @@ def generar_horarios_masivo():
         
         # Generar horarios masivos
         logger.info(f"Iniciando generacion masiva para {len(grupos_ids)} grupos")
-        # Inicializar progreso
-        global generacion_progreso
-        generacion_progreso = {
+        # Inicializar progreso (update in-place to keep shared reference with helpers)
+        generacion_progreso.clear()
+        generacion_progreso.update({
             'activo': True,
             'total_grupos': len(grupos_ids),
             'grupos_procesados': 0,
@@ -4588,7 +3982,7 @@ def generar_horarios_masivo():
             'mensaje': 'Iniciando generación...',
             'completado': False,
             'exito': False
-        }
+        })
         
         # Generar horarios masivos con callback de progreso
         resultado = generar_horarios_masivos_con_progreso(
@@ -4692,107 +4086,21 @@ def generar_horarios_masivo():
                          grupos_organizados=grupos_organizados,
                          resultado=resultado)
 
-def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version_nombre, creado_por, dias_semana):
-    """Wrapper que genera horarios actualizando el progreso global"""
-    global generacion_progreso, progreso_lock
-    from generador_horarios_mejorado import GeneradorHorariosMejorado
-    from models import Grupo, db
-    
-    resultados = {
-        'exito': True,
-        'mensaje': '',
-        'grupos_procesados': 0,
-        'grupos_fallidos': 0,
-        'horarios_generados': 0,
-        'algoritmo': 'Secuencial con Progreso'
-    }
-    
-    # Ordenar grupos por complejidad (los más simples primero)
-    grupos_ordenados = grupos_ids
-    total = len(grupos_ordenados)
-    
-    for i, grupo_id in enumerate(grupos_ordenados, 1):
-        grupo = Grupo.query.get(grupo_id)
-        if not grupo:
-            continue
-        
-        # Actualizar progreso con lock
-        with progreso_lock:
-            generacion_progreso['grupo_actual'] = i  # Solo el número actual
-            generacion_progreso['codigo_grupo'] = grupo.codigo
-            generacion_progreso['mensaje'] = f'Procesando grupo {grupo.codigo}...'
-        
-        try:
-            db.session.expire_all()
-            
-            generador = GeneradorHorariosMejorado(
-                grupos_ids=[grupo_id],
-                periodo_academico=periodo_academico,
-                version_nombre=f"{version_nombre or 'Secuencial'} - {grupo.codigo}",
-                creado_por=creado_por,
-                dias_semana=dias_semana or ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'],
-                tiempo_limite=30  # OPTIMIZADO: Reducido de 120s a 30s
-            )
-            
-            resultado = generador.generar()
-            
-            if resultado['exito']:
-                db.session.commit()
-                resultados['grupos_procesados'] += 1
-                resultados['horarios_generados'] += resultado['horarios_generados']
-                
-                # Actualizar progreso con lock
-                with progreso_lock:
-                    generacion_progreso['grupos_procesados'] = resultados['grupos_procesados']
-                    generacion_progreso['horarios_generados'] = resultados['horarios_generados']
-            else:
-                resultados['grupos_fallidos'] += 1
-                
-                # Guardar error detallado para mostrar en UI
-                with progreso_lock:
-                    if 'errores_detallados' not in generacion_progreso:
-                        generacion_progreso['errores_detallados'] = []
-                    generacion_progreso['errores_detallados'].append({
-                        'grupo': grupo.codigo,
-                        'error': resultado.get('mensaje', 'Error desconocido'),
-                        'errores_validacion': resultado.get('errores_validacion', [])
-                    })
-                    generacion_progreso['mensaje'] = f"❌ Error en {grupo.codigo}: {resultado.get('mensaje', 'Error desconocido')}"
-                
-        except Exception as e:
-            db.session.rollback()
-            resultados['grupos_fallidos'] += 1
-            
-            # Guardar error de excepción en progreso
-            with progreso_lock:
-                if 'errores_detallados' not in generacion_progreso:
-                    generacion_progreso['errores_detallados'] = []
-                generacion_progreso['errores_detallados'].append({
-                    'grupo': grupo.codigo,
-                    'error': str(e),
-                    'errores_validacion': []
-                })
-                generacion_progreso['mensaje'] = f"❌ Error en {grupo.codigo}: {str(e)}"
-            logger.error(f"Error en grupo {grupo.codigo}: {e}")
-    
-    # Resumen final
-    if resultados['grupos_procesados'] > 0:
-        if resultados['grupos_fallidos'] == 0:
-            resultados['mensaje'] = f"✅ Generación exitosa: {resultados['grupos_procesados']} grupos, {resultados['horarios_generados']} horarios"
-        else:
-            resultados['exito'] = False
-            resultados['mensaje'] = f"⚠️ Generación parcial: {resultados['grupos_procesados']} exitosos, {resultados['grupos_fallidos']} fallidos"
-    else:
-        resultados['exito'] = False
-        resultados['mensaje'] = "❌ No se pudo generar ningún horario"
-    
-    return resultados
-
 @app.route('/api/generacion-progreso')
+@app.route('/api/generacion-progreso/<task_id>')
 @login_required
-def api_generacion_progreso():
-    """API endpoint para consultar el progreso de generación masiva"""
-    global generacion_progreso
+def api_generacion_progreso(task_id=None):
+    """API endpoint para consultar el progreso de generación masiva.
+
+    Supports both legacy (no task_id) and new Redis-based (with task_id) modes.
+    """
+    tracker = _get_progress_tracker()
+    if task_id and tracker:
+        data = tracker.get(task_id)
+        if data:
+            return jsonify(data)
+        return jsonify({'error': 'Task not found', 'completado': True, 'grupos_procesados': 0, 'total_grupos': 0}), 404
+
     with progreso_lock:
         return jsonify(generacion_progreso.copy())
 
@@ -4957,8 +4265,6 @@ def api_verificar_horarios_existentes():
 @login_required
 def api_iniciar_generacion_masiva():
     """API endpoint para iniciar generación masiva en segundo plano"""
-    global generacion_progreso, progreso_lock
-    
     if not current_user.is_admin():
         return jsonify({'error': 'No tienes permisos'}), 403
     
@@ -4995,7 +4301,8 @@ def api_iniciar_generacion_masiva():
     
     # Inicializar progreso
     with progreso_lock:
-        generacion_progreso = {
+        generacion_progreso.clear()
+        generacion_progreso.update({
             'activo': True,
             'total_grupos': len(grupos_ids),
             'grupos_procesados': 0,
@@ -5005,11 +4312,10 @@ def api_iniciar_generacion_masiva():
             'mensaje': 'Iniciando generación...',
             'completado': False,
             'exito': False
-        }
-    
+        })
+
     # Función para ejecutar en thread
     def ejecutar_generacion():
-        global generacion_progreso, progreso_lock
         with app.app_context():
             resultado = generar_horarios_masivos_con_progreso(
                 grupos_ids=grupos_ids,
@@ -5135,7 +4441,7 @@ def generar_horarios_academicos():
     ]
 
     if form.validate_on_submit():
-        from generador_horarios import generar_horarios_automaticos
+        from generador_horarios_mejorado import generar_horarios_secuencial
         from datetime import datetime
 
         # Obtener el grupo seleccionado
@@ -5185,8 +4491,8 @@ def generar_horarios_academicos():
                 dias_semana.append('sabado')
 
         # Generar horarios usando el nuevo enfoque basado en grupos
-        resultado = generar_horarios_automaticos(
-            grupo_id=grupo_id,
+        resultado = generar_horarios_secuencial(
+            grupos_ids=[grupo_id],
             dias_semana=dias_semana,
             periodo_academico=periodo_academico,
             version_nombre=version_nombre,
@@ -5378,8 +4684,8 @@ def eliminar_horarios_masivo():
 @app.route('/admin/usuarios')
 @login_required
 def gestionar_usuarios():
-    """Gestión de usuarios (solo admin)"""
-    if not current_user.is_admin():
+    """Gestión de usuarios (admin y recursos humanos en modo solo lectura)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
 
@@ -5427,17 +4733,134 @@ def gestionar_usuarios():
         rol_display = usuario.get_rol_display()
         roles_count[rol_display] = roles_count.get(rol_display, 0) + 1
 
+    solo_lectura = current_user.is_recursos_humanos() and not current_user.is_admin()
+
     return render_template('admin/usuarios.html',
                          usuarios=usuarios,
                          total_usuarios=total_usuarios,
                          usuarios_activos=usuarios_activos,
                          usuarios_inactivos=usuarios_inactivos,
                          roles_count=roles_count,
+                         solo_lectura=solo_lectura,
                          filtros_activos={
                              'rol': rol_filter,
                              'activo': activo_filter,
                              'busqueda': busqueda
                          })
+
+@app.route('/admin/usuarios/exportar/csv')
+@login_required
+def exportar_usuarios_csv():
+    """Exportar lista de usuarios activos en CSV (admin y recursos humanos)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
+        abort(403)
+
+    usuarios = User.query.filter_by(activo=True).order_by(User.nombre, User.apellido).all()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Usuario', 'Nombre', 'Apellido', 'Email', 'Rol', 'Teléfono', 'Estado', 'Fecha Registro'])
+    for u in usuarios:
+        writer.writerow([
+            u.username, u.nombre, u.apellido, u.email,
+            u.get_rol_display(), u.telefono or '',
+            'Activo' if u.activo else 'Inactivo',
+            u.fecha_registro.strftime('%d/%m/%Y') if u.fecha_registro else ''
+        ])
+
+    output.seek(0)
+    return send_file(
+        BytesIO(output.getvalue().encode('utf-8-sig')),
+        as_attachment=True,
+        download_name='usuarios_sistema.csv',
+        mimetype='text/csv'
+    )
+
+
+@app.route('/admin/usuarios/exportar/pdf')
+@login_required
+def exportar_usuarios_pdf():
+    """Exportar lista de usuarios activos en PDF (admin y recursos humanos)"""
+    if not current_user.is_admin() and not current_user.is_recursos_humanos():
+        abort(403)
+
+    import os
+
+    usuarios = User.query.filter_by(activo=True).order_by(User.nombre, User.apellido).all()
+
+    buffer = BytesIO()
+    page_w, page_h = landscape(letter)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=30, rightMargin=30)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 14)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Lista de Usuarios del Sistema')
+        canvas_obj.setFont('Helvetica', 9)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 48, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
+    styles = getSampleStyleSheet()
+    styleN = ParagraphStyle('CellStyle', parent=styles['BodyText'], fontSize=8, leading=10)
+    elements = []
+
+    data = [['Usuario', 'Nombre Completo', 'Email', 'Rol', 'Teléfono', 'Estado']]
+    for u in usuarios:
+        data.append([
+            Paragraph(u.username, styleN),
+            Paragraph(u.get_nombre_completo(), styleN),
+            Paragraph(u.email or '', styleN),
+            Paragraph(u.get_rol_display(), styleN),
+            Paragraph(u.telefono or '', styleN),
+            Paragraph('Activo' if u.activo else 'Inactivo', styleN)
+        ])
+
+    avail_w = page_w - 60
+    col_widths = [avail_w*0.12, avail_w*0.22, avail_w*0.25, avail_w*0.18, avail_w*0.13, avail_w*0.10]
+    table = Table(data, repeatRows=1, colWidths=col_widths)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e3c72')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('PADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
+
+    buffer.seek(0)
+    return send_file(buffer, as_attachment=True, download_name='usuarios_sistema.pdf', mimetype='application/pdf')
+
 
 @app.route('/admin/usuario/nuevo', methods=['GET', 'POST'])
 @login_required
@@ -5589,9 +5012,13 @@ def editar_usuario(id):
                 )
                 db.session.add(nueva_disponibilidad)
 
+        # Resetear contraseña si se proporcionó una nueva
+        if form.nueva_password.data:
+            usuario.password = form.nueva_password.data
+
         try:
             db.session.commit()
-            
+
             # Construir mensaje con todos los roles
             roles_display = [Role.ROLES_DISPLAY.get(r, r) for r in roles_seleccionados]
             flash(f'Usuario {usuario.get_nombre_completo()} actualizado exitosamente con roles: {", ".join(roles_display)}.', 'success')
@@ -5836,10 +5263,41 @@ def configuracion_sistema():
         'director_academico_firma': ConfiguracionSistema.get_config('director_academico_firma', ''),
         'responsable_pa_nombre': ConfiguracionSistema.get_config('responsable_pa_nombre', ''),
         'responsable_pa_firma': ConfiguracionSistema.get_config('responsable_pa_firma', ''),
-        'fecha_inicio_periodo': ConfiguracionSistema.get_config('fecha_inicio_periodo', '')
+        'fecha_inicio_periodo': ConfiguracionSistema.get_config('fecha_inicio_periodo', ''),
+        'firmas_habilitadas': ConfiguracionSistema.get_config('firmas_habilitadas', 'true')
     }
 
-    return render_template('admin/configuracion.html', config_horas=config_horas, config_excel=config_excel)
+    firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
+
+    return render_template('admin/configuracion.html',
+                           config_horas=config_horas,
+                           config_excel=config_excel,
+                           firmas_usuario_habilitadas=firmas_usuario_habilitadas)
+
+
+# API para guardar configuración de seguridad
+@app.route('/admin/configuracion/seguridad', methods=['POST'])
+@login_required
+def guardar_configuracion_seguridad():
+    """Guardar configuración de seguridad incluyendo toggle de firmas de usuario"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+
+    try:
+        from models import ConfiguracionSistema
+        data = request.get_json()
+        firmas_usuario_habilitadas = 'true' if data.get('firmas_usuario_habilitadas') else 'false'
+
+        ConfiguracionSistema.set_config(
+            'firmas_usuario_habilitadas', firmas_usuario_habilitadas,
+            tipo='bool', descripcion='Permitir a los usuarios subir y dibujar firmas digitales en su perfil',
+            categoria='seguridad'
+        )
+
+        return jsonify({'success': True, 'message': 'Configuración de seguridad guardada exitosamente'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error al guardar: {str(e)}'}), 500
 
 
 # API para configuración de carga horaria de profesores
@@ -5915,9 +5373,17 @@ def guardar_configuracion_exportacion_excel():
         from models import ConfiguracionSistema
 
         # Obtener datos del formulario
+        firmas_habilitadas = request.form.get('firmas_habilitadas', 'false')
         director_nombre = request.form.get('director_academico_nombre', '')
         responsable_nombre = request.form.get('responsable_pa_nombre', '')
         fecha_inicio = request.form.get('fecha_inicio_periodo', '')
+
+        # Guardar toggle de firmas
+        ConfiguracionSistema.set_config(
+            'firmas_habilitadas', firmas_habilitadas,
+            tipo='bool', descripcion='Habilitar firmas digitales en exportaciones',
+            categoria='exportacion'
+        )
 
         # Guardar nombres
         ConfiguracionSistema.set_config(
@@ -6229,7 +5695,7 @@ def crear_backup():
 
     try:
         from models import BackupHistory
-        import shutil
+        import subprocess
         import hashlib
         from datetime import datetime
 
@@ -6240,39 +5706,52 @@ def crear_backup():
 
         # Generar nombre del archivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'backup_{timestamp}.db'
+        filename = f'backup_{timestamp}.sql'
         filepath = os.path.join(backup_dir, filename)
 
-        # Copiar archivo de base de datos
-        db_path = 'instance/sistema_academico.db'
-        if os.path.exists(db_path):
-            shutil.copy2(db_path, filepath)
+        # Obtener URL de conexión de la base de datos
+        database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
 
-            # Calcular tamaño y checksum
-            file_size = os.path.getsize(filepath)
-            with open(filepath, 'rb') as f:
-                checksum = hashlib.sha256(f.read()).hexdigest()
-
-            # Registrar en historial
-            backup = BackupHistory(
-                filename=filename,
-                tipo='manual',
-                tamano=file_size,
-                ruta_archivo=filepath,
-                usuario_id=current_user.id
+        if 'postgresql' in database_url:
+            # Usar pg_dump para PostgreSQL
+            result = subprocess.run(
+                ['pg_dump', '--no-owner', '--no-acl', '-f', filepath, database_url],
+                capture_output=True, text=True, timeout=120
             )
-            backup.checksum = checksum
-            db.session.add(backup)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'Backup creado exitosamente',
-                'filename': filename,
-                'size': file_size
-            })
+            if result.returncode != 0:
+                return jsonify({'success': False, 'message': f'Error en pg_dump: {result.stderr}'}), 500
         else:
-            return jsonify({'success': False, 'message': 'Archivo de base de datos no encontrado'}), 404
+            # Fallback para SQLite
+            import shutil
+            db_path = 'instance/sistema_academico.db'
+            if os.path.exists(db_path):
+                shutil.copy2(db_path, filepath)
+            else:
+                return jsonify({'success': False, 'message': 'Archivo de base de datos no encontrado'}), 404
+
+        # Calcular tamaño y checksum
+        file_size = os.path.getsize(filepath)
+        with open(filepath, 'rb') as f:
+            checksum = hashlib.sha256(f.read()).hexdigest()
+
+        # Registrar en historial
+        backup = BackupHistory(
+            filename=filename,
+            tipo='manual',
+            tamano=file_size,
+            ruta_archivo=filepath,
+            usuario_id=current_user.id
+        )
+        backup.checksum = checksum
+        db.session.add(backup)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Backup creado exitosamente',
+            'filename': filename,
+            'size': file_size
+        })
 
     except Exception as e:
         db.session.rollback()
@@ -6314,8 +5793,7 @@ def obtener_historial_backups():
 def descargar_backup(filename):
     """Descargar archivo de backup"""
     if not current_user.is_admin():
-        flash('No tienes permisos para esta acción.', 'error')
-        return redirect(url_for('dashboard'))
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
 
     try:
         from models import BackupHistory
@@ -6323,31 +5801,84 @@ def descargar_backup(filename):
         # Sanitizar filename para prevenir path traversal
         safe_filename = secure_filename(filename)
         if not safe_filename:
-            flash('Nombre de archivo no válido.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Nombre de archivo no válido'}), 400
 
         # Verificar que el backup existe en la base de datos
         backup = BackupHistory.query.filter_by(filename=safe_filename).first()
         if not backup:
-            flash('Backup no encontrado.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Backup no encontrado en el historial'}), 404
 
         # Validar que el path resuelto esté dentro del directorio de backups
         backups_dir = os.path.abspath('backups')
         filepath = os.path.abspath(os.path.join('backups', safe_filename))
         if not filepath.startswith(backups_dir):
-            flash('Acceso denegado.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
 
         if os.path.exists(filepath):
             return send_file(filepath, as_attachment=True, download_name=safe_filename)
         else:
-            flash('Archivo de backup no encontrado en el servidor.', 'error')
-            return redirect(url_for('configuracion_sistema'))
+            return jsonify({'success': False, 'message': 'El archivo de backup no existe en el servidor. Es posible que haya sido eliminado.'}), 404
 
     except Exception as e:
-        flash('Error al descargar backup.', 'error')
-        return redirect(url_for('configuracion_sistema'))
+        return jsonify({'success': False, 'message': f'Error al descargar backup: {str(e)}'}), 500
+
+@app.route('/admin/configuracion/backup/<filename>', methods=['DELETE'])
+@login_required
+def eliminar_backup(filename):
+    """Eliminar archivo de backup y registro en DB"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+
+    try:
+        from models import BackupHistory, db
+        from werkzeug.utils import secure_filename
+        import os
+
+        safe_filename = secure_filename(filename)
+        
+        # Verificar que el backup existe en la base de datos
+        backup = BackupHistory.query.filter_by(filename=safe_filename).first()
+        
+        if not backup:
+            return jsonify({'success': False, 'message': 'Backup no encontrado en el historial'}), 404
+
+        # Ruta del archivo
+        backups_dir = os.path.abspath('backups')
+        filepath = os.path.abspath(os.path.join(backups_dir, safe_filename))
+        
+        # Seguridad: validar que no intenten borrar fuera de 'backups/'
+        if not filepath.startswith(backups_dir):
+            return jsonify({'success': False, 'message': 'Acceso denegado'}), 403
+
+        # Eliminar el archivo si existe
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except Exception as file_error:
+                print(f"Error al eliminar archivo físico: {str(file_error)}")
+        
+        # Eliminar de la base de datos
+        db.session.delete(backup)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Backup eliminado exitosamente'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Error al eliminar backup: {str(e)}'}), 500
+
+# API para probar conexión a la base de datos
+@app.route('/admin/configuracion/test-connection', methods=['POST'])
+@login_required
+def test_db_connection():
+    """Probar conexión a la base de datos"""
+    if not current_user.is_admin():
+        return jsonify({'success': False, 'message': 'No tienes permisos para esta acción'}), 403
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return jsonify({'success': True, 'message': 'Conexión exitosa'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 # API para optimizar base de datos
 @app.route('/admin/configuracion/optimize', methods=['POST'])
@@ -6524,13 +6055,6 @@ def eliminar_imagen_perfil():
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 ALLOWED_MIME_TYPES = {'image/png', 'image/jpeg', 'image/gif'}
 
-def allowed_file(filename, file_obj=None):
-    """Verificar si el archivo tiene una extensión y MIME type permitidos"""
-    ext_ok = '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-    if file_obj and hasattr(file_obj, 'content_type'):
-        return ext_ok and file_obj.content_type in ALLOWED_MIME_TYPES
-    return ext_ok
-
 # ========== RUTAS PARA FIRMAS DIGITALES ==========
 
 # Guardar firma dibujada en canvas (base64)
@@ -6539,6 +6063,10 @@ def allowed_file(filename, file_obj=None):
 def guardar_firma_dibujada():
     """Guardar firma dibujada en canvas como imagen"""
     import base64
+    from models import ConfiguracionSistema
+
+    if ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true') != 'true':
+        return jsonify({'success': False, 'message': 'Las firmas digitales están deshabilitadas por el administrador.'}), 403
 
     try:
         data = request.get_json()
@@ -6591,6 +6119,11 @@ def guardar_firma_dibujada():
 @login_required
 def subir_firma():
     """Subir firma digital del usuario actual"""
+    from models import ConfiguracionSistema
+    if ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true') != 'true':
+        flash('Las firmas digitales están deshabilitadas por el administrador.', 'error')
+        return redirect(url_for('dashboard'))
+
     if 'firma' not in request.files:
         flash('No se encontró el archivo de firma.', 'error')
         return redirect(url_for('dashboard'))
@@ -6822,31 +6355,49 @@ def exportar_reportes_pdf():
         ])
 
     # Crear PDF
+    import os
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    page_w, page_h = A4
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            topMargin=85, bottomMargin=35,
+                            leftMargin=40, rightMargin=40)
+
+    COLOR_TEAL = colors.HexColor('#00847C')
+    COLOR_GOLD = colors.HexColor('#FFD600')
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    def draw_page(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(COLOR_TEAL)
+        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.setFillColor(COLOR_GOLD)
+        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
+        if logo_exists:
+            try:
+                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                                     preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont('Helvetica-Bold', 13)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Reporte del Sistema Académico')
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 46, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
+        canvas_obj.setFont('Helvetica-Oblique', 7)
+        canvas_obj.drawCentredString(
+            page_w / 2, 18,
+            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        )
+        canvas_obj.restoreState()
+
     elements = []
 
     # Estilos
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=16,
-        spaceAfter=30,
-        alignment=1  # Centrado
-    )
-
-    # Título
-    title = Paragraph("Reporte del Sistema Académico", title_style)
-    elements.append(title)
-    elements.append(Spacer(1, 12))
-
-    # Fecha de generación
-    from datetime import datetime
-    fecha_style = ParagraphStyle('Fecha', parent=styles['Normal'], fontSize=10, alignment=2)
-    fecha = Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", fecha_style)
-    elements.append(fecha)
-    elements.append(Spacer(1, 20))
 
     # Estadísticas Generales
     elements.append(Paragraph("Estadísticas Generales", styles['Heading2']))
@@ -6901,7 +6452,7 @@ def exportar_reportes_pdf():
         elements.append(Paragraph("No hay datos de carreras disponibles.", styles['Normal']))
 
     # Generar PDF
-    doc.build(elements)
+    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
 
     buffer.seek(0)
     return send_file(
@@ -7175,7 +6726,11 @@ def admin_horario_profesores():
     if not current_user.is_admin(): abort(403)
     
     horarios_data = procesar_horarios(agrupar_por='profesor', incluir_ids=True)
-    return render_template('admin/admin_horario_profesores.html', horarios_data=horarios_data)
+    # Get unique hours from the system's configured time slots
+    horas_sistema = sorted(set(
+        h.hora_inicio.hour for h in Horario.query.filter_by(activo=True).all()
+    ))
+    return render_template('admin/admin_horario_profesores.html', horarios_data=horarios_data, horas_sistema=horas_sistema)
 
 @app.route('/admin/horarios/grupos')
 @login_required
@@ -7676,10 +7231,18 @@ def exportar_horarios_grupo_excel():
         sheet_name = grupo_nombre[:31]
         ws = wb.create_sheet(title=sheet_name)
         
-        # Determinar turno
+        # Determinar turno y rango de horas dinámico
         es_vespertino = 'V' in grupo_nombre[1:3]
-        hora_inicio = 13 if es_vespertino else 7
-        hora_fin = 21 if es_vespertino else 14
+        horas_inicio_list = [a.horario.hora_inicio.hour for a in asig_grupo if a.horario and a.horario.hora_inicio]
+        horas_fin_list = [a.horario.hora_fin.hour for a in asig_grupo if a.horario and a.horario.hora_fin]
+        if horas_inicio_list and horas_fin_list:
+            hora_inicio = min(horas_inicio_list)
+            hora_fin = max(horas_fin_list)
+        else:
+            hora_inicio = 13 if es_vespertino else 7
+            hora_fin = 20 if es_vespertino else 14
+        if hora_fin <= hora_inicio:
+            hora_fin = hora_inicio + 1
         tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asig_grupo)
         
         dias_cols = dias_orden.copy()
@@ -7865,13 +7428,21 @@ def exportar_horarios_grupo_pdf():
         # Obtener horarios del grupo
         asignaciones = HorarioAcademico.query.filter_by(grupo=grupo, activo=True).all()
         
-        # Determinar turno
+        # Determinar turno y rango de horas dinámico
         es_vespertino = 'V' in grupo[1:3]
-        hora_inicio_turno = 13 if es_vespertino else 7
-        hora_fin_turno = 21 if es_vespertino else 14
+        horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+        horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+        if horas_inicio_list and horas_fin_list:
+            hora_inicio_turno = min(horas_inicio_list)
+            hora_fin_turno = max(horas_fin_list)
+        else:
+            hora_inicio_turno = 13 if es_vespertino else 7
+            hora_fin_turno = 20 if es_vespertino else 14
+        if hora_fin_turno <= hora_inicio_turno:
+            hora_fin_turno = hora_inicio_turno + 1
         tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
         turno_texto = 'Vespertino' if es_vespertino else 'Matutino'
-        
+
         dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
         if tiene_sabado:
             dias_semana.append('Sábado')
@@ -7969,6 +7540,56 @@ def exportar_horarios_grupo_pdf():
     return send_file(buffer, as_attachment=True, download_name='horarios_por_grupo.pdf', mimetype='application/pdf')
 
 # ==========================================
+# EXPORTAR HORARIOS POR GRUPO (CSV) - TODOS
+# ==========================================
+@app.route('/admin/horarios/grupos/exportar/csv')
+@login_required
+def exportar_horarios_grupo_csv():
+    if not current_user.is_admin():
+        abort(403)
+
+    asignaciones = HorarioAcademico.query.filter_by(activo=True).all()
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    # Agrupar por grupo
+    grupos_data = {}
+    for a in asignaciones:
+        if not a.profesor or not a.materia or not a.horario or not a.grupo:
+            continue
+        if a.grupo not in grupos_data:
+            grupos_data[a.grupo] = []
+        grupos_data[a.grupo].append(a)
+
+    if not grupos_data:
+        flash('No hay horarios para exportar.', 'warning')
+        return redirect(url_for('admin_horario_grupos'))
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Grupo', 'Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for grupo_nombre in sorted(grupos_data.keys()):
+        asig_grupo = grupos_data[grupo_nombre]
+        for a in sorted(asig_grupo, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+            dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+            writer.writerow([
+                grupo_nombre,
+                dia,
+                a.get_hora_inicio_str(),
+                a.get_hora_fin_str(),
+                a.materia.nombre,
+                a.profesor.get_nombre_completo()
+            ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name='horarios_por_grupo.csv', mimetype='text/csv')
+
+# ==========================================
 # EXPORTAR HORARIO INDIVIDUAL POR GRUPO (NUEVA RUTA)
 # ==========================================
 @app.route('/admin/horarios/grupos/exportar-individual/<nombre_grupo>')
@@ -7984,18 +7605,26 @@ def exportar_horario_individual_excel(nombre_grupo):
         flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
         return redirect(url_for('admin_horario_grupos'))
 
-    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     # 3. Crear estructura de datos por hora
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
+
     dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
@@ -8095,18 +7724,26 @@ def exportar_horario_individual_pdf(nombre_grupo):
         flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
         return redirect(url_for('admin_horario_grupos'))
 
-    # 2. Determinar turno y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
-    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
     # 3. Crear PDF
@@ -8164,33 +7801,75 @@ def exportar_horario_individual_pdf(nombre_grupo):
     return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
 
 
+# ==========================================
+# EXPORTAR CSV INDIVIDUAL POR GRUPO (ADMIN)
+# ==========================================
+@app.route('/admin/horarios/grupos/exportar-csv/<nombre_grupo>')
+@login_required
+def exportar_horario_individual_csv(nombre_grupo):
+    if not current_user.is_admin():
+        abort(403)
+
+    asignaciones = HorarioAcademico.query.filter_by(grupo=nombre_grupo, activo=True).all()
+
+    if not asignaciones:
+        flash(f'No se encontró el horario para el grupo "{nombre_grupo}".', 'danger')
+        return redirect(url_for('admin_horario_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for a in sorted(asignaciones, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+        dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+        writer.writerow([
+            dia,
+            a.get_hora_inicio_str(),
+            a.get_hora_fin_str(),
+            a.materia.nombre if a.materia else '',
+            a.profesor.get_nombre_completo() if a.profesor else ''
+        ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.csv', mimetype='text/csv')
+
+
 # ===================================================================
-# RUTAS PARA JEFES DE CARRERA 
+# RUTAS PARA JEFES DE CARRERA
 # ===================================================================
 
 @app.route('/jefe/horarios/profesores')
 @login_required
 def jefe_ver_horarios_profesores():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
-    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_id=id_carrera, incluir_ids=True)
-    return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data)
+    horarios_data = procesar_horarios(agrupar_por='profesor', carrera_ids=carrera_ids, incluir_ids=True)
+    horas_sistema = sorted(set(
+        h.hora_inicio.hour for h in Horario.query.filter_by(activo=True).all()
+    ))
+    return render_template('jefe/jefe_horario_profesores.html', horarios_data=horarios_data, horas_sistema=horas_sistema)
 
 
 @app.route('/jefe/horarios/grupos')
 @login_required
 def jefe_ver_horarios_grupos():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
-    horarios_data = procesar_horarios(agrupar_por='grupo', carrera_id=id_carrera)
+    horarios_data = procesar_horarios(agrupar_por='grupo', carrera_ids=carrera_ids, incluir_ids=True)
     return render_template('jefe/jefe_horario_grupos.html', horarios_data=horarios_data)
 
 
@@ -8199,27 +7878,38 @@ def jefe_ver_horarios_grupos():
 def exportar_jefe_horario_grupo_excel(nombre_grupo):
     if not current_user.is_jefe_carrera():
         abort(403)
-        
-    id_carrera = current_user.primera_carrera_id
-    
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     # 1. Obtener horarios del grupo específico filtrando por carrera
     asignaciones = HorarioAcademico.query.join(Materia).filter(
         HorarioAcademico.grupo == nombre_grupo,
         HorarioAcademico.activo == True,
-        Materia.carrera_id == id_carrera
+        Materia.carrera_id.in_(carrera_ids)
     ).all()
-    
+
     if not asignaciones:
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
 
-    # 2. Determinar turno (Matutino o Vespertino) y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     # 3. Crear estructura de datos por hora
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
@@ -8316,32 +8006,43 @@ def exportar_jefe_horario_grupo_excel(nombre_grupo):
 def exportar_jefe_horario_grupo_pdf(nombre_grupo):
     if not current_user.is_jefe_carrera():
         abort(403)
-        
-    id_carrera = current_user.primera_carrera_id
-    
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     # 1. Obtener horarios del grupo específico filtrando por carrera
     asignaciones = HorarioAcademico.query.join(Materia).filter(
         HorarioAcademico.grupo == nombre_grupo,
         HorarioAcademico.activo == True,
-        Materia.carrera_id == id_carrera
+        Materia.carrera_id.in_(carrera_ids)
     ).all()
     
     if not asignaciones:
         flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
         return redirect(url_for('jefe_ver_horarios_grupos'))
 
-    # 2. Determinar turno y si tiene sábado
+    # 2. Determinar turno y rango de horas dinámico
     es_vespertino = 'V' in nombre_grupo[1:3]
-    hora_inicio_turno = 13 if es_vespertino else 7
-    hora_fin_turno = 21 if es_vespertino else 14
-    
+    horas_inicio_list = [a.horario.hora_inicio.hour for a in asignaciones if a.horario and a.horario.hora_inicio]
+    horas_fin_list = [a.horario.hora_fin.hour for a in asignaciones if a.horario and a.horario.hora_fin]
+    if horas_inicio_list and horas_fin_list:
+        hora_inicio_turno = min(horas_inicio_list)
+        hora_fin_turno = max(horas_fin_list)
+    else:
+        hora_inicio_turno = 13 if es_vespertino else 7
+        hora_fin_turno = 20 if es_vespertino else 14
+    if hora_fin_turno <= hora_inicio_turno:
+        hora_fin_turno = hora_inicio_turno + 1
+
     tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asignaciones)
-    
+
     dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     if tiene_sabado:
         dias_semana.append('Sábado')
-    
-    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
+
+    dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
                 'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'}
 
     # 3. Crear PDF
@@ -8399,19 +8100,69 @@ def exportar_jefe_horario_grupo_pdf(nombre_grupo):
     return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.pdf', mimetype='application/pdf')
 
 
+# ==========================================
+# EXPORTAR CSV INDIVIDUAL POR GRUPO (JEFE)
+# ==========================================
+@app.route('/jefe/horarios/grupos/exportar-csv/<nombre_grupo>')
+@login_required
+def exportar_jefe_horario_grupo_csv(nombre_grupo):
+    if not current_user.is_jefe_carrera():
+        abort(403)
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.grupo == nombre_grupo,
+        HorarioAcademico.activo == True,
+        Materia.carrera_id.in_(carrera_ids)
+    ).all()
+
+    if not asignaciones:
+        flash(f'El grupo {nombre_grupo} no existe o no pertenece a tu carrera.', 'error')
+        return redirect(url_for('jefe_ver_horarios_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for a in sorted(asignaciones, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+        dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+        writer.writerow([
+            dia,
+            a.get_hora_inicio_str(),
+            a.get_hora_fin_str(),
+            a.materia.nombre if a.materia else '',
+            a.profesor.get_nombre_completo() if a.profesor else ''
+        ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horario_{nombre_grupo}.csv', mimetype='text/csv')
+
+
 # --- Rutas de Exportación para Jefes ---
 
 @app.route('/jefe/horarios/profesores/exportar/excel')
 @login_required
 def exportar_jefe_horarios_profesor_excel():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios ordenados por día de semana y hora
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera, 
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -8431,7 +8182,7 @@ def exportar_jefe_horarios_profesor_excel():
         
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Horarios Profesores {current_user.carrera.codigo}"
+        ws.title = f"Horarios Profesores {current_user.get_carrera_codigo()}"
         headers = ["Profesor", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
         ws.append(headers)
         for cell in ws[1]: cell.font = Font(bold=True); cell.alignment = Alignment(horizontal='center')
@@ -8442,22 +8193,61 @@ def exportar_jefe_horarios_profesor_excel():
             for cell in col_cells: cell.alignment = Alignment(wrap_text=True, vertical='top')
         
         buffer = BytesIO(); wb.save(buffer); buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.carrera.codigo}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.get_carrera_codigo()}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         flash(f"Error al generar el archivo Excel: {e}", "danger")
         return redirect(url_for('jefe/jefe_ver_horarios_profesores'))
+
+def _dibujar_encabezado_pdf_jefe(canvas, doc, titulo="Horarios"):
+    """Dibuja el encabezado institucional en cada página del PDF"""
+    canvas.saveState()
+    page_w, page_h = doc.pagesize
+    COLOR_TEAL = colors.Color(0, 0.518, 0.486) # #00847C
+    COLOR_GOLD = colors.Color(1, 0.839, 0)    # #FFD600
+    
+    # Barra superior teal
+    canvas.setFillColor(COLOR_TEAL)
+    canvas.rect(0, page_h - 60, page_w, 60, fill=1, stroke=0)
+    
+    # Línea dorada inferior
+    canvas.setFillColor(COLOR_GOLD)
+    canvas.rect(0, page_h - 63, page_w, 3, fill=1, stroke=0)
+    
+    # Logo
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        try:
+            canvas.drawImage(logo_path, 30, page_h - 55, width=60, height=45, preserveAspectRatio=True, mask='auto')
+        except:
+            pass
+            
+    # Títulos
+    canvas.setFillColor(colors.white)
+    canvas.setFont('Helvetica-Bold', 14)
+    canvas.drawCentredString(page_w / 2, page_h - 30, titulo)
+    canvas.setFont('Helvetica', 8)
+    canvas.drawCentredString(page_w / 2, page_h - 42, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
+    
+    # Pie de página
+    canvas.setFillColor(colors.grey)
+    canvas.setFont('Helvetica-Oblique', 7)
+    canvas.drawCentredString(page_w / 2, 25, f'Página {canvas.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}')
+    
+    canvas.restoreState()
 
 @app.route('/jefe/horarios/profesores/exportar/pdf')
 @login_required
 def exportar_jefe_horarios_profesor_pdf():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios ordenados por día de semana y hora
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -8483,11 +8273,24 @@ def exportar_jefe_horarios_profesor_pdf():
             data.append(row_data)
         
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=75, bottomMargin=40)
         table = Table(data, hAlign='CENTER', colWidths=[1.5*inch]*6)
-        style = TableStyle([('BACKGROUND', (0,0), (-1,0), colors.grey),('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),('GRID', (0,0), (-1,-1), 1, colors.black)])
-        table.setStyle(style); doc.build([table]); buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.carrera.codigo}.pdf', mimetype='application/pdf')
+        style = TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.Color(0, 0.518, 0.486)),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ])
+        table.setStyle(style)
+        
+        # Generar con encabezado
+        def my_header(canvas, doc_obj):
+            _dibujar_encabezado_pdf_jefe(canvas, doc_obj, f"Horarios por Profesor - {current_user.get_carrera_codigo()}")
+
+        doc.build([table], onFirstPage=my_header, onLaterPages=my_header)
+        buffer.seek(0)
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_profesores_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
         return redirect(url_for('jefe/jefe_ver_horarios_profesores'))
@@ -8496,13 +8299,15 @@ def exportar_jefe_horarios_profesor_pdf():
 @login_required
 def exportar_jefe_horarios_grupo_excel():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener horarios de la carrera
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -8536,9 +8341,9 @@ def exportar_jefe_horarios_grupo_excel():
         for i, grupo in enumerate(grupos_unicos):
             # Verificar que el grupo pertenece a la carrera
             grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
-            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+            if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
                 continue
-            
+
             # Crear hoja para cada grupo
             if i == 0:
                 ws = wb.active
@@ -8548,17 +8353,25 @@ def exportar_jefe_horarios_grupo_excel():
             
             # Obtener horarios del grupo
             horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
-            
-            # Determinar turno y sábado
+
+            # Determinar turno y rango de horas dinámico
             es_vespertino = 'V' in grupo[1:3]
-            hora_inicio_turno = 13 if es_vespertino else 7
-            hora_fin_turno = 21 if es_vespertino else 14
+            horas_inicio_list = [a.horario.hora_inicio.hour for a in horarios_grupo if a.horario and a.horario.hora_inicio]
+            horas_fin_list = [a.horario.hora_fin.hour for a in horarios_grupo if a.horario and a.horario.hora_fin]
+            if horas_inicio_list and horas_fin_list:
+                hora_inicio_turno = min(horas_inicio_list)
+                hora_fin_turno = max(horas_fin_list)
+            else:
+                hora_inicio_turno = 13 if es_vespertino else 7
+                hora_fin_turno = 20 if es_vespertino else 14
+            if hora_fin_turno <= hora_inicio_turno:
+                hora_fin_turno = hora_inicio_turno + 1
             tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
-            
+
             dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
             if tiene_sabado:
                 dias_semana.append('Sábado')
-            
+
             # Encabezados
             headers = ['Hora'] + dias_semana
             for col, header in enumerate(headers, 1):
@@ -8607,7 +8420,7 @@ def exportar_jefe_horarios_grupo_excel():
         buffer = BytesIO()
         wb.save(buffer)
         buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except Exception as e:
         flash(f"Error al generar el archivo Excel: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_grupos'))
@@ -8616,13 +8429,15 @@ def exportar_jefe_horarios_grupo_excel():
 @login_required
 def exportar_jefe_horarios_grupo_pdf():
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera: return redirect(url_for('dashboard'))
-    
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
     try:
         # Obtener grupos únicos de la carrera con horarios
         asignaciones = HorarioAcademico.query.join(Materia).filter(
-            Materia.carrera_id==id_carrera,
+            Materia.carrera_id.in_(carrera_ids),
             HorarioAcademico.activo==True
         ).all()
         
@@ -8648,22 +8463,30 @@ def exportar_jefe_horarios_grupo_pdf():
         for grupo in grupos_unicos:
             # Verificar que el grupo pertenece a la carrera
             grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
-            if not grupo_obj or grupo_obj.carrera_id != id_carrera:
+            if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
                 continue
-            
+
             # Obtener horarios del grupo
             horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
-            
-            # Determinar turno y sábado
+
+            # Determinar turno y rango de horas dinámico
             es_vespertino = 'V' in grupo[1:3]
-            hora_inicio_turno = 13 if es_vespertino else 7
-            hora_fin_turno = 21 if es_vespertino else 14
+            horas_inicio_list = [a.horario.hora_inicio.hour for a in horarios_grupo if a.horario and a.horario.hora_inicio]
+            horas_fin_list = [a.horario.hora_fin.hour for a in horarios_grupo if a.horario and a.horario.hora_fin]
+            if horas_inicio_list and horas_fin_list:
+                hora_inicio_turno = min(horas_inicio_list)
+                hora_fin_turno = max(horas_fin_list)
+            else:
+                hora_inicio_turno = 13 if es_vespertino else 7
+                hora_fin_turno = 20 if es_vespertino else 14
+            if hora_fin_turno <= hora_inicio_turno:
+                hora_fin_turno = hora_inicio_turno + 1
             tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in horarios_grupo)
-            
+
             dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
             if tiene_sabado:
                 dias_semana.append('Sábado')
-            
+
             # Título del grupo
             elements.append(Paragraph(f"Horario: {grupo}", title_style))
             elements.append(Spacer(1, 10))
@@ -8707,13 +8530,72 @@ def exportar_jefe_horarios_grupo_pdf():
             elements.append(table)
             elements.append(Spacer(1, 30))
         
-        doc.build(elements)
+        # Generar con encabezado
+        def my_header(canvas, doc_obj):
+            _dibujar_encabezado_pdf_jefe(canvas, doc_obj, f"Horarios por Grupo - {current_user.get_carrera_codigo()}")
+
+        doc.build(elements, onFirstPage=my_header, onLaterPages=my_header)
         buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.carrera.codigo}.pdf', mimetype='application/pdf')
+        return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.pdf', mimetype='application/pdf')
     except Exception as e:
         flash(f"Error al generar el archivo PDF: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_grupos'))
-    
+
+# ==========================================
+# EXPORTAR HORARIOS POR GRUPO (CSV) - JEFE
+# ==========================================
+@app.route('/jefe/horarios/grupos/exportar/csv')
+@login_required
+def exportar_jefe_horarios_grupo_csv():
+    if not current_user.is_jefe_carrera():
+        abort(403)
+
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
+        flash("No tienes una carrera asignada.", "warning")
+        return redirect(url_for('dashboard'))
+
+    asignaciones = HorarioAcademico.query.join(Materia).filter(
+        HorarioAcademico.activo == True,
+        Materia.carrera_id.in_(carrera_ids)
+    ).all()
+
+    if not asignaciones:
+        flash('No hay horarios para exportar.', 'warning')
+        return redirect(url_for('jefe_ver_horarios_grupos'))
+
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+
+    grupos_unicos = sorted(set(a.grupo for a in asignaciones if a.grupo))
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Grupo', 'Día', 'Hora Inicio', 'Hora Fin', 'Materia', 'Profesor'])
+
+    for grupo in grupos_unicos:
+        grupo_obj = Grupo.query.filter_by(codigo=grupo).first()
+        if not grupo_obj or grupo_obj.carrera_id not in carrera_ids:
+            continue
+
+        horarios_grupo = [a for a in asignaciones if a.grupo == grupo]
+        for a in sorted(horarios_grupo, key=lambda x: (x.dia_semana, x.horario.hora_inicio if x.horario else '')):
+            dia = dias_map.get(a.dia_semana.lower(), a.dia_semana)
+            writer.writerow([
+                grupo,
+                dia,
+                a.get_hora_inicio_str(),
+                a.get_hora_fin_str(),
+                a.materia.nombre if a.materia else '',
+                a.profesor.get_nombre_completo() if a.profesor else ''
+            ])
+
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    buffer = BytesIO(csv_bytes)
+    return send_file(buffer, as_attachment=True, download_name=f'horarios_grupos_{current_user.get_carrera_codigo()}.csv', mimetype='text/csv')
+
 # =================================================================
 # RUTAS DE EXPORTACIÓN EN FORMATO FDA (ADMIN)
 # =================================================================
@@ -8751,13 +8633,13 @@ def exportar_admin_fda_profesor(profesor_nombre):
 @login_required
 def exportar_jefe_fda_profesor(profesor_nombre):
     if not current_user.is_jefe_carrera(): abort(403)
-    id_carrera = current_user.primera_carrera_id
-    if not id_carrera:
+    carrera_ids = current_user.get_carreras_jefe_ids()
+    if not carrera_ids:
         flash("No tienes una carrera asignada.", "warning")
         return redirect(url_for('dashboard'))
 
     try:
-        horarios_data = procesar_horarios_formato_fda(carrera_id=id_carrera)
+        horarios_data = procesar_horarios_formato_fda(carrera_ids=carrera_ids)
         datos_profesor = horarios_data.get(profesor_nombre)
 
         if not datos_profesor:
@@ -8775,95 +8657,6 @@ def exportar_jefe_fda_profesor(profesor_nombre):
     except Exception as e:
         flash(f"Ocurrió un error al generar el reporte: {e}", "danger")
         return redirect(url_for('jefe_ver_horarios_profesores'))
-    
-
-def _generar_excel_horario_profesor(profesor_nombre):
-    """
-    Genera el archivo Excel del horario del profesor con formato de plantilla FDA (Carga Horaria).
-    Utiliza la función generar_excel_formato_fda() para mantener el formato original de la plantilla UPTEX.
-    """
-    try:
-        # =====================================================================
-        # 1. OBTENER DATOS
-        # =====================================================================
-        profesor = User.query.filter(
-            (User.nombre + ' ' + User.apellido) == profesor_nombre
-        ).first()
-
-        if not profesor:
-            return "Profesor no encontrado", 404
-
-        asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
-
-        # Periodo académico
-        periodo_academico = asignaciones[0].periodo_academico if asignaciones and asignaciones[0].periodo_academico else None
-
-        dias_map = {'lunes': 'lunes', 'martes': 'martes', 'miercoles': 'miercoles',
-                    'miércoles': 'miercoles', 'jueves': 'jueves', 'viernes': 'viernes',
-                    'sabado': 'sabado', 'sábado': 'sabado'}
-
-        es_tc = getattr(profesor, 'rol', '') == 'profesor_completo'
-
-        # =====================================================================
-        # 2. CONSTRUIR EL DICCIONARIO datos_profesor PARA generar_excel_formato_fda
-        # =====================================================================
-        datos_profesor = {
-            'info': {
-                'id': profesor.id,
-                'nombre_completo': profesor.get_nombre_completo(),
-                'es_tc': es_tc
-            },
-            'clases': []
-        }
-
-        for a in asignaciones:
-            if not all([a.materia, a.horario]):
-                continue
-
-            dia_raw = dias_map.get(a.dia_semana.lower(), a.dia_semana.lower())
-            grupo_codigo = a.grupo if a.grupo else "N/A"
-
-            duracion_horas = (a.horario.hora_fin.hour - a.horario.hora_inicio.hour) + \
-                             (a.horario.hora_fin.minute - a.horario.hora_inicio.minute) / 60.0
-
-            detalle_clase = {
-                'clave': a.materia.codigo if hasattr(a.materia, 'codigo') else '',
-                'asignatura': a.materia.nombre,
-                'grupo': grupo_codigo,
-                'dia_raw': dia_raw,
-                'hora_inicio': a.get_hora_inicio_str(),
-                'hora_fin': a.get_hora_fin_str(),
-                'horas_totales': duracion_horas,
-                'carrera': a.materia.carrera.codigo if a.materia.carrera else ''
-            }
-            datos_profesor['clases'].append(detalle_clase)
-
-        # Ordenar clases por día y hora
-        orden_dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-        datos_profesor['clases'].sort(
-            key=lambda c: (orden_dias.index(c['dia_raw']) if c['dia_raw'] in orden_dias else 99, c['hora_inicio'])
-        )
-
-        # =====================================================================
-        # 3. GENERAR EXCEL USANDO LA PLANTILLA FDA ORIGINAL
-        # =====================================================================
-        periodo, año = obtener_periodo_actual()
-
-        buffer = generar_excel_formato_fda(datos_profesor, periodo=periodo, año=año)
-
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.xlsx"
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=filename,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return f"Ocurrió un error al generar el archivo Excel: {e}", 500
-
 
 # 2. RUTA ORIGINAL (PARA ADMIN), AHORA SIMPLEMENTE LLAMA A LA FUNCIÓN AUXILIAR
 @app.route('/exportar/horario-excel/<profesor_nombre>')
@@ -8880,338 +8673,6 @@ def exportar_jefe_excel_profesor(profesor_nombre):
     # por ejemplo, verificar que el jefe de carrera solo pueda
     # exportar horarios de profesores de su carrera.
     return _generar_excel_horario_profesor(profesor_nombre)
-
-
-# =====================================================================
-# FUNCIÓN AUXILIAR PARA GENERAR PDF DE HORARIO DE PROFESOR
-# =====================================================================
-def _generar_pdf_horario_profesor(profesor_nombre):
-    """
-    Genera el archivo PDF del horario del profesor con formato de plantilla FDA (Carga Horaria).
-    Incluye firmas, horas TC, nombres configurados y colores UPTEX.
-    """
-    try:
-        from models import ConfiguracionSistema
-        # =====================================================================
-        # 1. OBTENER DATOS
-        # =====================================================================
-        profesor = User.query.filter(
-            (User.nombre + ' ' + User.apellido) == profesor_nombre
-        ).first()
-
-        if not profesor:
-            return "Profesor no encontrado", 404
-
-        asignaciones = HorarioAcademico.query.filter_by(profesor_id=profesor.id, activo=True).all()
-
-        # Periodo y año
-        periodo, anio = obtener_periodo_actual()
-
-        # Fecha de inicio desde configuración
-        fecha_inicio = ConfiguracionSistema.get_config('fecha_inicio_periodo', '') or ''
-
-        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-        dias_map = {'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
-                    'miércoles': 'Miércoles', 'jueves': 'Jueves', 'viernes': 'Viernes',
-                    'sabado': 'Sábado', 'sábado': 'Sábado'}
-
-        es_tc = profesor.rol == 'profesor_completo'
-        es_asignatura = profesor.rol == 'profesor_asignatura'
-
-        # Calcular horas reales de impartición
-        horas_imparticion = 0
-        for a in asignaciones:
-            if a.horario:
-                duracion = (a.horario.hora_fin.hour - a.horario.hora_inicio.hour) + \
-                           (a.horario.hora_fin.minute - a.horario.hora_inicio.minute) / 60.0
-                horas_imparticion += duracion
-        horas_imparticion = int(horas_imparticion) if horas_imparticion == int(horas_imparticion) else horas_imparticion
-
-        # Horas TC desde configuración
-        horas_asesoria = 0
-        horas_tutoria = 0
-        horas_gestion = 0
-        horas_dual = 0
-        horas_investigacion = 0
-        if es_tc:
-            horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_asesoria', 0) or 0)
-            horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_tutoria', 0) or 0)
-            horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_gestion', 0) or 0)
-            horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_dual', 0) or 0)
-            horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_investigacion', 0) or 0)
-        total_horas = horas_imparticion + horas_asesoria + horas_tutoria + horas_gestion + horas_dual + horas_investigacion
-
-        # Nombres desde configuración
-        nombre_director = ConfiguracionSistema.get_config('director_academico_nombre', 'Director Académico') or 'Director Académico'
-        nombre_responsable = ConfiguracionSistema.get_config('responsable_pa_nombre', 'Responsable del PA') or 'Responsable del PA'
-
-        # Firmas
-        def cargar_firma_pdf(ruta):
-            """Carga una imagen de firma para PDF, convirtiendo .webp si necesario"""
-            if not ruta or not os.path.exists(ruta):
-                return None
-            try:
-                ext = os.path.splitext(ruta)[1].lower()
-                if ext == '.webp':
-                    pil_img = PILImage.open(ruta)
-                    if pil_img.mode in ('RGBA', 'LA', 'P'):
-                        pil_img = pil_img.convert('RGBA')
-                    else:
-                        pil_img = pil_img.convert('RGB')
-                    img_buffer = BytesIO()
-                    pil_img.save(img_buffer, format='PNG')
-                    img_buffer.seek(0)
-                    return RlImage(img_buffer, width=1.3*inch, height=0.5*inch)
-                else:
-                    return RlImage(ruta, width=1.3*inch, height=0.5*inch)
-            except Exception as e:
-                logger.error(f"Error cargando firma PDF: {e}")
-                return None
-
-        # Firma del profesor
-        firma_prof_elem = None
-        if profesor.firma:
-            firma_prof_elem = cargar_firma_pdf(os.path.join('static', 'uploads', 'firmas', profesor.firma))
-
-        # Firma del director
-        firma_dir_elem = None
-        config_firma_dir = ConfiguracionSistema.query.filter_by(clave='director_academico_firma').first()
-        if config_firma_dir and config_firma_dir.valor:
-            firma_dir_elem = cargar_firma_pdf(os.path.join('static', 'uploads', 'firmas', config_firma_dir.valor))
-
-        # Firma del responsable
-        firma_resp_elem = None
-        config_firma_resp = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
-        if config_firma_resp and config_firma_resp.valor:
-            firma_resp_elem = cargar_firma_pdf(os.path.join('static', 'uploads', 'firmas', config_firma_resp.valor))
-
-        # =====================================================================
-        # 2. CREAR PDF
-        # =====================================================================
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=20, bottomMargin=20, leftMargin=30, rightMargin=30)
-        elements = []
-        styles = getSampleStyleSheet()
-
-        verde_uptex_color = colors.Color(0, 0.69, 0.31)  # #00B050
-        gris_claro = colors.Color(0.85, 0.85, 0.85)
-
-        # Estilos personalizados
-        title_style = ParagraphStyle('FDATitle', parent=styles['Heading1'], fontSize=14, alignment=1, spaceAfter=0, spaceBefore=0, fontName='Helvetica-Bold', textColor=colors.white)
-        label_style = ParagraphStyle('FDALabel', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=1)
-        label_white = ParagraphStyle('FDALabelW', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=1, textColor=colors.white)
-        normal_style = ParagraphStyle('FDANormal', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=1)
-        cell_style = ParagraphStyle('FDACell', parent=styles['Normal'], fontSize=6, leading=7, alignment=1, fontName='Helvetica')
-        small_style = ParagraphStyle('FDASmall', parent=styles['Normal'], fontSize=6, fontName='Helvetica', alignment=1)
-        left_style = ParagraphStyle('FDALeft', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=0)
-        note_style = ParagraphStyle('FDANote', parent=styles['Normal'], fontSize=6, fontName='Helvetica-Oblique', alignment=0, spaceAfter=0)
-        bold_left = ParagraphStyle('BoldLeft', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=0)
-
-        # Cargar logo
-        logo_path = os.path.join('static', 'images', 'logo.png')
-        logo_elem = None
-        if os.path.exists(logo_path):
-            try:
-                logo_elem = RlImage(logo_path, width=0.65*inch, height=0.65*inch)
-            except Exception:
-                logo_elem = None
-
-        # =====================================================================
-        # ENCABEZADO - Logo + Carga Horaria + Área/Vigencia/Código (verde)
-        # =====================================================================
-        header_data = [
-            [logo_elem or '', Paragraph('Carga Horaria', title_style), Paragraph('<b>Código:</b> FDA-02.5', label_white)],
-            ['', Paragraph('<b>Área:</b> Dirección Académica', label_white), Paragraph(f'<b>Vigencia:</b> {periodo} {anio}', label_white)],
-        ]
-        header_table = Table(header_data, colWidths=[0.8*inch, 7.5*inch, 2.2*inch])
-        header_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), verde_uptex_color),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
-            ('ALIGN', (2, 0), (2, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('SPAN', (0, 0), (0, 1)),
-            ('GRID', (0, 0), (-1, -1), 0.5, verde_uptex_color),
-            ('LINEBELOW', (1, 0), (2, 0), 0.5, colors.white),
-            ('ROWHEIGHTS', (0, 0), (-1, 0), 24),
-            ('ROWHEIGHTS', (0, 1), (-1, 1), 16),
-        ]))
-        elements.append(header_table)
-
-        # Nombre del profesor
-        nombre_row = [
-            Paragraph(f'<b>{profesor_nombre.upper()}</b>', ParagraphStyle('Name', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=0)),
-        ]
-        nombre_table = Table([nombre_row], colWidths=[10.5*inch])
-        nombre_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWHEIGHTS', (0, 0), (-1, -1), 16),
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.grey),
-        ]))
-        elements.append(nombre_table)
-
-        # Tipo: Prof. Asignatura / Prof. Tiempo Completo (verde)
-        tipo_row = [
-            Paragraph(f"Prof. Asignatura: <b>{'X' if es_asignatura else '  '}</b>", label_white),
-            Paragraph(f"Prof. Tiempo Completo: <b>{'X' if es_tc else '  '}</b>", label_white),
-        ]
-        tipo_table = Table([tipo_row], colWidths=[5.25*inch, 5.25*inch])
-        tipo_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), verde_uptex_color),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.white),
-            ('ROWHEIGHTS', (0, 0), (-1, -1), 14),
-        ]))
-        elements.append(tipo_table)
-
-        # Periodo | Fecha de Inicio | Plan de Estudios
-        periodo_row = [
-            Paragraph(f'<b>Periodo:</b> {periodo}', bold_left),
-            Paragraph(f'<b>Fecha de Inicio:</b> {fecha_inicio}', label_style),
-            Paragraph(f'<b>Plan de Estudios:</b> {anio}', label_style),
-        ]
-        periodo_table = Table([periodo_row], colWidths=[3.5*inch, 3.5*inch, 3.5*inch])
-        periodo_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWHEIGHTS', (0, 0), (-1, -1), 14),
-        ]))
-        elements.append(periodo_table)
-
-        elements.append(Paragraph('<b>Instrucciones:</b> Introducir nombre de la Asignatura, Salón y Grupo dentro de la celda correspondiente al día y la hora que será impartida.', ParagraphStyle('Inst', parent=styles['Normal'], fontSize=6, fontName='Helvetica', spaceAfter=2, spaceBefore=2)))
-
-        # =====================================================================
-        # CUADRÍCULA DE HORARIOS (encabezados verdes)
-        # =====================================================================
-        grid_data = [[Paragraph('<b>Horario</b>', label_white)] + [Paragraph(f'<b>{d}</b>', label_white) for d in dias_semana]]
-
-        for hora in range(7, 22):
-            hora_str = f"{hora:02d}:00"
-            row = [Paragraph(f'<b>{hora_str}</b>', label_style)]
-
-            for dia in dias_semana:
-                contenido = ""
-                for a in asignaciones:
-                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
-                    if dia_correcto == dia and a.horario and a.horario.hora_inicio.hour == hora:
-                        grupo_codigo = a.grupo if a.grupo else "N/A"
-                        contenido = f"{a.materia.nombre} {grupo_codigo}"
-                        break
-                row.append(Paragraph(contenido, cell_style))
-
-            grid_data.append(row)
-
-        col_widths = [0.8*inch] + [1.62*inch] * 6
-        grid_table = Table(grid_data, colWidths=col_widths)
-
-        grid_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), verde_uptex_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.95, 0.95, 0.95)),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.75, 0.75, 0.75)),
-            ('ROWHEIGHTS', (0, 0), (-1, -1), 18),
-        ]))
-        elements.append(grid_table)
-
-        # Salto de página para que tabla de horas y firmas queden en página 2
-        elements.append(PageBreak())
-
-        # =====================================================================
-        # TABLA DE TIPOS DE HORAS (encabezados verdes)
-        # =====================================================================
-        tipos_horas_pdf = [
-            ('Impartición de Curso', horas_imparticion),
-            ('Asesoría', horas_asesoria if es_tc else ''),
-            ('Tutoría', horas_tutoria if es_tc else ''),
-            ('Apoyo a la Gestión', horas_gestion if es_tc else ''),
-            ('Dual', horas_dual if es_tc else ''),
-            ('Investigación', horas_investigacion if es_tc else ''),
-        ]
-
-        horas_data = [
-            [Paragraph('<b>Tipo de Horas</b>', label_white), Paragraph('<b>Horas</b>', label_white)],
-        ]
-        for tipo, val in tipos_horas_pdf:
-            display_val = '' if val == 0 or val == '' else str(val)
-            horas_data.append([Paragraph(tipo, left_style), Paragraph(display_val, normal_style)])
-
-        horas_data.append([
-            Paragraph('<b>Total de Horas</b>', ParagraphStyle('R', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=2)),
-            Paragraph(f'<b>{total_horas}</b>', label_style)
-        ])
-
-        horas_table = Table(horas_data, colWidths=[2.5*inch, 1.0*inch])
-        horas_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), verde_uptex_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.75, 0.75, 0.75)),
-            ('ROWHEIGHTS', (0, 0), (-1, -1), 12),
-        ]))
-        elements.append(horas_table)
-        elements.append(Paragraph('*Solo llenar en caso de ser Profesor de Tiempo Completo', note_style))
-        elements.append(Spacer(1, 4))
-
-        # =====================================================================
-        # SECCIÓN DE FIRMAS
-        # =====================================================================
-        cargo_profesor = "PROFESOR DE TIEMPO COMPLETO" if es_tc else "PROFESOR DE ASIGNATURA"
-
-        firma_data = [
-            [Paragraph('<b>Elaboró:</b>', label_style),
-             Paragraph('<b>Autorizó:</b>', label_style),
-             Paragraph('<b>Recibió:</b>', label_style)],
-            [Paragraph(f'<b>{profesor_nombre.upper()}</b>', label_style),
-             Paragraph(f'<b>{nombre_director}</b>', label_style),
-             Paragraph(f'<b>{nombre_responsable}</b>', label_style)],
-            [Paragraph(cargo_profesor, small_style),
-             Paragraph('Director Académico', small_style),
-             Paragraph('Responsable del PA', small_style)],
-            [firma_prof_elem or '',
-             firma_dir_elem or '',
-             firma_resp_elem or ''],
-            [Paragraph('Firma', label_style),
-             Paragraph('Firma', label_style),
-             Paragraph('Firma', label_style)],
-        ]
-
-        firma_table = Table(firma_data, colWidths=[3.5*inch, 3.5*inch, 3.5*inch])
-        firma_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), gris_claro),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOX', (0, 0), (0, -1), 0.5, colors.grey),
-            ('BOX', (1, 0), (1, -1), 0.5, colors.grey),
-            ('BOX', (2, 0), (2, -1), 0.5, colors.grey),
-            ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.grey),
-            ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.grey),
-            ('ROWHEIGHTS', (0, 3), (-1, 3), 40),
-        ]))
-        elements.append(firma_table)
-
-        # =====================================================================
-        # 3. GUARDAR Y ENVIAR
-        # =====================================================================
-        doc.build(elements)
-        buffer.seek(0)
-
-        filename = f"Horario_{profesor.nombre.replace(' ','_')}_{profesor.apellido.replace(' ','_')}.pdf"
-        return send_file(buffer, as_attachment=True, download_name=filename, mimetype='application/pdf')
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return f"Ocurrió un error al generar el archivo PDF: {e}", 500
-
 
 # 4. RUTA PDF PARA ADMIN (HORARIO DE PROFESOR)
 @app.route('/exportar/horario-pdf/<profesor_nombre>')
@@ -9393,8 +8854,12 @@ def generar_horarios_masivo_jefe():
                 else:
                     flash(f"❌ {resultado['mensaje']}", 'error')
     
+    # Obtener carreras del jefe para el filtro en el template
+    carreras_jefe = Carrera.query.filter(Carrera.id.in_(carrera_ids), Carrera.activa == True).all()
+
     return render_template('jefe/jefe_generar_horarios_masivo.html',
                          grupos_organizados=grupos_organizados,
+                         carreras_jefe=carreras_jefe,
                          resultado=resultado)
 
 
@@ -9402,8 +8867,6 @@ def generar_horarios_masivo_jefe():
 @login_required
 def api_iniciar_generacion_masiva_jefe():
     """API para iniciar generación masiva en segundo plano (jefes)"""
-    global generacion_progreso, progreso_lock
-    
     if not current_user.is_jefe_carrera():
         return jsonify({'error': 'No tienes permisos'}), 403
     
@@ -9445,7 +8908,8 @@ def api_iniciar_generacion_masiva_jefe():
         version_nombre = f"Generación Masiva Jefe {timestamp}"
     
     with progreso_lock:
-        generacion_progreso = {
+        generacion_progreso.clear()
+        generacion_progreso.update({
             'activo': True,
             'total_grupos': len(grupos_ids),
             'grupos_procesados': 0,
@@ -9455,10 +8919,9 @@ def api_iniciar_generacion_masiva_jefe():
             'mensaje': 'Iniciando generación...',
             'completado': False,
             'exito': False
-        }
-    
+        })
+
     def ejecutar_generacion():
-        global generacion_progreso, progreso_lock
         with app.app_context():
             resultado = generar_horarios_masivos_con_progreso(
                 grupos_ids=grupos_ids,
@@ -9468,82 +8931,78 @@ def api_iniciar_generacion_masiva_jefe():
                 dias_semana=dias_semana
             )
             
-            # Crear backup/versión después de generar
+            # Crear backup/versión después de generar (un backup por carrera)
             if resultado.get('exito') or resultado.get('horarios_generados', 0) > 0:
                 try:
                     import json
-                    from models import VersionHorario, Grupo
-                    
-                    # Obtener los códigos de los grupos seleccionados
-                    grupos_codigos = []
+                    from models import VersionHorario, Grupo as GrupoModel, User, Carrera
+                    from collections import defaultdict
+
+                    # Agrupar grupos seleccionados por carrera
+                    grupos_por_carrera = defaultdict(list)
                     for gid in grupos_ids:
-                        grupo = Grupo.query.get(gid)
+                        grupo = GrupoModel.query.get(gid)
                         if grupo:
-                            grupos_codigos.append(grupo.codigo.upper())
-                    
-                    # MEJORADO: Obtener TODOS los horarios activos de los grupos seleccionados
-                    # Esto asegura que el backup tenga el estado completo de esos grupos
-                    logger.info(f"Capturando backup de {len(grupos_codigos)} grupos: {grupos_codigos}")
-                    horarios_generados = HorarioAcademico.query.filter(
-                        HorarioAcademico.grupo.in_(grupos_codigos),
-                        HorarioAcademico.activo == True
-                    ).all()
-                    
-                    logger.info(f"Encontrados {len(horarios_generados)} horarios para backup")
-                    
-                    # Serializar datos
-                    datos = []
-                    grupos_set = set()
-                    for h in horarios_generados:
-                        datos.append({
-                            'id': h.id,
-                            'profesor_id': h.profesor_id,
-                            'materia_id': h.materia_id,
-                            'horario_id': h.horario_id,
-                            'dia_semana': h.dia_semana,
-                            'grupo': h.grupo,
-                            'periodo_academico': h.periodo_academico,
-                            'version_nombre': h.version_nombre
-                        })
-                        grupos_set.add(h.grupo)
-                    
-                    # Determinar carrera - usar la del primer grupo generado
-                    carrera_id = None
-                    from models import Grupo
-                    primer_grupo = Grupo.query.get(grupos_ids[0]) if grupos_ids else None
-                    if primer_grupo:
-                        carrera_id = primer_grupo.carrera_id
-                    
-                    # Crear registro de versión
-                    version = VersionHorario(
-                        nombre_version=version_nombre,
-                        descripcion=f"Generación masiva de {len(grupos_ids)} grupos",
-                        datos_horarios=json.dumps(datos, ensure_ascii=False),
-                        total_horarios=len(datos),
-                        grupos_afectados=','.join(grupos_set),
-                        carrera_id=carrera_id,
-                        creado_por=user_id
-                    )
-                    db.session.add(version)
+                            grupos_por_carrera[grupo.carrera_id].append(grupo.codigo.upper())
+
+                    logger.info(f"Creando backups para {len(grupos_por_carrera)} carrera(s)")
+
+                    for carrera_id, grupos_codigos in grupos_por_carrera.items():
+                        horarios_generados = HorarioAcademico.query.filter(
+                            HorarioAcademico.grupo.in_(grupos_codigos),
+                            HorarioAcademico.activo == True
+                        ).all()
+
+                        if not horarios_generados:
+                            continue
+
+                        datos = []
+                        grupos_set = set()
+                        for h in horarios_generados:
+                            datos.append({
+                                'id': h.id,
+                                'profesor_id': h.profesor_id,
+                                'materia_id': h.materia_id,
+                                'horario_id': h.horario_id,
+                                'dia_semana': h.dia_semana,
+                                'grupo': h.grupo,
+                                'periodo_academico': h.periodo_academico,
+                                'version_nombre': h.version_nombre
+                            })
+                            grupos_set.add(h.grupo)
+
+                        carrera = Carrera.query.get(carrera_id)
+                        carrera_nombre = carrera.nombre if carrera else 'Sin carrera'
+
+                        version = VersionHorario(
+                            nombre_version=version_nombre,
+                            descripcion=f"Generación masiva de {len(grupos_codigos)} grupos ({carrera_nombre})",
+                            datos_horarios=json.dumps(datos, ensure_ascii=False),
+                            total_horarios=len(datos),
+                            grupos_afectados=','.join(sorted(grupos_set)),
+                            carrera_id=carrera_id,
+                            creado_por=user_id
+                        )
+                        db.session.add(version)
+                        logger.info(f"Backup creado: {version_nombre} ({carrera_nombre}) con {len(datos)} horarios")
+
                     db.session.commit()
-                    
-                    # Limitar versiones por usuario - 20 para admin, 10 para usuarios normales
-                    from models import User
+
+                    # Limitar versiones por usuario
                     usuario = User.query.get(user_id)
                     limite_versiones = 20 if usuario and usuario.is_admin() else 10
-                    
+
                     versiones_usuario = VersionHorario.query.filter(
                         VersionHorario.creado_por == user_id,
                         VersionHorario.activo == True
                     ).order_by(VersionHorario.fecha_creacion.desc()).all()
-                    
+
                     if len(versiones_usuario) > limite_versiones:
-                        # Marcar las versiones más antiguas como inactivas
                         for v_old in versiones_usuario[limite_versiones:]:
                             v_old.activo = False
                         db.session.commit()
                         logger.info(f"Limpieza: {len(versiones_usuario) - limite_versiones} versiones antiguas eliminadas")
-                        
+
                 except Exception as e:
                     logger.error(f"Error creando version: {e}")
             

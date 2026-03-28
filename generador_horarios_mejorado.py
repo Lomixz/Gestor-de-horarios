@@ -239,6 +239,9 @@ class GeneradorHorariosMejorado:
         self._cache_horarios_existentes = {}  # profesor_id -> [(horario_id, dia_semana)]
         self._cache_capacidad_profesor = {}  # (profesor_id, turno) -> capacidad
 
+        self._materias_sin_profesor = []  # Materias omitidas por falta de profesor
+        self._profesores_asignacion_directa = set()  # IDs de profesores con AsignacionProfesorGrupo
+
         self.model = None
         self.solver = None
         self.variables = {}
@@ -319,23 +322,29 @@ class GeneradorHorariosMejorado:
                                 disponibilidad_seleccionada = disp
                                 break
 
-                        # Si ninguno tiene suficiente, usar el de mayor disponibilidad si tiene algo
+                        # Si ninguno tiene suficiente, usar el de mayor disponibilidad
+                        # Para asignaciones directas, SIEMPRE usar el profesor asignado
+                        # (la asignación explícita tiene prioridad sobre la disponibilidad)
                         if not profesor_seleccionado:
                             mejor_candidato = candidatos_asignados[0]
-                            if mejor_candidato[1] > 0:
-                                profesor_seleccionado = mejor_candidato[0]
-                                disponibilidad_seleccionada = mejor_candidato[1]
+                            profesor_seleccionado = mejor_candidato[0]
+                            disponibilidad_seleccionada = mejor_candidato[1]
+                            if disponibilidad_seleccionada > 0:
                                 msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
                                        f"tiene {disponibilidad_seleccionada}h disponibles (Requeridas: {horas_requeridas}h). "
                                        "Se usará de todos modos.")
-                                materias_con_advertencia.append(msg)
-                                logger.warning(msg)
                             else:
-                                # Ningún profesor asignado tiene disponibilidad
-                                usar_fallback = True
-                                nombres = ", ".join([p.nombre for p, _ in candidatos_asignados])
-                                logger.warning(f"{grupo.codigo}/{materia.codigo}: Ningún prof. asignado ({nombres}) "
-                                             f"tiene disponibilidad en turno {turno_str}. Buscando alternativa...")
+                                # Profesor asignado sin disponibilidad registrada en este turno
+                                # Se asumirá disponibilidad completa (la asignación explícita lo autoriza)
+                                msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
+                                       f"sin disponibilidad en turno {turno_str}. "
+                                       "Se asumirá disponibilidad completa por asignación directa.")
+                            materias_con_advertencia.append(msg)
+                            logger.warning(msg)
+
+                        # Marcar como asignación directa para override de disponibilidad
+                        if profesor_seleccionado:
+                            self._profesores_asignacion_directa.add(profesor_seleccionado.id)
 
                 # PRIORIDAD 2: Fallback a relación M2M si no hay asignación específica o ningún asignado tiene disponibilidad
                 if profesor_seleccionado is None:
@@ -392,12 +401,37 @@ class GeneradorHorariosMejorado:
             for adv in materias_con_advertencia:
                 print(f"      - {adv}")
 
-        # Error si hay materias sin profesor
+        # Materias sin profesor: remover del grupo en lugar de fallar todo
         if materias_sin_profesor:
-            raise ValueError(
-                f"Las siguientes materias no tienen profesor asignado o con disponibilidad:\n   - "
-                + "\n   - ".join(materias_sin_profesor)
-            )
+            logger.warning(f"Materias sin profesor asignado: {len(materias_sin_profesor)}")
+            print(f"\n   ⚠️ Se omitirán {len(materias_sin_profesor)} materias sin profesor asignado")
+            self._materias_sin_profesor = materias_sin_profesor
+
+            # Remover materias sin profesor de materias_por_grupo para que no se intenten agendar
+            for grupo in self.grupos:
+                materias_originales = self.materias_por_grupo.get(grupo.id, [])
+                self.materias_por_grupo[grupo.id] = [
+                    m for m in materias_originales
+                    if (grupo.id, m.id) in self.profesor_por_materia_grupo
+                ]
+                removidas = len(materias_originales) - len(self.materias_por_grupo[grupo.id])
+                if removidas:
+                    print(f"      {grupo.codigo}: {removidas} materias omitidas, {len(self.materias_por_grupo[grupo.id])} restantes")
+
+            # Si un grupo se queda sin materias, fallar
+            for grupo in self.grupos:
+                if not self.materias_por_grupo.get(grupo.id):
+                    raise ValueError(
+                        f"Grupo {grupo.codigo}: Todas las materias carecen de profesor asignado.\n   - "
+                        + "\n   - ".join(m for m in materias_sin_profesor if m.startswith(grupo.codigo))
+                    )
+
+        # Invalidar caché de capacidad para profesores con asignación directa
+        # (la capacidad se recalculará con el override de disponibilidad completa)
+        for prof_id in self._profesores_asignacion_directa:
+            keys_to_remove = [k for k in self._cache_capacidad_profesor if k[0] == prof_id]
+            for k in keys_to_remove:
+                del self._cache_capacidad_profesor[k]
 
     def _contar_capacidad_restante(self, profesor_id, turno):
         """
@@ -443,16 +477,33 @@ class GeneradorHorariosMejorado:
                 DisponibilidadProfesor.activo == True,
                 DisponibilidadProfesor.disponible == True,
             ).count()
+
+            # Si el profesor tiene asignación directa pero 0 slots disponibles en este turno,
+            # asumir disponibilidad completa (la asignación explícita lo autoriza)
+            if slots_totales == 0 and profesor_id in self._profesores_asignacion_directa:
+                slots_totales = len(horarios_ids) * len(self.dias_semana)
+                logger.info(f"Profesor ID {profesor_id} con asignación directa, "
+                           f"asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
         else:
-            # Si NO tiene disponibilidad registrada, asumir disponibilidad COMPLETA
-            # (todos los horarios del turno x todos los días de la semana)
-            slots_totales = len(horarios_ids) * len(self.dias_semana)
-            logger.info(f"Profesor ID {profesor_id} sin disponibilidad explícita. "
-                       f"Asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
+            # Professor has no explicit availability registered
+            from models import ConfiguracionSistema
+            require_explicit = ConfiguracionSistema.get_config(
+                'require_explicit_availability', False
+            )
+            if require_explicit:
+                # Strict mode: no availability = 0 capacity
+                slots_totales = 0
+                logger.warning(f"Profesor ID {profesor_id} sin disponibilidad registrada. "
+                               f"Modo estricto activo: capacidad = 0")
+            else:
+                # Legacy mode: assume full availability
+                slots_totales = len(horarios_ids) * len(self.dias_semana)
+                logger.info(f"Profesor ID {profesor_id} sin disponibilidad explícita. "
+                           f"Asumiendo disponibilidad completa: {slots_totales} slots en turno {turno}")
 
         # 3. Contar slots ocupados (HorarioAcademico)
         # Excluyendo los grupos actuales (porque los estamos regenerando)
-        grupos_codigos_actuales = [g.codigo for g in self.grupos]
+        grupos_codigos_actuales = [g.codigo.upper() for g in self.grupos]
 
         slots_ocupados = HorarioAcademico.query.filter(
             HorarioAcademico.profesor_id == profesor_id,
@@ -530,11 +581,19 @@ class GeneradorHorariosMejorado:
         """
         Cargar disponibilidades de profesores seleccionados.
 
-        IMPORTANTE: Si un profesor NO tiene disponibilidad explícita registrada,
-        se asume disponibilidad COMPLETA (disponible en todos los horarios de todos los días).
-        Esto permite que profesores nuevos o sin configurar puedan ser incluidos en horarios.
+        Behavior depends on the 'require_explicit_availability' system config:
+        - If True: professors WITHOUT explicit availability are flagged as errors
+          and will NOT be assumed available. Generation will fail for their groups.
+        - If False (default): professors without availability are assumed fully
+          available (legacy behavior for backwards compatibility).
         """
+        from models import ConfiguracionSistema
+
         print("📅 Cargando disponibilidades...")
+
+        require_explicit = ConfiguracionSistema.get_config(
+            'require_explicit_availability', False
+        )
 
         profesores_ids = set(p.id for p in self.profesor_por_materia_grupo.values())
         profesores_sin_disponibilidad = []
@@ -558,35 +617,60 @@ class GeneradorHorariosMejorado:
             slots_disponibles = 0
 
             if disponibilidades_profesor:
-                # El profesor tiene disponibilidad explícita registrada
                 for disp in disponibilidades_profesor:
                     if disp.dia_semana in disponibilidad_dict:
                         disponibilidad_dict[disp.dia_semana][disp.horario_id] = disp.disponible
                         if disp.disponible:
                             slots_disponibles += 1
+
+                # Si el profesor tiene asignación directa, verificar disponibilidad
+                # por turno. Si no tiene slots en un turno donde está asignado,
+                # asumir disponibilidad completa para ese turno.
+                if profesor_id in self._profesores_asignacion_directa:
+                    for turno, horarios_turno in self.horarios_por_turno.items():
+                        horarios_turno_ids = {h.id for h in horarios_turno}
+                        slots_turno = sum(
+                            1 for dia in self.dias_semana
+                            for hid in horarios_turno_ids
+                            if disponibilidad_dict.get(dia, {}).get(hid, False)
+                        )
+                        if slots_turno == 0:
+                            profesor = User.query.get(profesor_id)
+                            nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
+                            turno_label = "matutino" if turno == "M" else "vespertino"
+                            logger.warning(f"Profesor {nombre_profesor} con asignación directa pero sin "
+                                           f"slots en turno {turno_label}. Asumiendo disponibilidad completa.")
+                            for dia in self.dias_semana:
+                                for horario in horarios_turno:
+                                    disponibilidad_dict[dia][horario.id] = True
+                                    slots_disponibles += 1
             else:
-                # El profesor NO tiene disponibilidad registrada
-                # Asumir disponibilidad COMPLETA en todos los horarios de todos los días
                 profesor = User.query.get(profesor_id)
                 nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
-                profesores_sin_disponibilidad.append(nombre_profesor)
+                profesores_sin_disponibilidad.append((profesor_id, nombre_profesor))
 
-                for dia in self.dias_semana:
-                    for horario_id in todos_los_horarios.keys():
-                        disponibilidad_dict[dia][horario_id] = True
-                        slots_disponibles += 1
+                if require_explicit:
+                    # Strict mode: leave availability empty (all slots unavailable)
+                    logger.warning(f"Profesor {nombre_profesor} sin disponibilidad registrada "
+                                   f"(modo estricto activo - NO se asumirá disponible)")
+                else:
+                    # Legacy mode: assume full availability
+                    for dia in self.dias_semana:
+                        for horario_id in todos_los_horarios.keys():
+                            disponibilidad_dict[dia][horario_id] = True
+                            slots_disponibles += 1
 
             self.disponibilidades[profesor_id] = disponibilidad_dict
 
-            # Obtener nombre del profesor para logging
             profesor = User.query.get(profesor_id)
             nombre_profesor = f"{profesor.nombre} {profesor.apellido}" if profesor else f"ID:{profesor_id}"
             logger.debug(f"  Profesor {nombre_profesor}: {slots_disponibles} slots disponibles")
 
         if profesores_sin_disponibilidad:
+            mode_label = "BLOQUEADOS" if require_explicit else "disponibilidad completa asumida"
             print(f"   ⚠️ {len(profesores_sin_disponibilidad)} profesores sin disponibilidad explícita "
-                  f"(se asume disponibilidad completa):")
-            for nombre in profesores_sin_disponibilidad[:5]:  # Mostrar máximo 5
+                  f"({mode_label}):")
+            for _, nombre in profesores_sin_disponibilidad[:5]:
                 print(f"      - {nombre}")
             if len(profesores_sin_disponibilidad) > 5:
                 print(f"      ... y {len(profesores_sin_disponibilidad) - 5} más")
@@ -745,22 +829,16 @@ class GeneradorHorariosMejorado:
         CRÍTICO para generación secuencial: Respetar horarios ya asignados a profesores.
         Si un profesor ya tiene una clase en cierto horario/día, no puede tener otra.
 
-        MEJORADO: Ahora considera TODOS los horarios activos del profesor, no solo
-        los de otras materias. Esto es crucial para la generación masiva/secuencial.
+        OPTIMIZADO: Prefetch ALL existing schedules for all relevant professors
+        in a single query instead of N+1 queries per professor.
         """
         print("📋 Verificando horarios ya existentes...")
         logger.info("Verificando conflictos con horarios existentes...")
 
-        # Obtener IDs de materias de los grupos actuales (para no bloquear las propias)
-        materias_grupos_actuales = set()
-        for grupo in self.grupos:
-            for materia in self.materias_por_grupo.get(grupo.id, []):
-                materias_grupos_actuales.add(materia.id)
-
         restricciones_aplicadas = 0
         profesores_con_conflictos = set()
 
-        # Recolectar todos los profesores únicos de esta generación
+        # Collect all unique professors in this generation
         profesores_unicos = set()
         for grupo in self.grupos:
             for materia in self.materias_por_grupo.get(grupo.id, []):
@@ -768,30 +846,34 @@ class GeneradorHorariosMejorado:
                 if profesor:
                     profesores_unicos.add(profesor.id)
 
-        # Para cada profesor, buscar TODOS sus horarios existentes activos
-        for profesor_id in profesores_unicos:
-            # Buscar horarios ya asignados a este profesor (activos, de CUALQUIER materia)
-            # Usar CODIGO DE GRUPO porque HorarioAcademico no tiene grupo_id
-            grupos_codigos_actuales = [g.codigo for g in self.grupos]
-            
-            horarios_existentes = HorarioAcademico.query.filter(
-                HorarioAcademico.profesor_id == profesor_id,
-                HorarioAcademico.activo == True,
-                # Excluir los grupos actuales
-                ~HorarioAcademico.grupo.in_(grupos_codigos_actuales)
-            ).all()
+        if not profesores_unicos:
+            print("   ✓ No hay horarios previos que bloquear")
+            return
 
-            if horarios_existentes:
-                profesores_con_conflictos.add(profesor_id)
+        grupos_codigos_actuales = [g.codigo.upper() for g in self.grupos]
 
-            for ha in horarios_existentes:
-                # Encontrar el día idx
+        # OPTIMIZED: Single query to fetch ALL existing schedules for all professors
+        horarios_existentes = HorarioAcademico.query.filter(
+            HorarioAcademico.profesor_id.in_(profesores_unicos),
+            HorarioAcademico.activo == True,
+            ~HorarioAcademico.grupo.in_(grupos_codigos_actuales),
+        ).all()
+
+        # Index by professor_id for fast lookup
+        horarios_por_profesor = defaultdict(list)
+        for ha in horarios_existentes:
+            horarios_por_profesor[ha.profesor_id].append(ha)
+
+        for profesor_id, horarios_prof in horarios_por_profesor.items():
+            profesores_con_conflictos.add(profesor_id)
+
+            for ha in horarios_prof:
                 try:
                     dia_idx = self.dias_semana.index(ha.dia_semana)
                 except ValueError:
                     continue
 
-                # Bloquear este slot para TODAS las materias de este profesor en los grupos actuales
+                # Block this slot for ALL subjects this professor teaches in current groups
                 for grupo in self.grupos:
                     for materia in self.materias_por_grupo.get(grupo.id, []):
                         profesor = self.profesor_por_materia_grupo.get(
@@ -1022,47 +1104,58 @@ class GeneradorHorariosMejorado:
                             profesor_dia_horarios[key][idx].append(var)
 
         # Para cada (profesor, día), crear restricción de huecos
+        # Garantiza: entre cualquier par de clases, máximo 2 slots vacíos.
+        # Corrige el bug original que no contaba slots sin variables (siempre vacíos).
         for (profesor_id, dia_idx), horarios_dict in profesor_dia_horarios.items():
             if len(horarios_dict) < 2:
                 continue
 
             indices = sorted(horarios_dict.keys())
-            n_slots = len(indices)
 
-            # Variables: para cada slot, si el profesor tiene al menos una clase
-            slot_ocupado = []
+            # Crear variable auxiliar para cada slot: 1 si tiene al menos una clase
+            slot_ocupado = {}
             for idx in indices:
                 vars_en_slot = horarios_dict[idx]
-                # Crear variable auxiliar: 1 si hay al menos una clase en este slot
                 ocupado = self.model.NewBoolVar(f'ocup_p{profesor_id}_d{dia_idx}_h{idx}')
-                # ocupado = 1 si sum(vars_en_slot) >= 1
                 self.model.Add(sum(vars_en_slot) >= 1).OnlyEnforceIf(ocupado)
                 self.model.Add(sum(vars_en_slot) == 0).OnlyEnforceIf(ocupado.Not())
-                slot_ocupado.append((idx, ocupado))
+                slot_ocupado[idx] = ocupado
 
-            # Restricción: entre la primera y última clase, máximo 2 huecos
-            # Usamos una aproximación: para cada par de slots ocupados (i, j),
-            # los slots intermedios que NO estén ocupados no pueden ser más de 2
-            for i in range(len(slot_ocupado)):
-                for j in range(i + 1, len(slot_ocupado)):
-                    idx_i, var_i = slot_ocupado[i]
-                    idx_j, var_j = slot_ocupado[j]
+            ordered_indices = sorted(slot_ocupado.keys())
 
-                    # Slots entre i y j
-                    slots_entre = [s for s in slot_ocupado if idx_i < s[0] < idx_j]
+            # Para cada par (i, j) de slots donde el profesor PUEDE tener clase:
+            # Si ambos están ocupados, los huecos entre ellos deben ser <= 2.
+            # Los huecos incluyen tanto slots con variables vacías como slots sin
+            # variables (donde no puede haber clase → siempre vacíos).
+            for i_pos in range(len(ordered_indices)):
+                for j_pos in range(i_pos + 1, len(ordered_indices)):
+                    idx_i = ordered_indices[i_pos]
+                    idx_j = ordered_indices[j_pos]
 
-                    if len(slots_entre) > 2:
-                        # Si hay más de 2 slots intermedios, al menos (len-2) deben estar ocupados
-                        # para que no haya más de 2 huecos
-                        vars_intermedios = [s[1] for s in slots_entre]
-                        min_ocupados = len(slots_entre) - 2
+                    # Total de slots intermedios en el rango real (incluyendo sin variables)
+                    total_intermedios = idx_j - idx_i - 1
 
-                        # Si ambos extremos están ocupados, los intermedios deben cumplir
-                        # var_i + var_j + (min_ocupados - sum(intermedios)) <= 2 + len(intermedios)
-                        # Simplificado: si var_i=1 y var_j=1, sum(intermedios) >= min_ocupados
+                    if total_intermedios <= 2:
+                        continue  # Máximo 2 huecos posibles, restricción siempre cumplida
+
+                    # Slots intermedios CON variables (podrían estar ocupados)
+                    intermedios_con_var = [
+                        slot_ocupado[idx] for idx in ordered_indices
+                        if idx_i < idx < idx_j
+                    ]
+                    # Slots intermedios SIN variables = siempre vacíos (huecos fijos)
+                    huecos_fijos = total_intermedios - len(intermedios_con_var)
+
+                    # Restricción: huecos_fijos + intermedios_vacios <= 2
+                    # => intermedios_vacios <= 2 - huecos_fijos
+                    # => len(intermedios_con_var) - sum(intermedios_con_var) <= 2 - huecos_fijos
+                    # => sum(intermedios_con_var) >= len(intermedios_con_var) - 2 + huecos_fijos
+                    min_ocupados = len(intermedios_con_var) - 2 + huecos_fijos
+
+                    if min_ocupados > 0 and intermedios_con_var:
                         self.model.Add(
-                            sum(vars_intermedios) >= min_ocupados
-                        ).OnlyEnforceIf([var_i, var_j])
+                            sum(intermedios_con_var) >= min_ocupados
+                        ).OnlyEnforceIf([slot_ocupado[idx_i], slot_ocupado[idx_j]])
 
     def agregar_funcion_objetivo(self):
         """Función objetivo para equilibrar horarios"""
@@ -1156,61 +1249,66 @@ class GeneradorHorariosMejorado:
             return False
 
     def guardar_horarios(self):
-        """Guardar horarios generados en la base de datos"""
+        """Guardar horarios generados en la base de datos.
+
+        Usa SAVEPOINT para atomicidad: si la inserción falla,
+        los horarios previos NO se eliminan.
+        """
         print("💾 Guardando horarios...")
         logger.info(f"Guardando horarios para {len(self.grupos)} grupos")
         print(f"   📝 Usando creado_por: {self.creado_por}")
 
         try:
-            # CORRECCIÓN CRÍTICA: Eliminar horarios anteriores SOLO de estos grupos específicos
-            # No eliminar por materia_id porque eso borra horarios de otros grupos
-            for grupo in self.grupos:
-                # Eliminar solo los horarios de este grupo específico
-                # IMPORTANTE: Usar upper() para consistencia con cómo se guarda en HorarioAcademico
-                grupo_codigo_normalizado = grupo.codigo.upper()
-                deleted_count = HorarioAcademico.query.filter(
-                    HorarioAcademico.grupo == grupo_codigo_normalizado
-                ).delete(synchronize_session=False)
-                if deleted_count > 0:
-                    print(f"   🗑️ Eliminados {deleted_count} horarios previos de {grupo_codigo_normalizado}")
+            # SAVEPOINT: si falla la inserción, el rollback restaura los datos previos
+            nested = db.session.begin_nested()
 
-            # No hacer commit intermedio para atomicidad
+            try:
+                # Eliminar horarios anteriores SOLO de estos grupos específicos
+                for grupo in self.grupos:
+                    grupo_codigo_normalizado = grupo.codigo.upper()
+                    deleted_count = HorarioAcademico.query.filter(
+                        HorarioAcademico.grupo == grupo_codigo_normalizado
+                    ).delete(synchronize_session=False)
+                    if deleted_count > 0:
+                        print(f"   🗑️ Eliminados {deleted_count} horarios previos de {grupo_codigo_normalizado}")
 
-            # Guardar nuevos horarios
-            horarios_por_grupo = defaultdict(list)
-            
-            # Mapa de grupos para acceso rápido
-            grupos_map = {g.id: g for g in self.grupos}
+                # Guardar nuevos horarios
+                horarios_por_grupo = defaultdict(list)
+                grupos_map = {g.id: g for g in self.grupos}
 
-            for (grupo_id, materia_id, horario_id, dia_idx), var in self.variables.items():
-                if self.solver.Value(var) == 1:
-                    profesor = self.profesor_por_materia_grupo.get((grupo_id, materia_id))
-                    if not profesor:
-                        logger.warning(f"No se encontró profesor para grupo_id={grupo_id}, materia_id={materia_id}")
-                        continue
+                for (grupo_id, materia_id, horario_id, dia_idx), var in self.variables.items():
+                    if self.solver.Value(var) == 1:
+                        profesor = self.profesor_por_materia_grupo.get((grupo_id, materia_id))
+                        if not profesor:
+                            logger.warning(f"No se encontró profesor para grupo_id={grupo_id}, materia_id={materia_id}")
+                            continue
 
-                    dia = self.dias_semana[dia_idx]
-                    
-                    # Obtener código del grupo - CRÍTICO: nunca usar 'A' como fallback
-                    grupo_obj = grupos_map.get(grupo_id)
-                    if not grupo_obj:
-                        logger.error(f"Grupo {grupo_id} no encontrado en grupos_map")
-                        continue
-                    grupo_codigo = grupo_obj.codigo
+                        dia = self.dias_semana[dia_idx]
 
-                    horario_academico = HorarioAcademico(
-                        profesor_id=profesor.id,
-                        materia_id=materia_id,
-                        horario_id=horario_id,
-                        dia_semana=dia,
-                        grupo=grupo_codigo.upper(),  # Normalizar a mayúsculas para consistencia
-                        periodo_academico=self.periodo_academico,
-                        version_nombre=self.version_nombre,
-                        creado_por=self.creado_por,
-                    )
+                        grupo_obj = grupos_map.get(grupo_id)
+                        if not grupo_obj:
+                            logger.error(f"Grupo {grupo_id} no encontrado en grupos_map")
+                            continue
+                        grupo_codigo = grupo_obj.codigo
 
-                    db.session.add(horario_academico)
-                    horarios_por_grupo[grupo_id].append(horario_academico)
+                        horario_academico = HorarioAcademico(
+                            profesor_id=profesor.id,
+                            materia_id=materia_id,
+                            horario_id=horario_id,
+                            dia_semana=dia,
+                            grupo=grupo_codigo.upper(),
+                            periodo_academico=self.periodo_academico,
+                            version_nombre=self.version_nombre,
+                            creado_por=self.creado_por,
+                        )
+
+                        db.session.add(horario_academico)
+                        horarios_por_grupo[grupo_id].append(horario_academico)
+
+                nested.commit()
+            except Exception as e:
+                nested.rollback()
+                raise
 
             db.session.commit()
             logger.info("Cambios guardados exitosamente")
@@ -1228,7 +1326,7 @@ class GeneradorHorariosMejorado:
             print(f"\n   TOTAL: {len(self.horarios_generados)} horarios generados")
 
             return self.horarios_generados
-            
+
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error al guardar horarios: {e}")
@@ -1356,11 +1454,16 @@ class GeneradorHorariosMejorado:
 
             if self.resolver():
                 self.guardar_horarios()
+                materias_omitidas = getattr(self, '_materias_sin_profesor', [])
+                msg = f"✅ Horarios generados exitosamente para {len(self.grupos)} grupos"
+                if materias_omitidas:
+                    msg += f" (⚠️ {len(materias_omitidas)} materias omitidas por falta de profesor)"
                 return {
                     "exito": True,
-                    "mensaje": f"✅ Horarios generados exitosamente para {len(self.grupos)} grupos",
+                    "mensaje": msg,
                     "grupos_procesados": len(self.grupos),
                     "horarios_generados": len(self.horarios_generados),
+                    "materias_omitidas": materias_omitidas,
                 }
             else:
                 # Generar diagnóstico detallado del fallo

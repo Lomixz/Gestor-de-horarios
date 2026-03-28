@@ -1,9 +1,11 @@
 FROM python:3.12-slim
 
-# Install system dependencies
+# Install system dependencies (including PostgreSQL client libs)
 RUN apt-get update && apt-get install -y \
     build-essential \
     gosu \
+    libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -12,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install python dependencies
-RUN pip install --default-timeout=100 -r requirements.txt
+RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
 # Install gunicorn for production serving
 RUN pip install --no-cache-dir gunicorn
 

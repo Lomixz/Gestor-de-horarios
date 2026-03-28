@@ -1,63 +1,93 @@
 {% extends "base.html" %}
 
 {% block title %}Iniciar Sesión - Sistema Académico{% endblock %}
+{% block meta_description %}Accede al Sistema de Gestión Académica. Administra horarios, profesores, materias y grupos desde una sola plataforma.{% endblock %}
+{% block body_class %}login-page{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-4">
-        <div class="card auth-card">
-            <div class="card-body">
-                <div class="text-center mb-4">
-                    <i class="fas fa-user-circle fa-3x text-primary mb-3"></i>
-                    <h3 class="card-title">Iniciar Sesión</h3>
-                    <p class="text-muted">Ingrese sus credenciales para acceder</p>
+<div class="login-wrapper">
+    <!-- Panel izquierdo: branding -->
+    <div class="login-brand-panel d-none d-lg-flex">
+        <div class="login-brand-inner">
+            <div class="login-brand-logo">
+                <i class="fas fa-graduation-cap"></i>
+            </div>
+            <h2 class="login-brand-title">Sistema de Gestión Académica</h2>
+            <p class="login-brand-sub">Plataforma integral para la administración educativa. Gestiona horarios, profesores, materias y más.</p>
+            <div class="login-brand-features">
+                <div class="login-feature-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Gestión de horarios académicos</span>
+                </div>
+                <div class="login-feature-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Administración de profesores</span>
+                </div>
+                <div class="login-feature-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Control de materias y grupos</span>
+                </div>
+                <div class="login-feature-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Reportes y exportaciones</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel derecho: formulario -->
+    <div class="login-form-panel">
+        <div class="login-form-inner">
+            <div class="login-form-header">
+                <div class="login-form-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <h1 style="font-size:1.5rem;font-weight:700;font-family:'Outfit',sans-serif;color:var(--dark);margin-bottom:0.25rem">Bienvenido de nuevo</h1>
+                <p class="text-muted mb-0" style="font-size:0.9rem">Ingrese sus credenciales para acceder</p>
+            </div>
+
+            <form method="POST">
+                {{ form.hidden_tag() }}
+
+                <div class="mb-4">
+                    {{ form.username.label(class="form-label fw-semibold") }}
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-user"></i></span>
+                        {{ form.username(class="form-control form-control-lg") }}
+                    </div>
+                    {% if form.username.errors %}
+                        {% for error in form.username.errors %}
+                            <div class="text-danger small mt-1">
+                                <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
                 </div>
 
-                <form method="POST">
-                    {{ form.hidden_tag() }}
-                    
-                    <div class="mb-3">
-                        {{ form.username.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-user"></i>
-                            </span>
-                            {{ form.username(class="form-control") }}
-                        </div>
-                        {% if form.username.errors %}
-                            {% for error in form.username.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
+                <div class="mb-4">
+                    {{ form.password.label(class="form-label fw-semibold") }}
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                        {{ form.password(class="form-control form-control-lg") }}
                     </div>
-
-                    <div class="mb-3">
-                        {{ form.password.label(class="form-label") }}
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="fas fa-lock"></i>
-                            </span>
-                            {{ form.password(class="form-control") }}
-                        </div>
-                        {% if form.password.errors %}
-                            {% for error in form.password.errors %}
-                                <div class="text-danger small">{{ error }}</div>
-                            {% endfor %}
-                        {% endif %}
-                    </div>
-
-                    <div class="d-grid mb-3">
-                        {{ form.submit(class="btn btn-primary btn-lg") }}
-                    </div>
-                </form>
-
-                <div class="text-center">
-                    <p class="mb-0">¿No tienes cuenta? 
-                        <a href="{{ url_for('register') }}" class="text-decoration-none">
-                            Regístrate aquí
-                        </a>
-                    </p>
+                    {% if form.password.errors %}
+                        {% for error in form.password.errors %}
+                            <div class="text-danger small mt-1">
+                                <i class="fas fa-exclamation-circle me-1"></i>{{ error }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
                 </div>
+
+                <div class="d-grid mb-3">
+                    {{ form.submit(class="btn btn-primary btn-lg fw-semibold") }}
+                </div>
+            </form>
+
+            <div class="text-center mt-2">
+                <p class="mb-0 text-muted" style="font-size:0.875rem">¿No tienes cuenta?
+                    <a href="{{ url_for('register') }}" class="text-decoration-none fw-semibold" style="color:var(--primary)">Regístrate aquí</a>
+                </p>
             </div>
         </div>
     </div>

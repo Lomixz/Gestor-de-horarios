@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import StringField, PasswordField, SelectField, SelectMultipleField, SubmitField, IntegerField, TimeField, TextAreaField, BooleanField
-from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError, NumberRange, Optional
+from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError, NumberRange, Optional, Regexp
 from models import User, Horario, Carrera, Materia
 import re
 
@@ -9,6 +9,22 @@ def validate_not_zero(form, field):
     """Validador personalizado para asegurar que el valor no sea 0"""
     if field.data == 0:
         raise ValidationError('Debe seleccionar una opción válida')
+
+def validate_not_negative(form, field):
+    """Validador para asegurar que el valor no sea negativo (sentinel -1)"""
+    if field.data is not None and field.data < 0:
+        raise ValidationError('Debe seleccionar una opción válida')
+
+def validate_file_size(max_mb=5):
+    """Validador de tamaño máximo de archivo."""
+    def _validator(form, field):
+        if field.data:
+            field.data.seek(0, 2)
+            size = field.data.tell()
+            field.data.seek(0)
+            if size > max_mb * 1024 * 1024:
+                raise ValidationError(f'El archivo no puede exceder {max_mb} MB.')
+    return _validator
 
 def clean_phone_number(phone):
     """Limpia el número de teléfono eliminando caracteres no numéricos"""
@@ -30,34 +46,36 @@ def validate_password_strength(form, field):
 
 class LoginForm(FlaskForm):
     """Formulario de inicio de sesión"""
-    username = StringField('Usuario', validators=[DataRequired(), Length(min=4, max=20)])
+    username = StringField('Usuario', validators=[DataRequired(), Length(min=4, max=80)])
     password = PasswordField('Contraseña', validators=[DataRequired()])
     submit = SubmitField('Iniciar Sesión')
 
 class RegistrationForm(FlaskForm):
     """Formulario de registro de usuario"""
     username = StringField('Usuario', validators=[
-        DataRequired(), 
-        Length(min=4, max=20, message='El usuario debe tener entre 4 y 20 caracteres')
+        DataRequired(),
+        Length(min=4, max=80, message='El usuario debe tener entre 4 y 80 caracteres')
     ])
-    
+
     email = StringField('Email', validators=[
-        DataRequired(), 
-        Email(message='Ingrese un email válido')
+        DataRequired(),
+        Email(message='Ingrese un email válido'),
+        Length(max=120, message='El email no puede exceder 120 caracteres')
     ])
-    
+
     nombre = StringField('Nombre', validators=[
-        DataRequired(), 
-        Length(min=2, max=50, message='El nombre debe tener entre 2 y 50 caracteres')
+        DataRequired(),
+        Length(min=2, max=100, message='El nombre debe tener entre 2 y 100 caracteres')
     ])
-    
+
     apellido = StringField('Apellido', validators=[
-        DataRequired(), 
-        Length(min=2, max=50, message='El apellido debe tener entre 2 y 50 caracteres')
+        DataRequired(),
+        Length(min=2, max=100, message='El apellido debe tener entre 2 y 100 caracteres')
     ])
-    
+
     telefono = StringField('Teléfono', validators=[
-        Length(min=10, max=10, message='El teléfono debe tener exactamente 10 dígitos')
+        Optional(),
+        Regexp(r'^\d{10}$', message='El teléfono debe ser exactamente 10 dígitos numéricos')
     ])
     
     password = PasswordField('Contraseña', validators=[
@@ -74,16 +92,17 @@ class RegistrationForm(FlaskForm):
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
         ('jefe_carrera', 'Jefe de Carrera'),
-        ('profesor', 'Profesor')
+        ('profesor', 'Profesor'),
+        ('recursos_humanos', 'Recursos Humanos')
     ], validators=[DataRequired(message='Debe seleccionar un rol')])
     
     tipo_profesor = SelectField('Tipo de Profesor', choices=[
         ('', 'Seleccione tipo de profesor'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
-    ])
-    
-    carrera = SelectMultipleField('Carrera', validators=[Optional()])
+    ], validate_choice=False)
+
+    carrera = SelectMultipleField('Carrera', validators=[Optional()], validate_choice=False)
     
     otra_carrera = BooleanField('¿Estás inscrito en otra carrera además de la que seleccionaste?', validators=[Optional()])
     
@@ -260,7 +279,8 @@ class ImportarCarrerasForm(FlaskForm):
     """Formulario para importar carreras desde archivo CSV"""
     archivo = FileField('Archivo CSV', validators=[
         DataRequired(message='Debe seleccionar un archivo'),
-        FileAllowed(['csv'], 'Solo se permiten archivos CSV')
+        FileAllowed(['csv'], 'Solo se permiten archivos CSV'),
+        validate_file_size(5)
     ])
     
     submit = SubmitField('Importar Carreras')
@@ -269,7 +289,8 @@ class ImportarAsignacionesGrupoForm(FlaskForm):
     """Formulario para importar asignaciones masivas de materias a grupos desde CSV"""
     archivo = FileField('Archivo CSV', validators=[
         DataRequired(message='Debe seleccionar un archivo'),
-        FileAllowed(['csv'], 'Solo se permiten archivos CSV')
+        FileAllowed(['csv'], 'Solo se permiten archivos CSV'),
+        validate_file_size(5)
     ])
     
     submit = SubmitField('Importar Asignaciones')
@@ -278,7 +299,8 @@ class ImportarAsignacionesForm(FlaskForm):
     """Formulario para importar asignaciones de materias desde archivo CSV"""
     archivo = FileField('Archivo CSV', validators=[
         DataRequired(message='Debe seleccionar un archivo'),
-        FileAllowed(['csv'], 'Solo se permiten archivos CSV')
+        FileAllowed(['csv'], 'Solo se permiten archivos CSV'),
+        validate_file_size(5)
     ])
     
     submit = SubmitField('Importar Asignaciones')
@@ -287,7 +309,8 @@ class ImportarProfesoresForm(FlaskForm):
     """Formulario para importar profesores desde archivo CSV/Excel"""
     archivo = FileField('Archivo CSV/Excel', validators=[
         DataRequired(message='Debe seleccionar un archivo'),
-        FileAllowed(['csv', 'xlsx', 'xls'], 'Solo se permiten archivos CSV o Excel')
+        FileAllowed(['csv', 'xlsx', 'xls'], 'Solo se permiten archivos CSV o Excel'),
+        validate_file_size(10)
     ])
     
     carrera_defecto = SelectField('Carrera por Defecto', validators=[
@@ -404,7 +427,8 @@ class ImportarMateriasForm(FlaskForm):
     """Formulario para importar materias desde archivo CSV/Excel"""
     archivo = FileField('Archivo CSV/Excel', validators=[
         DataRequired(message='Debe seleccionar un archivo'),
-        FileAllowed(['csv', 'xlsx', 'xls'], 'Solo se permiten archivos CSV o Excel')
+        FileAllowed(['csv', 'xlsx', 'xls'], 'Solo se permiten archivos CSV o Excel'),
+        validate_file_size(10)
     ])
     
     carrera_defecto = SelectField('Carrera por Defecto', validators=[
@@ -566,29 +590,31 @@ class EditarDisponibilidadProfesorForm(FlaskForm):
 
 class AgregarProfesorForm(FlaskForm):
     """Formulario para que administradores agreguen profesores manualmente"""
-    
+
     username = StringField('Nombre de Usuario', validators=[
         DataRequired(message='El nombre de usuario es obligatorio'),
-        Length(min=4, max=20, message='El usuario debe tener entre 4 y 20 caracteres')
+        Length(min=4, max=80, message='El usuario debe tener entre 4 y 80 caracteres')
     ])
-    
+
     email = StringField('Email', validators=[
         DataRequired(message='El email es obligatorio'),
-        Email(message='Ingrese un email válido')
+        Email(message='Ingrese un email válido'),
+        Length(max=120, message='El email no puede exceder 120 caracteres')
     ])
-    
+
     nombre = StringField('Nombre', validators=[
         DataRequired(message='El nombre es obligatorio'),
-        Length(min=2, max=50, message='El nombre debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El nombre debe tener entre 2 y 100 caracteres')
     ])
-    
+
     apellido = StringField('Apellido', validators=[
         DataRequired(message='El apellido es obligatorio'),
-        Length(min=2, max=50, message='El apellido debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El apellido debe tener entre 2 y 100 caracteres')
     ])
-    
+
     telefono = StringField('Teléfono', validators=[
-        Length(min=10, max=10, message='El teléfono debe tener exactamente 10 dígitos')
+        Optional(),
+        Regexp(r'^\d{10}$', message='El teléfono debe ser exactamente 10 dígitos numéricos')
     ])
 
     password = PasswordField('Contraseña', validators=[
@@ -671,27 +697,28 @@ class AgregarUsuarioForm(FlaskForm):
     """Formulario para agregar nuevo usuario"""
     username = StringField('Usuario', validators=[
         DataRequired(),
-        Length(min=4, max=20, message='El usuario debe tener entre 4 y 20 caracteres')
+        Length(min=4, max=80, message='El usuario debe tener entre 4 y 80 caracteres')
     ])
 
     email = StringField('Email', validators=[
         DataRequired(),
-        Email(message='Ingrese un email válido')
+        Email(message='Ingrese un email válido'),
+        Length(max=120, message='El email no puede exceder 120 caracteres')
     ])
 
     nombre = StringField('Nombre', validators=[
         DataRequired(),
-        Length(min=2, max=50, message='El nombre debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El nombre debe tener entre 2 y 100 caracteres')
     ])
 
     apellido = StringField('Apellido', validators=[
         DataRequired(),
-        Length(min=2, max=50, message='El apellido debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El apellido debe tener entre 2 y 100 caracteres')
     ])
 
     telefono = StringField('Teléfono', validators=[
         Optional(),
-        Length(min=10, max=10, message='El teléfono debe tener exactamente 10 dígitos')
+        Regexp(r'^\d{10}$', message='El teléfono debe ser exactamente 10 dígitos numéricos')
     ])
 
     password = PasswordField('Contraseña', validators=[
@@ -708,6 +735,7 @@ class AgregarUsuarioForm(FlaskForm):
     # Usamos Optional() porque los checkboxes en el HTML no se procesan igual que un select multiple
     roles_seleccionados = SelectMultipleField('Roles', choices=[
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -717,6 +745,7 @@ class AgregarUsuarioForm(FlaskForm):
     rol = SelectField('Rol Principal', choices=[
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor', 'Profesor'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
@@ -831,32 +860,34 @@ class EditarUsuarioForm(FlaskForm):
     """Formulario para editar usuario existente"""
     username = StringField('Usuario', validators=[
         DataRequired(),
-        Length(min=4, max=20, message='El usuario debe tener entre 4 y 20 caracteres')
+        Length(min=4, max=80, message='El usuario debe tener entre 4 y 80 caracteres')
     ])
 
     email = StringField('Email', validators=[
         DataRequired(),
-        Email(message='Ingrese un email válido')
+        Email(message='Ingrese un email válido'),
+        Length(max=120, message='El email no puede exceder 120 caracteres')
     ])
 
     nombre = StringField('Nombre', validators=[
         DataRequired(),
-        Length(min=2, max=50, message='El nombre debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El nombre debe tener entre 2 y 100 caracteres')
     ])
 
     apellido = StringField('Apellido', validators=[
         DataRequired(),
-        Length(min=2, max=50, message='El apellido debe tener entre 2 y 50 caracteres')
+        Length(min=2, max=100, message='El apellido debe tener entre 2 y 100 caracteres')
     ])
 
     telefono = StringField('Teléfono', validators=[
         Optional(),
-        Length(min=10, max=10, message='El teléfono debe tener exactamente 10 dígitos')
+        Regexp(r'^\d{10}$', message='El teléfono debe ser exactamente 10 dígitos numéricos')
     ])
 
     rol = SelectField('Rol', choices=[
         ('', 'Seleccione un rol'),
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -866,6 +897,7 @@ class EditarUsuarioForm(FlaskForm):
     # Usamos Optional porque en el formulario de jefe de carrera no se incluye este campo
     roles_seleccionados = SelectMultipleField('Roles', choices=[
         ('admin', 'Administrador'),
+        ('recursos_humanos', 'Recursos Humanos'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor_completo', 'Profesor de Tiempo Completo'),
         ('profesor_asignatura', 'Profesor por Asignatura')
@@ -881,6 +913,8 @@ class EditarUsuarioForm(FlaskForm):
     carreras = SelectMultipleField('Carreras', coerce=int, validators=[Optional()])
 
     activo = BooleanField('Usuario Activo')
+
+    nueva_password = PasswordField('Nueva Contraseña (opcional)', validators=[Optional()])
 
     submit = SubmitField('Actualizar Usuario')
 
@@ -1039,8 +1073,11 @@ class GrupoForm(FlaskForm):
         ('V', 'Vespertino')
     ], validators=[DataRequired(message='Debe seleccionar un turno')])
     
-    carrera = SelectField('Carrera', coerce=int, validators=[DataRequired(message='Debe seleccionar una carrera')])
-    
+    carrera = SelectField('Carrera', coerce=int, validators=[
+        DataRequired(message='Debe seleccionar una carrera'),
+        validate_not_zero
+    ])
+
     cuatrimestre = SelectField('Cuatrimestre', choices=[
         (-1, 'Seleccione un cuatrimestre'),
         (0, 'Propedéutico (0)'),
@@ -1054,7 +1091,10 @@ class GrupoForm(FlaskForm):
         (8, '8vo Cuatrimestre'),
         (9, '9no Cuatrimestre'),
         (10, '10mo Cuatrimestre')
-    ], coerce=int, validators=[DataRequired(message='Debe seleccionar un cuatrimestre')])
+    ], coerce=int, validators=[
+        DataRequired(message='Debe seleccionar un cuatrimestre'),
+        validate_not_negative
+    ])
     
     submit = SubmitField('Guardar Grupo')
     
@@ -1126,3 +1166,13 @@ class CambiarPasswordObligatorioForm(FlaskForm):
     ])
 
     submit = SubmitField('Cambiar Contraseña')
+
+
+class SubirImagenForm(FlaskForm):
+    """Formulario para subir foto de perfil o firma digital."""
+    imagen = FileField('Imagen', validators=[
+        DataRequired(message='Debe seleccionar una imagen'),
+        FileAllowed(['jpg', 'jpeg', 'png', 'gif', 'webp'], 'Solo se permiten imágenes (jpg, jpeg, png, gif, webp)'),
+        validate_file_size(2)
+    ])
+    submit = SubmitField('Subir Imagen')

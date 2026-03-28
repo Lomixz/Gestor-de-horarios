@@ -231,13 +231,17 @@
                     </span>
                 </h4>
                 <div class="acciones-grupo">
-                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}" 
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_excel', nombre_grupo=grupo) }}"
                        class="btn-accion-grupo" title="Exportar a Excel">
                         <i class="fas fa-file-excel"></i> Excel
                     </a>
-                    <a href="{{ url_for('exportar_jefe_horario_grupo_pdf', nombre_grupo=grupo) }}" 
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_pdf', nombre_grupo=grupo) }}"
                        class="btn-accion-grupo" title="Exportar a PDF">
                         <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                    <a href="{{ url_for('exportar_jefe_horario_grupo_csv', nombre_grupo=grupo) }}"
+                       class="btn-accion-grupo" title="Exportar a CSV">
+                        <i class="fas fa-file-csv"></i> CSV
                     </a>
                 </div>
             </div>
@@ -263,14 +267,10 @@
                     {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
                     <div class="celda-horario">
                         {% for clase in dias[dia_semana] %}
-                            {% set hora_str = '%02d:00'|format(hora) %}
-                            {% if hora_str in clase %}
+                            {% if clase.hora_inicio == hora %}
                             <div class="clase-card">
-                                {% set partes = clase.split('<br>') %}
-                                <div class="clase-materia">{{ partes[0] | safe }}</div>
-                                {% if partes|length > 1 %}
-                                <div class="clase-profesor"><i class="fas fa-user"></i> {{ partes[1] | replace('Prof: ', '') | safe }}</div>
-                                {% endif %}
+                                <div class="clase-materia">{{ clase.materia }}</div>
+                                <div class="clase-profesor"><i class="fas fa-user"></i> {{ clase.profesor }}</div>
                             </div>
                             {% endif %}
                         {% endfor %}

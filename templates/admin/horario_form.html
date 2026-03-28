@@ -31,7 +31,7 @@
                             <span class="input-group-text">
                                 <i class="fas fa-tag"></i>
                             </span>
-                            {{ form.nombre(class="form-control", placeholder="Ej: 1ra Hora, Receso, etc.") }}
+                            {{ form.nombre(class="form-control", placeholder="Ej: 1ra Hora, Receso, etc.", maxlength="100") }}
                         </div>
                         {% if form.nombre.errors %}
                             {% for error in form.nombre.errors %}
@@ -93,7 +93,7 @@
                             <span class="input-group-text">
                                 <i class="fas fa-sort-numeric-up"></i>
                             </span>
-                            {{ form.orden(class="form-control", placeholder="1, 2, 3...") }}
+                            {{ form.orden(class="form-control", placeholder="1, 2, 3...", type="number", min="1", max="20") }}
                         </div>
                         <div class="form-text">
                             Número que determina el orden de los períodos en el turno

@@ -304,7 +304,7 @@
                                 </tr>
                                 <tr>
                                     <td><strong>Fecha Creación:</strong></td>
-                                    <td>{{ modal_carrera.fecha_creacion.strftime('%d/%m/%Y') }}</td>
+                                    <td>{{ modal_carrera.fecha_creacion.strftime('%d/%m/%Y') if modal_carrera.fecha_creacion else 'N/A' }}</td>
                                 </tr>
                             </table>
                         </div>

@@ -18,10 +18,21 @@
                     <i class="fas fa-arrow-left me-1"></i>
                     Volver al Dashboard
                 </a>
-                <a href="{{ url_for('agregar_usuario') }}" class="btn btn-primary">
-                    <i class="fas fa-user-plus me-1"></i>
-                    Agregar Usuario
-                </a>
+                {% if solo_lectura %}
+                    <a href="{{ url_for('exportar_usuarios_csv') }}" class="btn btn-outline-success">
+                        <i class="fas fa-file-csv me-1"></i>
+                        Exportar CSV
+                    </a>
+                    <a href="{{ url_for('exportar_usuarios_pdf') }}" class="btn btn-outline-danger">
+                        <i class="fas fa-file-pdf me-1"></i>
+                        Exportar PDF
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('agregar_usuario') }}" class="btn btn-primary">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Agregar Usuario
+                    </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -126,6 +137,7 @@
                             <option value="Profesor">Profesores (Todos)</option>
                             <option value="Profesor de Tiempo Completo">Profesor de Tiempo Completo</option>
                             <option value="Profesor por Asignatura">Profesor por Asignatura</option>
+                            <option value="Recursos Humanos">Recursos Humanos</option>
                         </select>
                     </div>
                     
@@ -199,7 +211,7 @@
                                     <td class="admin-col-text">{{ usuario.get_nombre_completo() }}</td>
                                     <td class="admin-col-text">{{ usuario.email }}</td>
                                     <td class="text-center admin-col-type">
-                                        <span class="badge badge-nowrap bg-{% if usuario.rol == 'admin' %}danger{% elif usuario.rol == 'jefe_carrera' %}warning{% else %}primary{% endif %}">
+                                        <span class="badge badge-nowrap bg-{% if usuario.rol == 'admin' %}danger{% elif usuario.rol == 'jefe_carrera' %}warning{% elif usuario.rol == 'recursos_humanos' %}success{% else %}primary{% endif %}">
                                             {{ usuario.get_rol_display() }}
                                         </span>
                                     </td>
@@ -211,58 +223,56 @@
                                             <span class="badge badge-nowrap bg-danger">Inactivo</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-center admin-col-date">{{ usuario.fecha_registro.strftime('%d/%m/%Y') }}</td>
+                                    <td class="text-center admin-col-date">{{ usuario.fecha_registro.strftime('%d/%m/%Y') if usuario.fecha_registro else 'N/A' }}</td>
                                     <td class="text-center admin-users-actions">
+                                        {% if solo_lectura %}
+                                            <span class="text-muted small"><i class="fas fa-eye me-1"></i>Solo lectura</span>
+                                        {% else %}
                                         <div class="btn-group" role="group">
-                                            <a href="{{ url_for('editar_usuario', id=usuario.id) }}" 
-                                               class="btn btn-sm btn-outline-primary" 
-                                               data-bs-toggle="tooltip" 
-                                               data-bs-placement="top" 
+                                            <a href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                                               class="btn btn-sm btn-outline-primary"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
                                                title="Editar Usuario">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="{{ url_for('cambiar_password_usuario', id=usuario.id) }}" 
-                                               class="btn btn-sm btn-outline-secondary" 
-                                               data-bs-toggle="tooltip" 
-                                               data-bs-placement="top" 
+                                            <a href="{{ url_for('cambiar_password_usuario', id=usuario.id) }}"
+                                               class="btn btn-sm btn-outline-secondary"
+                                               data-bs-toggle="tooltip"
+                                               data-bs-placement="top"
                                                title="Cambiar Contraseña">
                                                 <i class="fas fa-key"></i>
                                             </a>
                                             {% if usuario.activo %}
-                                                <form method="POST" action="{{ url_for('desactivar_usuario', id=usuario.id) }}" class="inline-action-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <button type="submit" 
-                                                            class="btn btn-sm btn-outline-warning" 
-                                                            data-bs-toggle="tooltip" 
-                                                            data-bs-placement="top" 
-                                                            title="Desactivar Usuario"
-                                                            onclick="return confirm('¿Estás seguro de desactivar este usuario?')">
-                                                        <i class="fas fa-ban"></i>
-                                                    </button>
-                                                </form>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-warning"
+                                                        data-bs-toggle="tooltip"
+                                                        data-bs-placement="top"
+                                                        title="Desactivar Usuario"
+                                                        onclick="mostrarModalEstado('{{ usuario.nombre }} {{ usuario.apellido }}', '{{ url_for('desactivar_usuario', id=usuario.id) }}', 'desactivar', '{{ csrf_token() }}')">
+                                                    <i class="fas fa-ban"></i>
+                                                </button>
                                             {% else %}
-                                                <form method="POST" action="{{ url_for('activar_usuario', id=usuario.id) }}" class="inline-action-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <button type="submit" 
-                                                            class="btn btn-sm btn-outline-success" 
-                                                            data-bs-toggle="tooltip" 
-                                                            data-bs-placement="top" 
-                                                            title="Activar Usuario"
-                                                            onclick="return confirm('¿Estás seguro de activar este usuario?')">
-                                                        <i class="fas fa-check"></i>
-                                                    </button>
-                                                </form>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-outline-success"
+                                                        data-bs-toggle="tooltip"
+                                                        data-bs-placement="top"
+                                                        title="Activar Usuario"
+                                                        onclick="mostrarModalEstado('{{ usuario.nombre }} {{ usuario.apellido }}', '{{ url_for('activar_usuario', id=usuario.id) }}', 'activar', '{{ csrf_token() }}')">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
                                             {% endif %}
                                             {% if usuario.id != current_user.id %}
-                                                <a href="{{ url_for('eliminar_usuario', id=usuario.id) }}" 
-                                                   class="btn btn-sm btn-outline-danger" 
-                                                   data-bs-toggle="tooltip" 
-                                                   data-bs-placement="top" 
+                                                <a href="{{ url_for('eliminar_usuario', id=usuario.id) }}"
+                                                   class="btn btn-sm btn-outline-danger"
+                                                   data-bs-toggle="tooltip"
+                                                   data-bs-placement="top"
                                                    title="Eliminar Usuario">
                                                     <i class="fas fa-trash"></i>
                                                 </a>
                                             {% endif %}
                                         </div>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -408,5 +418,73 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
+
+function mostrarModalEstado(nombreUsuario, actionUrl, accion, csrfToken) {
+    const esDesactivar = accion === 'desactivar';
+    const modal = document.getElementById('modalCambioEstado');
+
+    // Configurar contenido del modal
+    document.getElementById('modal-estado-icono').className = esDesactivar
+        ? 'fas fa-user-slash fa-3x text-warning mb-3'
+        : 'fas fa-user-check fa-3x text-success mb-3';
+    document.getElementById('modal-estado-titulo').textContent = esDesactivar
+        ? 'Desactivar Usuario'
+        : 'Activar Usuario';
+    document.getElementById('modal-estado-nombre').textContent = nombreUsuario;
+    document.getElementById('modal-estado-mensaje').textContent = esDesactivar
+        ? 'Este usuario perdera acceso al sistema y aparecera como inactivo. Podras reactivarlo en cualquier momento.'
+        : 'Este usuario recuperara el acceso al sistema y aparecera como activo nuevamente.';
+
+    // Configurar formulario
+    const form = document.getElementById('modal-estado-form');
+    form.action = actionUrl;
+    document.getElementById('modal-estado-csrf').value = csrfToken;
+
+    // Configurar boton
+    const btn = document.getElementById('modal-estado-btn');
+    btn.className = esDesactivar
+        ? 'btn btn-warning'
+        : 'btn btn-success';
+    btn.innerHTML = esDesactivar
+        ? '<i class="fas fa-ban me-1"></i> Si, Desactivar'
+        : '<i class="fas fa-check me-1"></i> Si, Activar';
+
+    // Configurar borde superior
+    document.getElementById('modal-estado-header-bar').className = esDesactivar
+        ? 'modal-header-bar bg-warning'
+        : 'modal-header-bar bg-success';
+
+    // Mostrar modal
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+}
 </script>
+
+<!-- Modal de cambio de estado -->
+<div class="modal fade" id="modalCambioEstado" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div id="modal-estado-header-bar" class="modal-header-bar bg-warning" style="height: 5px; border-radius: 0.375rem 0.375rem 0 0;"></div>
+            <div class="modal-body text-center px-4 py-4">
+                <i id="modal-estado-icono" class="fas fa-user-slash fa-3x text-warning mb-3"></i>
+                <h5 id="modal-estado-titulo" class="fw-bold mb-2">Desactivar Usuario</h5>
+                <p class="mb-1">
+                    <span class="badge bg-dark fs-6 px-3 py-2" id="modal-estado-nombre"></span>
+                </p>
+                <p class="text-muted mt-3 mb-0" id="modal-estado-mensaje"></p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 pb-4">
+                <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Cancelar
+                </button>
+                <form id="modal-estado-form" method="POST" class="d-inline">
+                    <input type="hidden" name="csrf_token" id="modal-estado-csrf" value="">
+                    <button type="submit" id="modal-estado-btn" class="btn btn-warning px-4">
+                        <i class="fas fa-ban me-1"></i> Si, Desactivar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

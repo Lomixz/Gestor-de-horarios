@@ -155,7 +155,7 @@
                                 <span class="input-group-text">
                                     <i class="fas fa-phone"></i>
                                 </span>
-                                {{ form.telefono(class="form-control", placeholder="Ej: 5512345678 (10 dígitos)", maxlength="13", id="telefono_input") }}
+                                {{ form.telefono(class="form-control", placeholder="Ej: 5512345678", maxlength="10", pattern="\d{10}", type="tel", id="telefono_input") }}
                             </div>
                             {% if form.telefono.errors %}
                                 {% for error in form.telefono.errors %}
@@ -239,7 +239,7 @@
                                 <!-- Profesor por Asignatura -->
                                 <div class="col-md-6">
                                     <div class="form-check role-card p-3 border rounded">
-                                        <input class="form-check-input role-checkbox" type="checkbox" 
+                                        <input class="form-check-input role-checkbox" type="checkbox"
                                                name="roles_seleccionados" value="profesor_asignatura" id="role_prof_asig"
                                                {% if usuario and 'profesor_asignatura' in usuario.get_roles_list() %}checked{% endif %}>
                                         <label class="form-check-label d-flex align-items-center" for="role_prof_asig">
@@ -249,6 +249,24 @@
                                             <div>
                                                 <strong>Profesor por Asignatura</strong>
                                                 <small class="d-block text-muted">Horario parcial</small>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Recursos Humanos -->
+                                <div class="col-md-6">
+                                    <div class="form-check role-card p-3 border rounded">
+                                        <input class="form-check-input role-checkbox" type="checkbox"
+                                               name="roles_seleccionados" value="recursos_humanos" id="role_rh"
+                                               {% if usuario and 'recursos_humanos' in usuario.get_roles_list() %}checked{% endif %}>
+                                        <label class="form-check-label d-flex align-items-center" for="role_rh">
+                                            <span class="role-icon bg-success text-white rounded-circle p-2 me-2">
+                                                <i class="fas fa-users-cog"></i>
+                                            </span>
+                                            <div>
+                                                <strong>Recursos Humanos</strong>
+                                                <small class="d-block text-muted">Consulta usuarios dados de baja</small>
                                             </div>
                                         </label>
                                     </div>
@@ -424,6 +442,18 @@
                             </div>
                         </div>
 
+                        <!-- Resetear contraseña -->
+                        {% if usuario %}
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">
+                                <i class="fas fa-key me-1 text-warning"></i>
+                                {{ form.nueva_password.label.text }}
+                            </label>
+                            {{ form.nueva_password(class="form-control", placeholder="Dejar en blanco para no cambiar") }}
+                            <div class="form-text">Si ingresas una nueva contraseña, se actualizará para este usuario.</div>
+                        </div>
+                        {% endif %}
+
                         <!-- Información adicional (solo para edición) -->
                         {% if usuario %}
                         <div class="card bg-light mb-4">
@@ -588,6 +618,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 rolLegacy.value = 'profesor_completo';
             } else if (selectedRoles.includes('profesor_asignatura')) {
                 rolLegacy.value = 'profesor_asignatura';
+            } else if (selectedRoles.includes('recursos_humanos')) {
+                rolLegacy.value = 'recursos_humanos';
             } else {
                 rolLegacy.value = '';
             }

@@ -12,8 +12,16 @@ def init_config_system():
     """Inicializar sistema de configuración y backups"""
     app = Flask(__name__)
     basedir = os.path.abspath(os.path.dirname(__file__))
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(basedir, "instance", "sistema_academico.db")}'
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+        'DATABASE_URL',
+        f'sqlite:///{os.path.join(basedir, "instance", "sistema_academico.db")}'
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    if 'postgresql' in app.config['SQLALCHEMY_DATABASE_URI']:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 5,
+            'pool_pre_ping': True,
+        }
 
     # Importar db desde models (igual que en app.py)
     from models import db, ConfiguracionSistema, BackupHistory
@@ -54,6 +62,9 @@ def init_config_system():
             {'clave': 'class_days_per_week', 'valor': '5', 'tipo': 'int', 'descripcion': 'Días de clase por semana', 'categoria': 'schedule'},
             {'clave': 'class_duration', 'valor': '50', 'tipo': 'int', 'descripcion': 'Duración de clase en minutos', 'categoria': 'schedule'},
             {'clave': 'break_between_classes', 'valor': '10', 'tipo': 'int', 'descripcion': 'Tiempo entre clases en minutos', 'categoria': 'schedule'},
+
+            # Configuración de disponibilidad
+            {'clave': 'require_explicit_availability', 'valor': 'false', 'tipo': 'bool', 'descripcion': 'Requerir disponibilidad explícita de profesores (si false, se asume disponibilidad completa)', 'categoria': 'schedule'},
         ]
 
         print("📝 Configurando valores por defecto...")

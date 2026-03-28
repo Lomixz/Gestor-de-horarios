@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración del Chatbot{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="admin-page-title">
+                        <i class="fas fa-robot me-2"></i>
+                        Configuración del Chatbot
+                    </h2>
+                    <p class="text-muted mt-1">Configurar el asistente inteligente con LLM</p>
+                </div>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>
+                    Volver al Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>
+                        Proveedor LLM
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form id="chatbotConfigForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <!-- Habilitado -->
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="habilitado" name="habilitado">
+                                <label class="form-check-label" for="habilitado">
+                                    <strong>Chatbot habilitado</strong>
+                                </label>
+                            </div>
+                            <small class="text-muted">Cuando está activo, todos los usuarios ven el widget de chat</small>
+                        </div>
+
+                        <hr>
+
+                        <!-- Proveedor -->
+                        <div class="mb-3">
+                            <label for="provider" class="form-label"><strong>Proveedor</strong></label>
+                            <select class="form-select" id="provider" name="provider">
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="claude">Anthropic Claude</option>
+                            </select>
+                        </div>
+
+                        <!-- API Key -->
+                        <div class="mb-3" id="apiKeyGroup">
+                            <label for="api_key" class="form-label"><strong>API Key</strong></label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" id="api_key" name="api_key" placeholder="Ingresa tu API key">
+                                <button class="btn btn-outline-secondary" type="button" onclick="toggleApiKey()">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted">Deja vacío para mantener la key actual</small>
+                        </div>
+
+                        <!-- Ollama URL -->
+                        <div class="mb-3" id="ollamaUrlGroup">
+                            <label for="ollama_url" class="form-label"><strong>URL de Ollama</strong></label>
+                            <input type="text" class="form-control" id="ollama_url" name="ollama_url" placeholder="http://localhost:11434">
+                        </div>
+
+                        <!-- Modelo -->
+                        <div class="mb-3">
+                            <label for="model_name" class="form-label"><strong>Modelo</strong></label>
+                            <input type="text" class="form-control" id="model_name" name="model_name" placeholder="Nombre del modelo">
+                            <small class="text-muted" id="modelHelp"></small>
+                        </div>
+
+                        <hr>
+
+                        <!-- Parámetros avanzados -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="max_tokens" class="form-label">Max Tokens</label>
+                                <input type="number" class="form-control" id="max_tokens" name="max_tokens" min="128" max="4096" value="1024">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="temperatura" class="form-label">Temperatura</label>
+                                <input type="number" class="form-control" id="temperatura" name="temperatura" min="0" max="1" step="0.1" value="0.3">
+                                <small class="text-muted">0 = determinista, 1 = creativo</small>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-info" onclick="testConnection()">
+                                <i class="fas fa-plug me-1"></i>
+                                Test Conexión
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>
+                                Guardar Configuración
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Test result -->
+                    <div id="testResult" class="mt-3" style="display:none;"></div>
+                </div>
+            </div>
+
+            <!-- Info cards -->
+            <div class="row mt-4">
+                <div class="col-md-6 mb-3">
+                    <div class="card border-info">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-server me-1 text-info"></i> Ollama</h6>
+                            <p class="card-text small">Modelos locales sin costo. Requiere Ollama instalado. Modelos sugeridos: llama3, mistral, gemma2</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card border-success">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-cloud me-1 text-success"></i> OpenAI</h6>
+                            <p class="card-text small">API de pago. Modelos: gpt-4o-mini (económico), gpt-4o (potente)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card border-warning">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-gem me-1 text-warning"></i> Google Gemini</h6>
+                            <p class="card-text small">API con plan gratuito. Modelos: gemini-2.0-flash (rápido), gemini-1.5-pro</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="fas fa-brain me-1 text-primary"></i> Claude</h6>
+                            <p class="card-text small">API de Anthropic. Modelos: claude-sonnet-4-6 (rápido), claude-opus-4-6 (potente)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const modelSuggestions = {
+        'ollama': 'Ej: llama3, mistral, gemma2, codellama',
+        'openai': 'Ej: gpt-4o-mini, gpt-4o, gpt-3.5-turbo',
+        'gemini': 'Ej: gemini-2.0-flash, gemini-1.5-pro',
+        'claude': 'Ej: claude-sonnet-4-6, claude-haiku-4-5-20251001'
+    };
+
+    const defaultModels = {
+        'ollama': 'llama3',
+        'openai': 'gpt-4o-mini',
+        'gemini': 'gemini-2.0-flash',
+        'claude': 'claude-sonnet-4-6'
+    };
+
+    // Load current config
+    document.addEventListener('DOMContentLoaded', function() {
+        secureFetch('/api/chatbot/status')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                document.getElementById('provider').value = data.provider || 'ollama';
+                document.getElementById('habilitado').checked = data.habilitado || false;
+                document.getElementById('model_name').value = data.model_name || '';
+                document.getElementById('ollama_url').value = data.ollama_url || 'http://localhost:11434';
+                document.getElementById('max_tokens').value = data.max_tokens || 1024;
+                document.getElementById('temperatura').value = data.temperatura || 0.3;
+                updateProviderUI();
+            })
+            .catch(function() {});
+    });
+
+    document.getElementById('provider').addEventListener('change', function() {
+        updateProviderUI();
+        document.getElementById('model_name').value = defaultModels[this.value] || '';
+    });
+
+    function updateProviderUI() {
+        var provider = document.getElementById('provider').value;
+        var apiKeyGroup = document.getElementById('apiKeyGroup');
+        var ollamaUrlGroup = document.getElementById('ollamaUrlGroup');
+        var modelHelp = document.getElementById('modelHelp');
+
+        apiKeyGroup.style.display = provider === 'ollama' ? 'none' : 'block';
+        ollamaUrlGroup.style.display = provider === 'ollama' ? 'block' : 'none';
+        modelHelp.textContent = modelSuggestions[provider] || '';
+    }
+
+    function toggleApiKey() {
+        var input = document.getElementById('api_key');
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function testConnection() {
+        var resultDiv = document.getElementById('testResult');
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin me-2"></i>Probando conexión...</div>';
+
+        // Save config first, then test
+        saveConfig(function() {
+            secureFetch('/api/chatbot/test', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>' + data.message + '</div>';
+                    } else {
+                        resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>' + data.message + '</div>';
+                    }
+                })
+                .catch(function(err) {
+                    resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>Error de conexión</div>';
+                });
+        });
+    }
+
+    function saveConfig(callback) {
+        var formData = {
+            provider: document.getElementById('provider').value,
+            model_name: document.getElementById('model_name').value,
+            habilitado: document.getElementById('habilitado').checked ? 'true' : 'false',
+            api_key: document.getElementById('api_key').value,
+            ollama_url: document.getElementById('ollama_url').value,
+            max_tokens: document.getElementById('max_tokens').value,
+            temperatura: document.getElementById('temperatura').value
+        };
+
+        secureFetch('/api/chatbot/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(formData)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (callback) callback();
+            else {
+                var resultDiv = document.getElementById('testResult');
+                resultDiv.style.display = 'block';
+                if (data.success) {
+                    resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i>' + data.message + '</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i>' + (data.message || data.error) + '</div>';
+                }
+                setTimeout(function() { resultDiv.style.display = 'none'; }, 3000);
+            }
+        })
+        .catch(function() {
+            if (!callback) alert('Error guardando configuración');
+        });
+    }
+
+    document.getElementById('chatbotConfigForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        saveConfig();
+    });
+
+    // Initialize UI
+    updateProviderUI();
+</script>
+{% endblock %}
