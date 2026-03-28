@@ -576,13 +576,15 @@ def procesar_archivo_materias(archivo, carrera_defecto_id=None, restar_horas=0):
             resultado['mensaje'] = 'No se encontraron registros para procesar'
         
     except pd.errors.EmptyDataError:
+        db.session.rollback()
         resultado['mensaje'] = 'El archivo está vacío o no tiene datos válidos'
     except pd.errors.ParserError:
+        db.session.rollback()
         resultado['mensaje'] = 'Error al leer el archivo. Verifica que sea un CSV válido'
     except Exception as e:
         db.session.rollback()
         resultado['mensaje'] = f"Error al leer el archivo: {str(e)}"
-    
+
     return resultado
 
 def generar_pdf_materias(materias, nombre_carrera=None, cuatrimestre=None, ciclo=None):
@@ -1373,9 +1375,10 @@ def procesar_archivo_asignaciones_grupo(archivo):
             resultado['mensaje'] = 'No se procesaron asignaciones válidas'
         
     except Exception as e:
+        db.session.rollback()
         resultado['mensaje'] = f'Error al procesar archivo: {str(e)}'
         resultado['errores'].append(str(e))
-    
+
     return resultado
 
 

@@ -142,8 +142,6 @@ def load_user(user_id):
 from app_pkg.blueprints.api import api_bp
 app.register_blueprint(api_bp)
 
-from app_pkg.blueprints.chatbot import chatbot_bp
-app.register_blueprint(chatbot_bp)
 
 # Security headers
 @app.after_request
