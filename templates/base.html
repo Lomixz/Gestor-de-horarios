@@ -69,6 +69,11 @@
                                 <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">
                                     <i class="fas fa-tachometer-alt me-2"></i>Dashboard
                                 </a></li>
+                                {% if current_user.is_admin() %}
+                                <li><a class="dropdown-item" href="{{ url_for('exportar_datos') }}">
+                                    <i class="fas fa-file-export me-2 text-primary"></i>Exportaciones
+                                </a></li>
+                                {% endif %}
                                 <li><hr class="dropdown-divider my-1"></li>
                                 <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
                                     <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión

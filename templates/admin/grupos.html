@@ -13,13 +13,23 @@
                     Gestión de Grupos Académicos
                 </h2>
                 <div class="page-actions">
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-1"></i>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left me-2"></i>
                         Volver al Dashboard
                     </a>
+                    <div class="btn-group me-2">
+                        <a href="{{ url_for('importar_grupos_csv_route') }}" class="btn btn-outline-success">
+                            <i class="fas fa-file-import me-1"></i>
+                            Importar
+                        </a>
+                        <a href="{{ url_for('exportar_grupos_csv_route') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-file-export me-1"></i>
+                            Exportar
+                        </a>
+                    </div>
                     <a href="{{ url_for('asignacion_masiva_materias_grupos') }}" class="btn btn-success">
                         <i class="fas fa-th me-1"></i>
-                        Asignación Masiva de Materias
+                        Asignación Masiva
                     </a>
                     <a href="{{ url_for('crear_grupo') }}" class="btn btn-primary">
                         <i class="fas fa-plus me-1"></i>

@@ -12,50 +12,56 @@
                     <h2 class="admin-page-title"><i class="bi bi-clock-history"></i> Disponibilidad Horaria de Profesores</h2>
                     <p class="text-muted mb-0">Panel de Administrador - Gestión Global</p>
                 </div>
-                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left"></i> Volver al Dashboard
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left me-2"></i> Volver al Dashboard
                 </a>
             </div>
         </div>
     </div>
 
     <!-- Tarjetas de estadísticas -->
-    <div class="row mb-4">
+    <div class="row g-3 mb-4">
         <div class="col-md-4">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
+            <div class="card kpi-card bg-primary text-white border-0 shadow-sm" style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%) !important;">
+                <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="card-title mb-0">Total de Profesores</h6>
-                            <h2 class="mb-0">{{ total_profesores }}</h2>
+                            <h6 class="text-white mb-1 fw-semibold">Total de Profesores</h6>
+                            <h2 class="mb-0 fw-bold text-white">{{ total_profesores }}</h2>
                         </div>
-                        <i class="bi bi-people-fill admin-stat-icon"></i>
+                        <div class="kpi-icon-outer bg-white bg-opacity-25 rounded-circle p-3">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-success text-white">
-                <div class="card-body">
+            <div class="card kpi-card bg-success text-white border-0 shadow-sm" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;">
+                <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="card-title mb-0">Con Disponibilidad</h6>
-                            <h2 class="mb-0">{{ profesores_con_disponibilidad }}</h2>
+                            <h6 class="text-white mb-1 fw-semibold">Con Disponibilidad</h6>
+                            <h2 class="mb-0 fw-bold text-white">{{ profesores_con_disponibilidad }}</h2>
                         </div>
-                        <i class="bi bi-check-circle-fill admin-stat-icon"></i>
+                        <div class="kpi-icon-outer bg-white bg-opacity-25 rounded-circle p-3">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card bg-warning text-white">
-                <div class="card-body">
+            <div class="card kpi-card bg-warning text-white border-0 shadow-sm" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;">
+                <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="card-title mb-0">Sin Disponibilidad</h6>
-                            <h2 class="mb-0">{{ total_profesores - profesores_con_disponibilidad }}</h2>
+                            <h6 class="text-white mb-1 fw-semibold">Sin Disponibilidad</h6>
+                            <h2 class="mb-0 fw-bold text-white">{{ total_profesores - profesores_con_disponibilidad }}</h2>
                         </div>
-                        <i class="bi bi-exclamation-triangle-fill admin-stat-icon"></i>
+                        <div class="kpi-icon-outer bg-white bg-opacity-25 rounded-circle p-3">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>

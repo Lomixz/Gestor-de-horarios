@@ -231,7 +231,7 @@
                                     <i class="fas fa-users fa-2x text-primary mb-2"></i>
                                     <h6>Gestión de Usuarios</h6>
                                     <p class="small text-muted">Administrar todos los usuarios del sistema</p>
-                                    <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary-premium btn-sm">Acceder</a>
+                                    <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-outline-primary btn-sm">Acceder</a>
                                 </div>
                             </div>
                         </div>
@@ -312,7 +312,7 @@
                                     <i class="fas fa-user-clock fa-2x text-primary mb-2"></i>
                                     <h6>Horarios por Profesor</h6>
                                     <p class="small text-muted">Consultar horario de cada profesor</p>
-                                    <a href="{{ url_for('admin_horario_profesores') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
+                                    <a href="{{ url_for('admin_horario_profesores') }}" class="btn btn-outline-primary btn-sm">Consultar</a>
                                 </div>
                             </div>
                         </div>
@@ -343,7 +343,7 @@
                                     <i class="fas fa-calendar-alt fa-2x text-danger mb-2"></i>
                                     <h6>Horarios Académicos</h6>
                                     <p class="small text-muted">Generar y gestionar horarios de clases</p>
-                                    <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-danger btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_horarios_academicos') }}" class="btn btn-outline-danger btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -368,12 +368,34 @@
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <div class="card border-danger">
-                                <div class="card-body text-center">
-                                    <i class="fas fa-user-slash fa-2x text-danger mb-2"></i>
-                                    <h6>Usuarios Dados de Baja</h6>
-                                    <p class="small text-muted">Consultar y exportar usuarios inactivos</p>
-                                    <a href="{{ url_for('rh_usuarios_baja') }}" class="btn btn-outline-danger btn-sm">Ver</a>
+                            <div class="card border-primary h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <div class="mb-2">
+                                        <i class="fas fa-file-export fa-2x text-primary"></i>
+                                    </div>
+                                    <h6>Exportación Masiva</h6>
+                                    <p class="small text-muted flex-grow-1">Centro de exportación de profesores, materias, carreras y grupos</p>
+                                    <div class="mt-2 text-center">
+                                        <a href="{{ url_for('exportar_datos') }}" class="btn btn-outline-primary btn-sm">
+                                            Exportar
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-danger h-100">
+                                <div class="card-body text-center d-flex flex-column">
+                                    <div class="mb-2">
+                                        <i class="fas fa-user-slash fa-2x text-danger"></i>
+                                    </div>
+                                    <h6>Usuarios de Baja</h6>
+                                    <p class="small text-muted flex-grow-1">Consultar y exportar usuarios inactivos</p>
+                                    <div class="mt-2 text-center">
+                                        <a href="{{ url_for('rh_usuarios_baja') }}" class="btn btn-outline-danger btn-sm">
+                                            Ver
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -394,7 +416,7 @@
                                         <i class="fas fa-users fa-2x text-primary mb-2"></i>
                                         <h6>Gestión de Usuarios</h6>
                                         <p class="small text-muted">Consultar y exportar lista de usuarios activos</p>
-                                        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-primary-premium btn-sm">Ver Usuarios</a>
+                                        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-outline-primary btn-sm">Ver Usuarios</a>
                                     </div>
                                 </div>
                             </div>
@@ -428,7 +450,7 @@
                                     <i class="fas fa-chalkboard-teacher fa-2x text-primary mb-2"></i>
                                     <h6>Gestión de Profesores</h6>
                                     <p class="small text-muted">Administrar profesores de la carrera</p>
-                                    <a href="{{ url_for('gestionar_profesores_jefe') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_profesores_jefe') }}" class="btn btn-outline-primary btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -438,7 +460,7 @@
                                     <i class="fas fa-book fa-2x text-success mb-2"></i>
                                     <h6>Plan de Estudios</h6>
                                     <p class="small text-muted">Revisar y modificar plan de estudios</p>
-                                    <a href="{{ url_for('gestionar_materias_jefe') }}" class="btn btn-primary-premium btn-sm">Ver Plan</a>
+                                    <a href="{{ url_for('gestionar_materias_jefe') }}" class="btn btn-outline-success btn-sm">Ver Plan</a>
                                 </div>
                             </div>
                         </div>
@@ -448,7 +470,7 @@
                                     <i class="fas fa-layer-group fa-2x text-info mb-2"></i>
                                     <h6>Gestión de Grupos</h6>
                                     <p class="small text-muted">Administrar grupos académicos de tu carrera</p>
-                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
+                                    <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-outline-info btn-sm">Gestionar</a>
                                 </div>
                             </div>
                         </div>
@@ -458,7 +480,7 @@
                                     <i class="fas fa-tasks fa-2x text-danger mb-2"></i>
                                     <h6>Asignación Masiva de Materias</h6>
                                     <p class="small text-muted">Asignar materias a múltiples profesores</p>
-                                    <a href="{{ url_for('asignacion_masiva_materias_jefe') }}" class="btn btn-danger btn-sm">Asignar</a>
+                                    <a href="{{ url_for('asignacion_masiva_materias_jefe') }}" class="btn btn-outline-danger btn-sm">Asignar</a>
                                 </div>
                             </div>
                         </div>
@@ -469,7 +491,7 @@
             
             <h6>Horarios de Profesores</h6>
             <p class="small text-muted">Ver horarios de los profesores de tu carrera</p>
-            <a href="{{ url_for('jefe_ver_horarios_profesores') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
+            <a href="{{ url_for('jefe_ver_horarios_profesores') }}" class="btn btn-outline-primary btn-sm">Consultar</a>
         </div>
     </div>
 </div>
@@ -481,7 +503,7 @@
             
             <h6>Horarios por Grupo</h6>
             <p class="small text-muted">Ver horarios por grupo de tu carrera</p>
-            <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-primary-premium btn-sm">Consultar</a>
+            <a href="{{ url_for('jefe_ver_horarios_grupos') }}" class="btn btn-outline-success btn-sm">Consultar</a>
         </div>
     </div>
 </div>
@@ -492,7 +514,7 @@
             <i class="fas fa-calendar-check fa-2x text-warning mb-2"></i>
             <h6>Disponibilidad de Profesores</h6>
             <p class="small text-muted">Gestionar disponibilidad horaria de profesores</p>
-            <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-primary-premium btn-sm">Gestionar</a>
+            <a href="{{ url_for('disponibilidad_profesores_jefe') }}" class="btn btn-outline-warning btn-sm">Gestionar</a>
         </div>
     </div>
 </div>
@@ -542,7 +564,7 @@
                                     <i class="fas fa-calendar-alt fa-2x text-success mb-2"></i>
                                     <h6>Mis Horarios</h6>
                                     <p class="small text-muted">Ver mis horarios y materias asignadas</p>
-                                    <a href="{{ url_for('profesor_horarios') }}" class="btn btn-primary-premium btn-sm">Ver Horarios</a>
+                                    <a href="{{ url_for('profesor_horarios') }}" class="btn btn-outline-success btn-sm">Ver Horarios</a>
                                 </div>
                             </div>
                         </div>
@@ -552,7 +574,7 @@
                                     <i class="fas fa-clock fa-2x text-warning mb-2"></i>
                                     <h6>Mi Disponibilidad</h6>
                                     <p class="small text-muted">Ver y gestionar mi disponibilidad horaria</p>
-                                    <a href="{{ url_for('profesor_disponibilidad') }}" class="btn btn-primary-premium btn-sm">Ver Disponibilidad</a>
+                                    <a href="{{ url_for('profesor_disponibilidad') }}" class="btn btn-outline-warning btn-sm">Ver Disponibilidad</a>
                                 </div>
                             </div>
                         </div>
@@ -562,7 +584,7 @@
                                     <i class="fas fa-book fa-2x text-info mb-2"></i>
                                     <h6>Mis Materias</h6>
                                     <p class="small text-muted">Ver materias que tengo asignadas</p>
-                                    <a href="{{ url_for('profesor_mis_materias') }}" class="btn btn-primary-premium btn-sm">Ver Materias</a>
+                                    <a href="{{ url_for('profesor_mis_materias') }}" class="btn btn-outline-info btn-sm">Ver Materias</a>
                                 </div>
                             </div>
                         </div>

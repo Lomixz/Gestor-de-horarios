@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Grupos - Administración{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-4">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-file-import me-2"></i>Importar Grupos (CSV / Excel)
+                </h5>
+                <a href="{{ url_for('gestionar_grupos') }}" class="btn btn-sm btn-light">
+                    <i class="fas fa-arrow-left"></i> Volver
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <h6 class="alert-heading"><i class="fas fa-info-circle me-1"></i> Instrucciones Importantes</h6>
+                    <ul class="mb-0 small">
+                        <li>El archivo debe contener las columnas: <strong>numero_grupo, turno, cuatrimestre, carrera_codigo</strong>.</li>
+                        <li><strong>numero_grupo:</strong> El código distintivo del grupo (ej: 101, 102, 111).</li>
+                        <li><strong>turno:</strong> Debe ser 'matutino' o 'vespertino'.</li>
+                        <li><strong>cuatrimestre:</strong> Número entero del 1 al 10.</li>
+                        <li><strong>carrera_codigo:</strong> El código corto de la carrera (ej: IRO, ISC, IND).</li>
+                    </ul>
+                </div>
+
+                <div class="text-center mb-4">
+                    <a href="{{ url_for('descargar_plantilla_grupos_csv_route') }}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-file-csv me-1"></i> Descargar Plantilla CSV
+                    </a>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-4">
+                        {{ form.archivo.label(class="form-label font-weight-bold") }}
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-file-upload"></i></span>
+                            {{ form.archivo(class="form-control") }}
+                        </div>
+                        {% if form.archivo.errors %}
+                            {% for error in form.archivo.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        {{ form.carrera_id.label(class="form-label font-weight-bold") }}
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-graduation-cap"></i></span>
+                            {{ form.carrera_id(class="form-select") }}
+                        </div>
+                        <div class="form-text small text-muted">
+                            Esta carrera se usará si el código de carrera en el archivo no se encuentra en el sistema.
+                        </div>
+                        {% if form.carrera_id.errors %}
+                            {% for error in form.carrera_id.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-1"></i> Iniciar Importación
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4 border-left-warning shadow">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="font-weight-bold text-warning mb-1">Nota sobre actualizaciones:</h6>
+                        <p class="small text-muted mb-0">Si el número de grupo ya existe dentro de la misma carrera, la información se actualizará automáticamente con los datos del archivo.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Centro de Exportación - Administración{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-file-export me-2 text-primary"></i>Centro de Exportación de Datos
+            </h1>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Volver al Panel
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Profesores -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Profesores</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">CSV/Plantilla</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-user-tie fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{{ url_for('exportar_profesores_csv_route') }}" class="btn btn-sm btn-primary w-100 mb-2">
+                            <i class="fas fa-download me-1"></i> Exportar CSV
+                        </a>
+                        <p class="small text-muted mb-0">Exporta la lista actual en el formato para importación masiva.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Materias -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Materias</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">CSV/Plantilla</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-book fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{{ url_for('exportar_materias_csv_route') }}" class="btn btn-sm btn-success w-100 mb-2">
+                            <i class="fas fa-download me-1"></i> Exportar CSV
+                        </a>
+                        <p class="small text-muted mb-0">Exporta todas las materias activas para edición masiva.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Carreras -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Carreras</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">CSV/Plantilla</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-graduation-cap fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{{ url_for('exportar_carreras_csv_route') }}" class="btn btn-sm btn-info w-100 mb-2 text-white">
+                            <i class="fas fa-download me-1"></i> Exportar CSV
+                        </a>
+                        <p class="small text-muted mb-0">Exporta el catálogo completo de carreras.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grupos -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Grupos</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">CSV/Plantilla</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <a href="{{ url_for('exportar_grupos_csv_route') }}" class="btn btn-sm btn-warning w-100 mb-2 text-white">
+                            <i class="fas fa-download me-1"></i> Exportar CSV
+                        </a>
+                        <p class="small text-muted mb-0">Exporta los grupos actuales organizados por carrera y turno.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 bg-light">
+                    <h6 class="m-0 font-weight-bold text-primary">Información sobre la Exportación</h6>
+                </div>
+                <div class="card-body">
+                    <p>Los archivos CSV generados en esta sección son <strong>100% compatibles</strong> con las herramientas de importación masiva del sistema. Esto le permite:</p>
+                    <ol>
+                        <li>Exportar los datos actuales.</li>
+                        <li>Realizar modificaciones rápidas en Excel o cualquier editor de hojas de cálculo.</li>
+                        <li>Volver a importar el archivo para actualizar los registros en segundos.</li>
+                    </ol>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Nota:</strong> Para las exportaciones de PDF (reportes visuales), diríjase a las secciones correspondientes de Gestión de Profesores o Gestión de Materias.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

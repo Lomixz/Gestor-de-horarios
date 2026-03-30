@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from flask_wtf.file import FileField, FileAllowed
+from flask_wtf.file import FileField, FileAllowed, FileRequired
 from wtforms import StringField, PasswordField, SelectField, SelectMultipleField, SubmitField, IntegerField, TimeField, TextAreaField, BooleanField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError, NumberRange, Optional, Regexp
 from models import User, Horario, Carrera, Materia
@@ -1176,3 +1176,20 @@ class SubirImagenForm(FlaskForm):
         validate_file_size(2)
     ])
     submit = SubmitField('Subir Imagen')
+
+class ImportarGruposForm(FlaskForm):
+    """Formulario para importar grupos desde CSV/Excel"""
+    archivo = FileField('Archivo CSV o Excel', validators=[
+        FileRequired(message='Debe seleccionar un archivo'),
+        FileAllowed(['csv', 'xls', 'xlsx'], 'Solo se permiten archivos CSV o Excel')
+    ])
+    carrera_id = SelectField('Carrera por defecto', coerce=int, validators=[Optional()])
+    submit = SubmitField('Importar Grupos')
+    
+    def __init__(self, *args, **kwargs):
+        super(ImportarGruposForm, self).__init__(*args, **kwargs)
+        from models import Carrera
+        self.carrera_id.choices = [(0, '-- Seleccione una carrera (opcional) --')] + [
+            (c.id, f"{c.codigo} - {c.nombre}") 
+            for c in Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
+        ]
