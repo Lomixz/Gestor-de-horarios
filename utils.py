@@ -441,6 +441,137 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,
     
     return response
 
+def exportar_profesores_csv():
+    """Exportar todos los profesores en formato compatible con la plantilla"""
+    profesores = User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura', 'jefe_carrera'])).all()
+    
+    lineas = ['nombre,apellido_paterno,apellido_materno,email,telefono,rol,tipo_profesor,carrera_codigo']
+    
+    for p in profesores:
+        # Dividir apellido si es posible (asumiendo Paterno Materno)
+        apellidos = p.apellido.split(' ', 1)
+        paterno = apellidos[0] if len(apellidos) > 0 else p.apellido
+        materno = apellidos[1] if len(apellidos) > 1 else ''
+        
+        rol = 'profesor' if p.rol in ['profesor_completo', 'profesor_asignatura'] else p.rol
+        tipo = p.rol if p.rol in ['profesor_completo', 'profesor_asignatura'] else ''
+        
+        carreras = ""
+        if p.rol == 'jefe_carrera' and p.carrera_id:
+            carrera = Carrera.query.get(p.carrera_id)
+            if carrera: carreras = carrera.codigo
+        elif p.carreras:
+            carreras = ','.join([c.codigo for c in p.carreras])
+            
+        lineas.append(f"{p.nombre},{paterno},{materno},{p.email},{p.telefono or ''},{rol},{tipo},{carreras}")
+    
+    return '\n'.join(lineas)
+
+def exportar_materias_csv():
+    """Exportar todas las materias en formato compatible con la plantilla"""
+    materias = Materia.query.filter_by(activa=True).all()
+    lineas = ['nombre,codigo,cuatrimestre,carrera_codigo,creditos,horas_semanales,descripcion']
+    
+    for m in materias:
+        carrera_codigo = m.carrera.codigo if m.carrera else ''
+        descripcion = m.descripcion if m.descripcion else ''
+        lineas.append(f"{m.nombre},{m.codigo},{m.cuatrimestre},{carrera_codigo},{m.creditos},{m.horas_semanales},{descripcion}")
+    
+    return '\n'.join(lineas)
+
+def exportar_carreras_csv():
+    """Exportar todas las carreras en formato compatible con la plantilla"""
+    carreras = Carrera.query.filter_by(activa=True).all()
+    lineas = ['codigo,nombre,descripcion,facultad']
+    
+    for c in carreras:
+        descripcion = c.descripcion if c.descripcion else ''
+        facultad = c.facultad if c.facultad else ''
+        lineas.append(f"{c.codigo},{c.nombre},{descripcion},{facultad}")
+    
+    return '\n'.join(lineas)
+
+def exportar_grupos_csv():
+    """Exportar todos los grupos en formato compatible con la plantilla"""
+    from models import Grupo
+    grupos = Grupo.query.filter_by(activo=True).all()
+    lineas = ['numero_grupo,turno,cuatrimestre,carrera_codigo']
+    
+    for g in grupos:
+        carrera_codigo = g.carrera.codigo if g.carrera else ''
+        lineas.append(f"{g.codigo},{g.turno or ''},{g.cuatrimestre or ''},{carrera_codigo}")
+    
+    return '\n'.join(lineas)
+
+def generar_plantilla_grupos_csv():
+    """Generar archivo CSV de plantilla para importar grupos"""
+    contenido_csv = "numero_grupo,turno,cuatrimestre,carrera_codigo\n101,matutino,1,IRO\n102,matutino,1,IRO\n151,vespertino,1,IRO\n"
+    response = make_response(contenido_csv)
+    response.headers["Content-Disposition"] = "attachment; filename=plantilla_grupos.csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
+    return response
+
+def procesar_archivo_grupos_csv(archivo, carrera_defecto_id=None):
+    """Procesar archivo CSV/Excel con datos de grupos"""
+    from models import Grupo
+    resultado = {'exito': False, 'procesados': 0, 'creados': 0, 'actualizados': 0, 'errores': [], 'mensaje': ''}
+    
+    try:
+        if archivo.filename.endswith('.csv'):
+            try:
+                df = pd.read_csv(archivo, encoding='utf-8')
+            except:
+                archivo.seek(0)
+                df = pd.read_csv(archivo, encoding='latin-1')
+        else:
+            df = pd.read_excel(archivo)
+            
+        df.columns = df.columns.str.strip().str.lower()
+        
+        for index, row in df.iterrows():
+            try:
+                resultado['procesados'] += 1
+                if pd.isna(row['numero_grupo']):
+                    resultado['errores'].append(f"Fila {index + 2}: 'numero_grupo' es obligatorio.")
+                    continue
+                
+                codigo = str(row['numero_grupo']).strip()
+                turno = str(row['turno']).lower().strip() if 'turno' in df.columns and not pd.isna(row['turno']) else 'matutino'
+                cuatrimestre = int(row['cuatrimestre']) if 'cuatrimestre' in df.columns and not pd.isna(row['cuatrimestre']) else 1
+                
+                # Carrera
+                carrera_id = carrera_defecto_id
+                if 'carrera_codigo' in df.columns and not pd.isna(row['carrera_codigo']):
+                    c = Carrera.query.filter_by(codigo=str(row['carrera_codigo']).upper().strip()).first()
+                    if c: carrera_id = c.id
+                
+                if not carrera_id:
+                    resultado['errores'].append(f"Fila {index + 2}: No se pudo determinar la carrera.")
+                    continue
+                
+                grupo = Grupo.query.filter_by(codigo=codigo, carrera_id=carrera_id, activo=True).first()
+                if grupo:
+                    grupo.turno = turno
+                    grupo.cuatrimestre = cuatrimestre
+                    resultado['actualizados'] += 1
+                else:
+                    nuevo_grupo = Grupo(codigo=codigo, turno=turno, cuatrimestre=cuatrimestre, carrera_id=carrera_id)
+                    db.session.add(nuevo_grupo)
+                    resultado['creados'] += 1
+                    
+            except Exception as e:
+                resultado['errores'].append(f"Fila {index + 2}: {str(e)}")
+                
+        db.session.commit()
+        resultado['exito'] = True
+        resultado['mensaje'] = f"Procesados: {resultado['procesados']}, Creados: {resultado['creados']}, Actualizados: {resultado['actualizados']}"
+        
+    except Exception as e:
+        db.session.rollback()
+        resultado['mensaje'] = f"Error general: {str(e)}"
+        
+    return resultado
+
 def procesar_archivo_materias(archivo, carrera_defecto_id=None, restar_horas=0):
     """
     Procesar archivo CSV/Excel con datos de materias

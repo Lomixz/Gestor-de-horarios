@@ -13,11 +13,14 @@ from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm
                    GenerarHorariosForm, EditarHorarioAcademicoForm, EliminarHorarioAcademicoForm,
                    DisponibilidadProfesorForm, EditarDisponibilidadProfesorForm, AgregarProfesorForm,
                    EditarUsuarioForm, AsignarMateriasProfesorForm, GrupoForm, AsignarMateriasGrupoForm,
-                   CambiarPasswordProfesorForm, ImportarCarrerasForm, ImportarAsignacionesForm)
+                   CambiarPasswordProfesorForm, ImportarCarrerasForm, ImportarAsignacionesForm,
+                   ImportarGruposForm)
 from utils import (procesar_archivo_profesores, generar_pdf_profesores, procesar_archivo_materias, 
-                   generar_pdf_materias, generar_plantilla_csv, procesar_archivo_carreras, 
-                   generar_plantilla_csv_carreras, procesar_archivo_asignaciones, 
-                   generar_plantilla_csv_asignaciones, calcular_carga_profesor)
+                    generar_pdf_materias, generar_plantilla_csv, procesar_archivo_carreras, 
+                    generar_plantilla_csv_carreras, procesar_archivo_asignaciones, 
+                    generar_plantilla_csv_asignaciones, calcular_carga_profesor,
+                    exportar_profesores_csv, exportar_materias_csv, exportar_carreras_csv,
+                    exportar_grupos_csv, generar_plantilla_grupos_csv, procesar_archivo_grupos_csv)
 from datetime import time, datetime, timedelta
 from urllib.parse import urlparse
 import os
@@ -1526,6 +1529,93 @@ def gestionar_grupos():
 
     
     return render_template('admin/grupos.html', grupos=grupos, carreras=carreras)
+
+# --- NUEVAS RUTAS DE EXPORTACIÓN ---
+
+@app.route('/admin/exportar-datos')
+@login_required
+def exportar_datos():
+    """Centro de exportación de datos"""
+    if not current_user.is_admin():
+        flash('No tienes permisos para acceder a esta página.', 'error')
+        return redirect(url_for('dashboard'))
+    return render_template('admin/exportar_datos.html')
+
+@app.route('/admin/profesores/exportar-csv')
+@login_required
+def exportar_profesores_csv_route():
+    if not current_user.is_admin():
+        flash('No tienes permisos.', 'error')
+        return redirect(url_for('dashboard'))
+    contenido_csv = exportar_profesores_csv()
+    response = make_response(contenido_csv)
+    response.headers["Content-Disposition"] = "attachment; filename=profesores_export.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
+@app.route('/admin/materias/exportar-csv')
+@login_required
+def exportar_materias_csv_route():
+    if not current_user.is_admin():
+        flash('No tienes permisos.', 'error')
+        return redirect(url_for('dashboard'))
+    contenido_csv = exportar_materias_csv()
+    response = make_response(contenido_csv)
+    response.headers["Content-Disposition"] = "attachment; filename=materias_export.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
+@app.route('/admin/carreras/exportar-csv')
+@login_required
+def exportar_carreras_csv_route():
+    if not current_user.is_admin():
+        flash('No tienes permisos.', 'error')
+        return redirect(url_for('dashboard'))
+    contenido_csv = exportar_carreras_csv()
+    response = make_response(contenido_csv)
+    response.headers["Content-Disposition"] = "attachment; filename=carreras_export.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
+@app.route('/admin/grupos/exportar-csv')
+@login_required
+def exportar_grupos_csv_route():
+    if not current_user.is_admin() and not current_user.is_jefe_carrera():
+        flash('No tienes permisos.', 'error')
+        return redirect(url_for('dashboard'))
+    contenido_csv = exportar_grupos_csv()
+    response = make_response(contenido_csv)
+    response.headers["Content-Disposition"] = "attachment; filename=grupos_export.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+
+@app.route('/admin/grupos/importar-csv', methods=['GET', 'POST'])
+@login_required
+def importar_grupos_csv_route():
+    if not current_user.is_admin() and not current_user.is_jefe_carrera():
+        flash('No tienes permisos.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    form = ImportarGruposForm()
+    if form.validate_on_submit():
+        archivo = form.archivo.data
+        if archivo:
+            nombre_archivo = secure_filename(archivo.filename)
+            resultado = procesar_archivo_grupos_csv(archivo, form.carrera_id.data if form.carrera_id.data != 0 else None)
+            if resultado['exito']:
+                flash(resultado['mensaje'], 'success')
+                return redirect(url_for('gestionar_grupos'))
+            else:
+                flash(resultado['mensaje'], 'error')
+                for error in resultado['errores']:
+                    flash(error, 'warning')
+    
+    return render_template('admin/importar_grupos.html', form=form)
+
+@app.route('/admin/grupos/plantilla-csv')
+@login_required
+def descargar_plantilla_grupos_csv_route():
+    return generar_plantilla_grupos_csv()
 
 @app.route('/admin/grupo/nuevo', methods=['GET', 'POST'])
 @login_required
