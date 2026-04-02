@@ -2703,6 +2703,44 @@ def eliminar_materia(id):
         flash('Error al eliminar la materia. Inténtalo de nuevo.', 'error')
         return redirect(url_for('gestionar_materias'))
 
+@app.route('/admin/materias/eliminar-masivo', methods=['POST'])
+@login_required
+def eliminar_materias_masivo():
+    """Eliminar múltiples materias de una sola vez (solo admin)"""
+    if not current_user.is_admin():
+        return jsonify({'error': 'No tienes permisos para realizar esta acción.'}), 403
+    
+    try:
+        # Los IDs suelen venir como una cadena separada por comas o en un array JSON
+        ids_raw = request.form.get('ids', '')
+        if not ids_raw:
+            flash('No se seleccionaron materias para eliminar.', 'warning')
+            return redirect(url_for('gestionar_materias'))
+            
+        ids = [int(id_str) for id_str in ids_raw.split(',') if id_str.strip()]
+        
+        if not ids:
+            flash('No se seleccionaron materias válidas para eliminar.', 'warning')
+            return redirect(url_for('gestionar_materias'))
+            
+        # Realizar el borrado lógico (soft delete)
+        materias = Materia.query.filter(Materia.id.in_(ids)).all()
+        contador = 0
+        for materia in materias:
+            materia.activa = False
+            contador += 1
+            
+        db.session.commit()
+        
+        flash(f'Se han eliminado {contador} materias exitosamente.', 'success')
+        return redirect(url_for('gestionar_materias'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar materias: {str(e)}', 'error')
+        logger.error(f"Error en eliminar materias masivo: {e}")
+        return redirect(url_for('gestionar_materias'))
+
 @app.route('/admin/materias/importar', methods=['GET', 'POST'])
 @login_required
 def importar_materias():
