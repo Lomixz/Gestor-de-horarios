@@ -195,6 +195,10 @@
                             <i class="fas fa-file-pdf me-1"></i>
                             Exportar PDF
                         </button>
+                        <button type="button" id="btn-eliminar-masivo" class="btn btn-danger btn-sm d-none" onclick="eliminarMasivo()">
+                            <i class="fas fa-trash-alt me-1"></i>
+                            Eliminar Seleccionadas (<span id="count-selected">0</span>)
+                        </button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -203,6 +207,11 @@
                             <table class="table table-hover admin-table">
                                 <thead class="table-dark">
                                     <tr>
+                                        <th style="width: 40px;">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="select-all-materias">
+                                            </div>
+                                        </th>
                                         <th>Código</th>
                                         <th>Nombre</th>
                                         <th>Carrera</th>
@@ -216,7 +225,12 @@
                                 </thead>
                                 <tbody>
                                     {% for materia in materias %}
-                                    <tr class="fila-materia">
+                                    <tr class="fila-materia" data-id="{{ materia.id }}">
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input check-materia" type="checkbox" value="{{ materia.id }}">
+                                            </div>
+                                        </td>
                                         <td>
                                             <code>{{ materia.codigo }}</code>
                                         </td>
@@ -296,6 +310,12 @@
     <input type="hidden" name="carrera" id="export-carrera" value="">
     <input type="hidden" name="ciclo" id="export-ciclo" value="">
     <input type="hidden" name="cuatrimestre" id="export-cuatrimestre" value="">
+</form>
+
+<!-- Formulario oculto para eliminación masiva -->
+<form id="bulkDeleteForm" method="POST" action="{{ url_for('eliminar_materias_masivo') }}" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="ids" id="bulk-delete-ids" value="">
 </form>
 {% endblock %}
 
@@ -447,5 +467,85 @@ function exportarPDF() {
 
     document.getElementById('exportForm').submit();
 }
+
+// Lógica para eliminación masiva
+const selectAll = document.getElementById('select-all-materias');
+const checkboxes = document.getElementsByClassName('check-materia');
+const btnEliminarMasivo = document.getElementById('btn-eliminar-masivo');
+const countSelected = document.getElementById('count-selected');
+const bulkDeleteIds = document.getElementById('bulk-delete-ids');
+const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+
+if (selectAll) {
+    selectAll.addEventListener('change', function() {
+        // Solo actuar sobre las filas que están visibles (según filtros)
+        const visibleCheckboxes = Array.from(checkboxes).filter(cb => {
+            return cb.closest('.fila-materia').style.display !== 'none';
+        });
+        
+        for (let cb of visibleCheckboxes) {
+            cb.checked = this.checked;
+        }
+        actualizarEstadoBotonMasivo();
+    });
+}
+
+// Delegación de eventos para los checkboxes individuales
+document.querySelector('tbody').addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('check-materia')) {
+        actualizarEstadoBotonMasivo();
+        
+        // Sincronizar el checkbox "select-all"
+        if (!e.target.checked) {
+            selectAll.checked = false;
+        } else {
+            const visibleCheckboxes = Array.from(checkboxes).filter(cb => {
+                return cb.closest('.fila-materia').style.display !== 'none';
+            });
+            const allChecked = visibleCheckboxes.every(cb => cb.checked);
+            selectAll.checked = allChecked;
+        }
+    }
+});
+
+function actualizarEstadoBotonMasivo() {
+    const seleccionados = Array.from(checkboxes).filter(cb => cb.checked);
+    const count = seleccionados.length;
+    
+    if (count > 0) {
+        btnEliminarMasivo.classList.remove('d-none');
+        countSelected.textContent = count;
+    } else {
+        btnEliminarMasivo.classList.add('d-none');
+    }
+}
+
+function eliminarMasivo() {
+    const seleccionados = Array.from(checkboxes).filter(cb => cb.checked);
+    const ids = seleccionados.map(cb => cb.value);
+    
+    if (ids.length === 0) return;
+    
+    if (confirm(`¿Estás seguro de que deseas eliminar las ${ids.length} materias seleccionadas?`)) {
+        bulkDeleteIds.value = ids.join(',');
+        bulkDeleteForm.submit();
+    }
+}
+
+// Al aplicar filtros, deseleccionar lo que quedó oculto o resetear el selector maestro
+const originalAplicarFiltros = aplicarFiltros;
+aplicarFiltros = function() {
+    originalAplicarFiltros();
+    
+    // Opcional: Deseleccionar todo al filtrar para evitar errores de "borrar lo que no veo"
+    // o simplemente resetear el selector maestro
+    if (selectAll) selectAll.checked = false;
+    for (let cb of checkboxes) {
+        if (cb.closest('.fila-materia').style.display === 'none') {
+            cb.checked = false;
+        }
+    }
+    actualizarEstadoBotonMasivo();
+};
 </script>
 {% endblock %}
