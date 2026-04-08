@@ -53,7 +53,7 @@
                                 <div class="form-floating position-relative">
                                     {{ form.password(class="form-control", placeholder="Contraseña", id="pw_main") }}
                                     {{ form.password.label }}
-                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" onclick="togglePassword('password')">
+                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" role="button" tabindex="0" aria-label="Mostrar contraseña" aria-pressed="false" onclick="togglePassword('pw_main', this)">
                                         <i class="far fa-eye" id="pw_main_icon"></i>
                                     </span>
                                 </div>
@@ -70,9 +70,9 @@
                             </div>
                             <div class="col-md-6">
                                 <div class="form-floating position-relative">
-                                    {{ form.password2(class="form-control", placeholder="Confirmar") }}
+                                    {{ form.password2(class="form-control", placeholder="Confirmar", id="pw_confirm") }}
                                     {{ form.password2.label }}
-                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" onclick="togglePassword('password2')">
+                                    <span class="password-toggle position-absolute top-50 end-0 translate-middle-y me-3 text-muted" role="button" tabindex="0" aria-label="Mostrar confirmación de contraseña" aria-pressed="false" onclick="togglePassword('pw_confirm', this)">
                                         <i class="far fa-eye"></i>
                                     </span>
                                 </div>
@@ -451,19 +451,32 @@
     }
 
     // --- Password Toggle ---
-    function togglePassword(fieldName) {
-        const input = document.querySelector(`input[name="${fieldName}"]`);
+    function togglePassword(fieldRef, toggleEl) {
+        const input = document.getElementById(fieldRef) || document.querySelector(`input[name="${fieldRef}"]`);
+        if (!input) {
+            return;
+        }
+
         const wrapper = input.closest('.form-floating, .position-relative');
-        const toggle = wrapper.querySelector('.password-toggle');
+        const toggle = toggleEl || (wrapper ? wrapper.querySelector('.password-toggle') : null);
+        if (!toggle) {
+            return;
+        }
+
         const icon = toggle.querySelector('i');
         toggle.classList.add('pw-toggling');
         toggle.addEventListener('animationend', () => toggle.classList.remove('pw-toggling'), { once: true });
+
         if (input.type === 'password') {
             input.type = 'text';
             icon.classList.replace('fa-eye', 'fa-eye-slash');
+            toggle.setAttribute('aria-pressed', 'true');
+            toggle.setAttribute('aria-label', 'Ocultar contraseña');
         } else {
             input.type = 'password';
             icon.classList.replace('fa-eye-slash', 'fa-eye');
+            toggle.setAttribute('aria-pressed', 'false');
+            toggle.setAttribute('aria-label', fieldRef === 'pw_confirm' ? 'Mostrar confirmación de contraseña' : 'Mostrar contraseña');
         }
     }
 
@@ -601,6 +614,16 @@
                 if(c.dataset.turno === 'vespertino') c.checked = true;
              });
         };
+
+        // Soporte de teclado para toggles de contraseña
+        document.querySelectorAll('.password-toggle').forEach(toggle => {
+            toggle.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.click();
+                }
+            });
+        });
     });
 </script>
 {% endblock %}

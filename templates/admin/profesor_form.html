@@ -272,7 +272,10 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-key"></i>
                                     </span>
-                                    {{ form.password(class="form-control", placeholder="Contraseña segura") }}
+                                    {{ form.password(class="form-control", placeholder="Contraseña segura", id="profesor_password") }}
+                                    <button class="btn btn-outline-secondary" type="button" aria-label="Mostrar contraseña" onclick="togglePasswordField('profesor_password', 'icon_profesor_password', this)">
+                                        <i class="fas fa-eye" id="icon_profesor_password"></i>
+                                    </button>
                                 </div>
                                 {% if form.password.errors %}
                                     {% for error in form.password.errors %}
@@ -287,7 +290,10 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-key"></i>
                                     </span>
-                                    {{ form.password2(class="form-control", placeholder="Repita la contraseña") }}
+                                    {{ form.password2(class="form-control", placeholder="Repita la contraseña", id="profesor_password2") }}
+                                    <button class="btn btn-outline-secondary" type="button" aria-label="Mostrar confirmación de contraseña" onclick="togglePasswordField('profesor_password2', 'icon_profesor_password2', this)">
+                                        <i class="fas fa-eye" id="icon_profesor_password2"></i>
+                                    </button>
                                 </div>
                                 {% if form.password2.errors %}
                                     {% for error in form.password2.errors %}
@@ -317,6 +323,23 @@
 
 <!-- Script para mejorar UX -->
 <script>
+function togglePasswordField(fieldId, iconId, triggerButton) {
+    const input = document.getElementById(fieldId);
+    const icon = document.getElementById(iconId);
+    if (!input || !icon) {
+        return;
+    }
+
+    const showPassword = input.type === 'password';
+    input.type = showPassword ? 'text' : 'password';
+    icon.classList.toggle('fa-eye', !showPassword);
+    icon.classList.toggle('fa-eye-slash', showPassword);
+
+    if (triggerButton) {
+        triggerButton.setAttribute('aria-label', showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Limpiar teléfono de caracteres no numéricos antes de enviar
     const telefonoInput = document.querySelector('#telefono_input');

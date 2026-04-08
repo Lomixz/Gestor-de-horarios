@@ -1710,6 +1710,7 @@ select[multiple] option:checked {
     z-index: 11;
     min-width: 300px;
     width: 300px;
+    background-clip: padding-box;
 }
 
 .admin-ui .mass-materia-col {
@@ -1724,6 +1725,15 @@ select[multiple] option:checked {
     position: sticky;
     left: 0;
     z-index: 5;
+    min-width: 300px;
+    width: 300px;
+    background-color: #fff;
+    background-clip: padding-box;
+    box-shadow: 1px 0 0 #dee2e6;
+}
+
+.admin-ui .mass-sticky-col-body.mass-sticky-col-limit {
+    background-color: #f8d7da;
 }
 
 .admin-ui .mass-progress-xs {

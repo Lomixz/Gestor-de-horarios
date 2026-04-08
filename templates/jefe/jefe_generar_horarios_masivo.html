@@ -6,19 +6,17 @@
 <div class="container-fluid py-4">
     <!-- Header -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4">
-        <div class="d-flex align-items-center mb-3 mb-md-0">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-3">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <div>
-                <h2 class="mb-0 fw-bold">
-                    <i class="fas fa-calendar-alt text-primary me-2"></i>
-                    Generar Horarios
-                </h2>
-                <p class="text-muted mb-0 small">Seleccione los grupos para generar sus horarios</p>
-            </div>
+        <div class="mb-3 mb-md-0">
+            <h2 class="mb-0 fw-bold">
+                <i class="fas fa-calendar-alt text-primary me-2"></i>
+                Generar Horarios
+            </h2>
+            <p class="text-muted mb-0 small">Seleccione los grupos para generar sus horarios</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap justify-content-md-end">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Volver al Dashboard
+            </a>
             <button type="button" class="btn btn-outline-primary" id="btnSeleccionarTodos">
                 <i class="fas fa-check-square me-1"></i>Todos
             </button>

@@ -204,7 +204,7 @@
                             {% set en_limite = carga.porcentaje >= 100 %}
                             <tr class="align-middle {{ 'table-danger' if en_limite else '' }}">
                                 <!-- Columna Sticky Profesor -->
-                                <th class="p-3 border-end {{ 'bg-danger bg-opacity-10' if en_limite else 'bg-white' }} mass-sticky-col-body">
+                                <th class="p-3 border-end mass-sticky-col-body {{ 'mass-sticky-col-limit' if en_limite else '' }}">
                                     <div class="d-flex align-items-center">
                                         <div class="me-3 position-relative">
                                             {% if profesor.imagen_perfil %}

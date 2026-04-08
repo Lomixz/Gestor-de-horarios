@@ -7,10 +7,7 @@
     <div class="row justify-content-center">
         <div class="col-lg-8 col-xl-6">
             <!-- Header -->
-            <div class="d-flex align-items-center mb-4">
-                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary me-3">
-                    <i class="fas fa-arrow-left"></i>
-                </a>
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <div>
                     <h2 class="mb-0 fw-bold">
                         <i class="fas fa-calendar-plus text-primary me-2"></i>
@@ -18,6 +15,10 @@
                     </h2>
                     <p class="text-muted mb-0 small">Generar horario para un grupo individual</p>
                 </div>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>
+                    Volver al Dashboard
+                </a>
             </div>
 
             <!-- Form Card -->
