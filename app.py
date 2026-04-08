@@ -1548,9 +1548,9 @@ def exportar_profesores_csv_route():
         flash('No tienes permisos.', 'error')
         return redirect(url_for('dashboard'))
     contenido_csv = exportar_profesores_csv()
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=profesores_export.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 @app.route('/admin/materias/exportar-csv')
@@ -1560,9 +1560,9 @@ def exportar_materias_csv_route():
         flash('No tienes permisos.', 'error')
         return redirect(url_for('dashboard'))
     contenido_csv = exportar_materias_csv()
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=materias_export.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 @app.route('/admin/carreras/exportar-csv')
@@ -1572,9 +1572,9 @@ def exportar_carreras_csv_route():
         flash('No tienes permisos.', 'error')
         return redirect(url_for('dashboard'))
     contenido_csv = exportar_carreras_csv()
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=carreras_export.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 @app.route('/admin/grupos/exportar-csv')
@@ -1584,9 +1584,9 @@ def exportar_grupos_csv_route():
         flash('No tienes permisos.', 'error')
         return redirect(url_for('dashboard'))
     contenido_csv = exportar_grupos_csv()
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=grupos_export.csv"
-    response.headers["Content-type"] = "text/csv"
+    response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
 @app.route('/admin/grupos/importar-csv', methods=['GET', 'POST'])
@@ -2042,8 +2042,8 @@ def descargar_plantilla_asignaciones_grupos():
     
     from utils import generar_plantilla_csv_asignaciones_grupo
     contenido_csv = generar_plantilla_csv_asignaciones_grupo()
-    
-    response = make_response(contenido_csv)
+
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     response.headers['Content-Disposition'] = 'attachment; filename=plantilla_asignaciones_grupos.csv'
     
@@ -2066,8 +2066,8 @@ def exportar_asignaciones_grupos():
 
     from utils import exportar_asignaciones_grupo_csv
     contenido_csv = exportar_asignaciones_grupo_csv(carrera_id, cuatrimestre)
-    
-    response = make_response(contenido_csv)
+
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     
     filename = 'asignaciones_grupos'
@@ -2491,8 +2491,8 @@ def descargar_plantilla_carreras():
     
     try:
         plantilla = generar_plantilla_csv_carreras()
-        
-        response = make_response(plantilla)
+
+        response = make_response(plantilla.encode('utf-8-sig'))
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
         response.headers['Content-Disposition'] = 'attachment; filename=plantilla_carreras.csv'
         
@@ -2883,7 +2883,7 @@ def descargar_plantilla_csv_materias():
 """
         
         # Crear respuesta con archivo CSV
-        response = make_response(contenido_csv)
+        response = make_response(contenido_csv.encode('utf-8-sig'))
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
         response.headers['Content-Disposition'] = 'attachment; filename=plantilla_materias.csv'
         
@@ -3781,8 +3781,8 @@ def descargar_plantilla_asignaciones():
     
     try:
         plantilla = generar_plantilla_csv_asignaciones()
-        
-        response = make_response(plantilla)
+
+        response = make_response(plantilla.encode('utf-8-sig'))
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
         response.headers['Content-Disposition'] = 'attachment; filename=plantilla_asignaciones.csv'
         
@@ -3829,9 +3829,9 @@ def exportar_asignaciones_actuales():
                     
                 csv_content += f"{profesor.email},{materia.codigo}\n"
         
-        response = make_response(csv_content)
+        response = make_response(csv_content.encode('utf-8-sig'))
         response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-        
+
         # Nombre del archivo con filtros aplicados
         filename = 'asignaciones_actuales'
         if carrera_id:

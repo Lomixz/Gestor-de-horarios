@@ -435,10 +435,10 @@ Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,
 """
     
     # Crear response
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=plantilla_usuarios.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
-    
+
     return response
 
 def exportar_profesores_csv():
@@ -506,7 +506,7 @@ def exportar_grupos_csv():
 def generar_plantilla_grupos_csv():
     """Generar archivo CSV de plantilla para importar grupos"""
     contenido_csv = "numero_grupo,turno,cuatrimestre,carrera_codigo\n101,matutino,1,IRO\n102,matutino,1,IRO\n151,vespertino,1,IRO\n"
-    response = make_response(contenido_csv)
+    response = make_response(contenido_csv.encode('utf-8-sig'))
     response.headers["Content-Disposition"] = "attachment; filename=plantilla_grupos.csv"
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
