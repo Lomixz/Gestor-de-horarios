@@ -134,9 +134,10 @@ def detalle_profesor(profesor_id):
 def autenticar_profesor():
     """
     Verifica las credenciales de un profesor sin exponer su contraseña.
+    Acepta username o email indistintamente en el campo 'login'.
 
     Body JSON:
-      { "username": "...", "password": "..." }
+      { "login": "usuario_o_email", "password": "..." }
 
     Respuestas:
       200 + datos del profesor  →  credenciales correctas
@@ -145,14 +146,14 @@ def autenticar_profesor():
       404                       →  usuario no encontrado o no es profesor
     """
     data = request.get_json(silent=True) or {}
-    username = data.get('username', '').strip()
+    login = data.get('login', '').strip()
     password = data.get('password', '')
 
-    if not username or not password:
-        return jsonify({'error': 'username y password son requeridos'}), 400
+    if not login or not password:
+        return jsonify({'error': 'login y password son requeridos'}), 400
 
     profesor = User.query.filter(
-        User.username == username,
+        db.or_(User.username == login, User.email == login),
         User.rol.in_(ROLES_PROFESOR),
     ).first()
 
