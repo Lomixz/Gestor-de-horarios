@@ -19,6 +19,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          envs: EXTERNAL_API_KEY
           script: |
             set -e
             cd ${{ secrets.PROJECT_PATH }}
@@ -26,6 +27,17 @@ jobs:
             cp instance/database.db backups/db_backup_$(date +%F_%H-%M).db || true
             git fetch --all
             git reset --hard origin/main
+
+            # Crear .env si no existe
+            [ -f .env ] || cp .env.example .env
+
+            # Sincronizar variables de entorno desde GitHub Secrets
+            if grep -q "^EXTERNAL_API_KEY=" .env; then
+              sed -i "s/^EXTERNAL_API_KEY=.*/EXTERNAL_API_KEY=${EXTERNAL_API_KEY}/" .env
+            else
+              echo "EXTERNAL_API_KEY=${EXTERNAL_API_KEY}" >> .env
+            fi
+
             docker compose pull || true
             docker compose up -d --build
             docker image prune -f

@@ -127,3 +127,45 @@ def detalle_profesor(profesor_id):
         return jsonify({'error': 'Profesor no encontrado'}), 404
 
     return jsonify(_serialize_profesor(profesor)), 200
+
+
+@profesores_api_bp.route('/api/auth/profesor', methods=['POST'])
+@require_api_key
+def autenticar_profesor():
+    """
+    Verifica las credenciales de un profesor sin exponer su contraseña.
+
+    Body JSON:
+      { "username": "...", "password": "..." }
+
+    Respuestas:
+      200 + datos del profesor  →  credenciales correctas
+      401                       →  contraseña incorrecta
+      403                       →  usuario inactivo
+      404                       →  usuario no encontrado o no es profesor
+    """
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    if not username or not password:
+        return jsonify({'error': 'username y password son requeridos'}), 400
+
+    profesor = User.query.filter(
+        User.username == username,
+        User.rol.in_(ROLES_PROFESOR),
+    ).first()
+
+    if profesor is None:
+        return jsonify({'autenticado': False, 'error': 'Profesor no encontrado'}), 404
+
+    if not profesor.activo:
+        return jsonify({'autenticado': False, 'error': 'Cuenta inactiva'}), 403
+
+    if not profesor.check_password(password):
+        return jsonify({'autenticado': False, 'error': 'Contraseña incorrecta'}), 401
+
+    return jsonify({
+        'autenticado': True,
+        'profesor': _serialize_profesor(profesor),
+    }), 200
