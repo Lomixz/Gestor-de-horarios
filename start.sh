@@ -16,6 +16,17 @@ if [ ! -f .env ]; then
     echo ""
 fi
 
+# 2b. Generar EXTERNAL_API_KEY automáticamente si no está definida
+if ! grep -q "^EXTERNAL_API_KEY=.\+" .env 2>/dev/null; then
+    API_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    if grep -q "^EXTERNAL_API_KEY=" .env; then
+        sed -i.bak "s/^EXTERNAL_API_KEY=.*/EXTERNAL_API_KEY=${API_KEY}/" .env && rm -f .env.bak
+    else
+        echo "EXTERNAL_API_KEY=${API_KEY}" >> .env
+    fi
+    echo "API Key generada y guardada en .env"
+fi
+
 # 3. Crear directorios necesarios en el host (para los volúmenes montados)
 echo "Creando directorios..."
 mkdir -p instance logs backups horarios static/uploads/perfiles static/uploads/firmas
@@ -52,12 +63,29 @@ echo ""
 echo "=== Estado de servicios ==="
 docker compose ps
 
+API_KEY=$(grep "^EXTERNAL_API_KEY=" .env | cut -d '=' -f2)
+
 echo ""
 echo "=== Sistema listo ==="
 echo "  Web:    http://localhost:5001"
 echo "  Health: http://localhost:5001/health"
 echo "  BD:     PostgreSQL en puerto 5432"
 echo "  Redis:  solo accesible internamente (Docker)"
+echo ""
+echo "=== API de Profesores (para integración externa) ==="
+echo "  Ping (sin auth):     http://localhost:5001/api/profesores/ping"
+echo "  Listar profesores:   http://localhost:5001/api/profesores"
+echo "  Detalle por ID:      http://localhost:5001/api/profesores/{id}"
+echo ""
+echo "  Header requerido:    X-API-Key: ${API_KEY}"
+echo ""
+echo "  Ejemplo curl:"
+echo "  curl -H \"X-API-Key: ${API_KEY}\" http://localhost:5001/api/profesores"
+echo ""
+echo "  Filtros disponibles:"
+echo "  ?activo=true|false"
+echo "  ?tipo=profesor_completo|profesor_asignatura"
+echo "  ?carrera_id=<id>"
 echo ""
 echo "  Logs:   docker compose logs -f"
 echo "  Parar:  docker compose down"
