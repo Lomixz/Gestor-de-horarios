@@ -146,6 +146,7 @@ from app_pkg.blueprints.api import api_bp
 app.register_blueprint(api_bp)
 from app_pkg.blueprints.profesores_api import profesores_api_bp
 app.register_blueprint(profesores_api_bp)
+csrf.exempt(profesores_api_bp)
 
 
 # Security headers

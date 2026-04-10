@@ -31,11 +31,13 @@ jobs:
             # Crear .env si no existe
             [ -f .env ] || cp .env.example .env
 
-            # Sincronizar variables de entorno desde GitHub Secrets
-            if grep -q "^EXTERNAL_API_KEY=" .env; then
-              sed -i "s/^EXTERNAL_API_KEY=.*/EXTERNAL_API_KEY=${EXTERNAL_API_KEY}/" .env
-            else
-              echo "EXTERNAL_API_KEY=${EXTERNAL_API_KEY}" >> .env
+            # Sincronizar variables de entorno desde GitHub Secrets (solo si el secret no está vacío)
+            if [ -n "${EXTERNAL_API_KEY}" ]; then
+              if grep -q "^EXTERNAL_API_KEY=" .env; then
+                sed -i "s/^EXTERNAL_API_KEY=.*/EXTERNAL_API_KEY=${EXTERNAL_API_KEY}/" .env
+              else
+                echo "EXTERNAL_API_KEY=${EXTERNAL_API_KEY}" >> .env
+              fi
             fi
 
             docker compose pull || true
