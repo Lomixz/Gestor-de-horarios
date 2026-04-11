@@ -9,6 +9,8 @@
    - [Health Check](#health-check)
    - [Autenticación](#autenticación-1)
    - [Carreras](#carreras)
+    - [Grupos](#grupos)
+    - [Asignaciones por Grupo](#asignaciones-por-grupo)
    - [Cuatrimestres](#cuatrimestres)
    - [Relaciones Docente-Materia-Carrera](#relaciones-docente-materia-carrera)
 5. [Casos de Uso Comunes](#casos-de-uso-comunes)
@@ -22,8 +24,9 @@ Esta API proporciona acceso a los datos académicos del **Gestor de Horarios**, 
 
 - **Usuarios y Autenticación**: Verificar credenciales sin duplicar cuentas
 - **Carreras**: Programas académicos disponibles
+- **Grupos**: Grupos académicos por carrera, cuatrimestre y turno
 - **Cuatrimestres**: Períodos académicos y sus materias
-- **Relaciones Académicas**: Qué profesor imparte qué materia en qué carrera
+- **Relaciones Académicas**: Qué profesor imparte qué materia en qué carrera y grupo
 
 **URL Base**: `https://horarios.ddns.net/api/ext/`
 
@@ -479,6 +482,230 @@ curl -X GET "https://tu-dominio/api/ext/carreras/1" \
 
 ---
 
+### Grupos
+
+#### `GET /api/ext/grupos`
+
+**Descripción**: Retorna los grupos registrados en el sistema.
+
+**Requiere**: `X-API-Key` header
+
+**Parámetros Query** (todos opcionales):
+- `activo=true|false` — Filtrar por estado activo/inactivo
+- `carrera_id=<int>` — Filtrar por carrera
+- `cuatrimestre=<int>` — Filtrar por cuatrimestre
+- `turno=M|V` — Filtrar por turno (`M`=Matutino, `V`=Vespertino)
+
+**Respuesta (200 OK)**:
+```json
+{
+  "total": 2,
+  "grupos": [
+    {
+      "id": 10,
+      "codigo": "1MISI1",
+      "numero_grupo": 1,
+      "turno": "M",
+      "cuatrimestre": 1,
+      "activo": true,
+      "carrera": {
+        "id": 1,
+        "codigo": "ISI",
+        "nombre": "Ingeniería en Sistemas"
+      }
+    },
+    {
+      "id": 11,
+      "codigo": "1VISI1",
+      "numero_grupo": 1,
+      "turno": "V",
+      "cuatrimestre": 1,
+      "activo": true,
+      "carrera": {
+        "id": 1,
+        "codigo": "ISI",
+        "nombre": "Ingeniería en Sistemas"
+      }
+    }
+  ]
+}
+```
+
+**Respuesta (400 Bad Request)** — Turno inválido:
+```json
+{
+  "error": "turno inválido. Valores permitidos: M o V"
+}
+```
+
+**Ejemplos de Uso**:
+```bash
+# Obtener todos los grupos
+curl -X GET "https://tu-dominio/api/ext/grupos" \
+  -H "X-API-Key: tu_clave_secreta"
+
+# Obtener grupos activos de una carrera y cuatrimestre
+curl -X GET "https://tu-dominio/api/ext/grupos?activo=true&carrera_id=1&cuatrimestre=1" \
+  -H "X-API-Key: tu_clave_secreta"
+
+# Obtener grupos de turno matutino
+curl -X GET "https://tu-dominio/api/ext/grupos?turno=M" \
+  -H "X-API-Key: tu_clave_secreta"
+```
+
+**Casos de Uso**:
+- Poblar selector de grupos en formularios externos
+- Filtrar grupos por carrera, cuatrimestre y turno
+- Sincronizar estructura de grupos con sistemas de evaluación/control escolar
+
+---
+
+#### `GET /api/ext/grupos/<id>/materias`
+
+**Descripción**: Retorna el grupo, sus materias y el profesor asignado por materia dentro de ese grupo.
+
+**Requiere**: `X-API-Key` header
+
+**Parámetros**:
+- `id` (URL path, requerido) — ID del grupo
+
+**Respuesta (200 OK)**:
+```json
+{
+  "grupo": {
+    "id": 10,
+    "codigo": "1MISI1",
+    "numero_grupo": 1,
+    "turno": "M",
+    "cuatrimestre": 1,
+    "activo": true,
+    "carrera": {
+      "id": 1,
+      "codigo": "ISI",
+      "nombre": "Ingeniería en Sistemas"
+    }
+  },
+  "total_materias": 2,
+  "materias": [
+    {
+      "materia": {
+        "id": 101,
+        "codigo": "ISI-101",
+        "nombre": "Programación I",
+        "cuatrimestre": 1,
+        "activo": true
+      },
+      "profesor": {
+        "id": 42,
+        "username": "jdoe",
+        "nombre": "Juan",
+        "apellido": "Doe",
+        "nombre_completo": "Juan Doe",
+        "email": "juan.doe@university.edu",
+        "tipo_profesor": "profesor_completo",
+        "activo": true
+      }
+    },
+    {
+      "materia": {
+        "id": 102,
+        "codigo": "ISI-102",
+        "nombre": "Estructuras Discretas",
+        "cuatrimestre": 1,
+        "activo": true
+      },
+      "profesor": null
+    }
+  ]
+}
+```
+
+**Respuesta (404 Not Found)** — Grupo no existe:
+```json
+{
+  "error": "Grupo no encontrado"
+}
+```
+
+**Ejemplo de Uso**:
+```bash
+# Obtener detalle de grupo ID 10
+curl -X GET "https://tu-dominio/api/ext/grupos/10/materias" \
+  -H "X-API-Key: tu_clave_secreta"
+```
+
+---
+
+### Asignaciones por Grupo
+
+#### `GET /api/ext/asignaciones-grupo`
+
+**Descripción**: Retorna registros del tipo grupo-carrera-materia-profesor.
+
+**Requiere**: `X-API-Key` header
+
+**Parámetros Query** (todos opcionales):
+- `activo=true|false` — Filtrar por estado activo de la asignación
+- `carrera_id=<int>` — Filtrar por carrera
+- `grupo_id=<int>` — Filtrar por grupo
+- `cuatrimestre=<int>` — Filtrar por cuatrimestre del grupo
+- `profesor_id=<int>` — Filtrar por profesor
+
+**Respuesta (200 OK)**:
+```json
+{
+  "total": 1,
+  "asignaciones": [
+    {
+      "grupo": {
+        "id": 10,
+        "codigo": "1MISI1",
+        "numero_grupo": 1,
+        "turno": "M",
+        "cuatrimestre": 1,
+        "activo": true,
+        "carrera": {
+          "id": 1,
+          "codigo": "ISI",
+          "nombre": "Ingeniería en Sistemas"
+        }
+      },
+      "carrera": {
+        "id": 1,
+        "codigo": "ISI",
+        "nombre": "Ingeniería en Sistemas"
+      },
+      "materia": {
+        "id": 101,
+        "codigo": "ISI-101",
+        "nombre": "Programación I",
+        "cuatrimestre": 1,
+        "activo": true
+      },
+      "profesor": {
+        "id": 42,
+        "username": "jdoe",
+        "nombre": "Juan",
+        "apellido": "Doe",
+        "nombre_completo": "Juan Doe",
+        "email": "juan.doe@university.edu",
+        "tipo_profesor": "profesor_completo",
+        "activo": true
+      }
+    }
+  ]
+}
+```
+
+**Ejemplo de Uso**:
+```bash
+# Obtener asignaciones activas por grupo
+curl -X GET "https://tu-dominio/api/ext/asignaciones-grupo?activo=true" \
+  -H "X-API-Key: tu_clave_secreta"
+```
+
+---
+
 ### Cuatrimestres
 
 #### `GET /api/ext/cuatrimestres`
@@ -863,31 +1090,22 @@ async function loadMaterials(carreraId, cuatrimestre) {
 
 ---
 
-### Caso 4: Obtener Profesores para Evaluación
+### Caso 4: Obtener Profesores para Evaluación por Grupo
 
-Un estudiante necesita evaluar a los profesores de sus materias. El sistema obtiene las materias del estudiante y luego obtiene los profesores:
+Un estudiante necesita evaluar a los profesores de sus materias por grupo. El sistema consulta las asignaciones por grupo:
 
 ```javascript
 async function getProfesorsToEvaluate(carrierId) {
-  // 1. Obtener materias de la carrera en cuatrimestre actual
-  const materiasResponse = await fetch(
-    `https://gestor-horarios.edu/api/ext/cuatrimestres/3/materias?carrera_id=${carrierId}`,
+  // Obtener asignaciones por grupo para carrera y cuatrimestre
+  const asignacionesResponse = await fetch(
+    `https://gestor-horarios.edu/api/ext/asignaciones-grupo?carrera_id=${carrierId}&cuatrimestre=3&activo=true`,
     {
       headers: { 'X-API-Key': process.env.EXTERNAL_API_KEY }
     }
   );
-  const { materias } = await materiasResponse.json();
+  const { asignaciones } = await asignacionesResponse.json();
 
-  // 2. Obtener profesores que enseñan estas materias
-  const relacionesResponse = await fetch(
-    `https://gestor-horarios.edu/api/ext/relaciones?carrera_id=${carrierId}&cuatrimestre=3`,
-    {
-      headers: { 'X-API-Key': process.env.EXTERNAL_API_KEY }
-    }
-  );
-  const { relaciones } = await relacionesResponse.json();
-
-  return relaciones;
+  return asignaciones;
 }
 ```
 
@@ -916,16 +1134,22 @@ async function syncAcademicData() {
       materiasPorCarrera[carrera.id] = cuatrimestres.cuatrimestres;
     }
 
-    // 3. Obtener todas las relaciones
-    const relaciones = await fetch('https://gestor-horarios.edu/api/ext/relaciones', {
+    // 3. Obtener todos los grupos
+    const grupos = await fetch('https://gestor-horarios.edu/api/ext/grupos?activo=true', {
       headers: { 'X-API-Key': process.env.EXTERNAL_API_KEY }
     }).then(r => r.json());
 
-    // 4. Guardar en base de datos local
+    // 4. Obtener asignaciones por grupo
+    const asignaciones = await fetch('https://gestor-horarios.edu/api/ext/asignaciones-grupo?activo=true', {
+      headers: { 'X-API-Key': process.env.EXTERNAL_API_KEY }
+    }).then(r => r.json());
+
+    // 5. Guardar en base de datos local
     await saveSyncData({
       carreras: carreras.carreras,
+      grupos: grupos.grupos,
       materias: materiasPorCarrera,
-      relaciones: relaciones.relaciones,
+      asignaciones_grupo: asignaciones.asignaciones,
       syncedAt: new Date()
     });
 
@@ -994,6 +1218,66 @@ async function syncAcademicData() {
     "id": 1,
     "nombre": "Ingeniería en Sistemas",
     "codigo": "ISI"
+  }
+}
+```
+
+### Objeto Grupo
+
+```json
+{
+  "id": 10,
+  "codigo": "1MISI1",
+  "numero_grupo": 1,
+  "turno": "M",
+  "cuatrimestre": 1,
+  "activo": true,
+  "carrera": {
+    "id": 1,
+    "codigo": "ISI",
+    "nombre": "Ingeniería en Sistemas"
+  }
+}
+```
+
+### Objeto Asignación por Grupo
+
+```json
+{
+  "grupo": {
+    "id": 10,
+    "codigo": "1MISI1",
+    "numero_grupo": 1,
+    "turno": "M",
+    "cuatrimestre": 1,
+    "activo": true,
+    "carrera": {
+      "id": 1,
+      "codigo": "ISI",
+      "nombre": "Ingeniería en Sistemas"
+    }
+  },
+  "carrera": {
+    "id": 1,
+    "codigo": "ISI",
+    "nombre": "Ingeniería en Sistemas"
+  },
+  "materia": {
+    "id": 101,
+    "codigo": "ISI-101",
+    "nombre": "Programación I",
+    "cuatrimestre": 1,
+    "activo": true
+  },
+  "profesor": {
+    "id": 42,
+    "username": "jdoe",
+    "nombre": "Juan",
+    "apellido": "Doe",
+    "nombre_completo": "Juan Doe",
+    "email": "juan.doe@university.edu",
+    "tipo_profesor": "profesor_completo",
+    "activo": true
   }
 }
 ```
