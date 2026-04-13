@@ -404,10 +404,13 @@ class User(UserMixin, db.Model):
         # Obtener IDs de todas las carreras del jefe
         carrera_ids = [c.id for c in self.carreras]
         
-        # Solo profesores (con tipo_profesor definido) asignados a las carreras del jefe
+        # Profesores asignados a las carreras del jefe (campo legacy O many-to-many)
         profesores = User.query.filter(
             User.carreras.any(Carrera.id.in_(carrera_ids)),
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(
+                User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+                User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])),
+            ),
             User.activo == True
         ).all()
 

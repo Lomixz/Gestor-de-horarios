@@ -6,11 +6,36 @@ Autenticación: header X-API-Key con el valor de la variable de entorno EXTERNAL
 import os
 from functools import wraps
 from flask import Blueprint, jsonify, request
-from models import User, db
+from models import User, Role, db
 
 profesores_api_bp = Blueprint('profesores_api', __name__)
 
 ROLES_PROFESOR = ('profesor_completo', 'profesor_asignatura')
+
+
+def _filter_es_profesor():
+    """
+    Condición SQLAlchemy para incluir usuarios con rol de profesor,
+    ya sea en el campo legacy 'rol' O en la tabla many-to-many 'roles'.
+    """
+    return db.or_(
+        User.rol.in_(ROLES_PROFESOR),
+        User.roles.any(Role.nombre.in_(ROLES_PROFESOR)),
+    )
+
+
+def _get_tipo_profesor(p):
+    """
+    Devuelve el tipo de profesor revisando todas las fuentes de roles.
+    """
+    if p.rol in ROLES_PROFESOR:
+        return p.rol
+    for r in p.roles:
+        if r.nombre in ROLES_PROFESOR:
+            return r.nombre
+    if p.tipo_profesor in ROLES_PROFESOR:
+        return p.tipo_profesor
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +66,8 @@ def _serialize_profesor(p):
         'nombre_completo': p.get_nombre_completo(),
         'email': p.email,
         'telefono': p.telefono or None,
-        'tipo_profesor': p.rol if p.rol in ROLES_PROFESOR else (p.tipo_profesor if p.tipo_profesor in ROLES_PROFESOR else p.rol),
+        'tipo_profesor': _get_tipo_profesor(p),
+        'roles': p.get_roles_list(),
         'rol': p.rol,
         'activo': p.activo,
         'fecha_registro': p.fecha_registro.isoformat() if p.fecha_registro else None,
@@ -87,7 +113,7 @@ def listar_profesores():
       - tipo=profesor_completo|profesor_asignatura
       - carrera_id=<int>    Filtrar por carrera
     """
-    query = User.query.filter(User.rol.in_(ROLES_PROFESOR))
+    query = User.query.filter(_filter_es_profesor())
 
     # Filtro por estado
     activo_param = request.args.get('activo', '').lower()
@@ -96,10 +122,13 @@ def listar_profesores():
     elif activo_param == 'false':
         query = query.filter(User.activo == False)
 
-    # Filtro por tipo de profesor
+    # Filtro por tipo de profesor (busca en legacy y en many-to-many)
     tipo_param = request.args.get('tipo', '').strip()
     if tipo_param in ROLES_PROFESOR:
-        query = query.filter(User.tipo_profesor == tipo_param)
+        query = query.filter(db.or_(
+            User.rol == tipo_param,
+            User.roles.any(Role.nombre == tipo_param),
+        ))
 
     # Filtro por carrera
     carrera_id_param = request.args.get('carrera_id', '').strip()
@@ -120,7 +149,7 @@ def detalle_profesor(profesor_id):
     """Retorna los datos completos de un profesor por su ID."""
     profesor = User.query.filter(
         User.id == profesor_id,
-        User.rol.in_(ROLES_PROFESOR),
+        _filter_es_profesor(),
     ).first()
 
     if profesor is None:
@@ -154,7 +183,7 @@ def autenticar_profesor():
 
     profesor = User.query.filter(
         db.or_(User.username == login, User.email == login),
-        User.rol.in_(ROLES_PROFESOR),
+        _filter_es_profesor(),
     ).first()
 
     if profesor is None:

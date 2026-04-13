@@ -905,7 +905,7 @@ def disponibilidad_profesores_jefe():
     
     # Obtener profesores de la carrera del jefe
     profesores = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True,
         User.carreras.any(Carrera.id.in_(current_user.get_carreras_jefe_ids()))
     ).order_by(User.apellido, User.nombre).all()
@@ -1060,7 +1060,7 @@ def asignacion_masiva_materias_jefe():
             
             # Obtener todos los profesores y materias según filtros
             profesores = User.query.filter(
-                User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+                db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
                 User.activo == True,
                 User.carreras.any(Carrera.id.in_(current_user.get_carreras_jefe_ids()))
             ).all()
@@ -1126,7 +1126,7 @@ def asignacion_masiva_materias_jefe():
     
     # Obtener profesores activos de la carrera del jefe
     profesores = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True,
         User.carreras.any(Carrera.id.in_(current_user.get_carreras_jefe_ids()))
     ).order_by(User.apellido, User.nombre).all()
@@ -1941,14 +1941,14 @@ def asignar_profesores_grupo(grupo_id):
     for materia in materias_grupo:
         profesores_por_materia[materia.id] = User.query.filter(
             User.materias.any(id=materia.id),
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).order_by(User.apellido, User.nombre).all()
     
     # También obtener todos los profesores de la carrera (para referencia)
     profesores = User.query.filter(
         User.carreras.any(id=grupo.carrera_id),
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True
     ).order_by(User.apellido, User.nombre).all()
     
@@ -2914,16 +2914,19 @@ def gestionar_profesores():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    # Obtener todos los profesores activos (sin filtros para estadísticas)
+    # Obtener todos los profesores activos (campo legacy O many-to-many)
     todos_profesores = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
+            User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])),
+        ),
         User.activo == True
     ).all()
-    
-    # Calcular estadísticas
+
+    # Calcular estadísticas usando los métodos del modelo (comprueban ambas fuentes de rol)
     total_profesores = len(todos_profesores)
-    profesores_completos = len([p for p in todos_profesores if p.rol == 'profesor_completo'])
-    profesores_asignatura = len([p for p in todos_profesores if p.rol == 'profesor_asignatura'])
+    profesores_completos = len([p for p in todos_profesores if p.is_profesor_completo()])
+    profesores_asignatura = len([p for p in todos_profesores if p.is_profesor_asignatura()])
     
     # Obtener carreras para el filtro
     carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
@@ -3057,7 +3060,7 @@ def toggle_estado_profesor(id):
     try:
         profesor = User.query.get_or_404(id)
         
-        if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+        if not profesor.is_profesor():
             return jsonify({'error': 'Usuario no es profesor'}), 400
         
         profesor.activo = not profesor.activo
@@ -3083,7 +3086,7 @@ def eliminar_profesor_admin(id):
     
     profesor = User.query.get_or_404(id)
     
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('Este usuario no es un profesor.', 'error')
         return redirect(url_for('gestionar_profesores'))
     
@@ -3188,7 +3191,7 @@ def gestionar_materias_profesor(id):
     
     profesor = User.query.get_or_404(id)
     
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('Este usuario no es un profesor.', 'error')
         return redirect(url_for('gestionar_profesores'))
     
@@ -3232,7 +3235,7 @@ def ver_materias_profesor(id):
     
     profesor = User.query.get_or_404(id)
     
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('Este usuario no es un profesor.', 'error')
         return redirect(url_for('gestionar_profesores'))
     
@@ -3264,7 +3267,7 @@ def editar_profesor(id):
     
     profesor = User.query.get_or_404(id)
     
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('Este usuario no es un profesor.', 'error')
         return redirect(url_for('gestionar_profesores'))
     
@@ -3373,7 +3376,7 @@ def cambiar_password_profesor(id):
     
     profesor = User.query.get_or_404(id)
     
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('Este usuario no es un profesor.', 'error')
         return redirect(url_for('gestionar_profesores'))
     
@@ -3415,7 +3418,7 @@ def admin_disponibilidad_profesores():
     
     # Construir query base
     query = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True
     )
     
@@ -3423,10 +3426,10 @@ def admin_disponibilidad_profesores():
     if carrera_id:
         query = query.filter(User.carreras.any(id=carrera_id))
     if rol_filtro:
-        query = query.filter(User.rol == rol_filtro)
-    
+        query = query.filter(db.or_(User.rol == rol_filtro, User.roles.any(Role.nombre == rol_filtro)))
+
     profesores = query.order_by(User.apellido, User.nombre).all()
-    
+
     # Calcular estadísticas de disponibilidad
     total_profesores = len(profesores)
     profesores_con_disponibilidad = 0
@@ -3461,7 +3464,7 @@ def admin_editar_disponibilidad_profesor(id):
     profesor = User.query.get_or_404(id)
     
     # Verificar que sea un profesor
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('El usuario seleccionado no es un profesor.', 'error')
         return redirect(url_for('admin_disponibilidad_profesores'))
     
@@ -3528,7 +3531,7 @@ def admin_ver_disponibilidad_profesor(id):
     profesor = User.query.get_or_404(id)
     
     # Verificar que sea un profesor
-    if profesor.rol not in ['profesor_completo', 'profesor_asignatura']:
+    if not profesor.is_profesor():
         flash('El usuario seleccionado no es un profesor.', 'error')
         return redirect(url_for('admin_disponibilidad_profesores'))
     
@@ -3579,7 +3582,7 @@ def asignacion_masiva_materias():
 
             # Obtener todos los profesores y materias según filtros
             profesores = User.query.filter(
-                User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+                db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
                 User.activo == True
             ).all()
 
@@ -3680,7 +3683,7 @@ def asignacion_masiva_materias():
     
     # Obtener todos los profesores activos
     profesores_query = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True
     )
     
@@ -3818,7 +3821,7 @@ def exportar_asignaciones_actuales():
         
         # Construir consulta
         profesores_query = User.query.filter(
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         )
         
@@ -3879,7 +3882,7 @@ def auto_asignar_por_carrera():
         
         # Obtener profesores de la carrera
         profesores = User.query.filter(
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True,
             User.carreras.any(id=carrera_id)
         ).all()
@@ -3959,7 +3962,7 @@ def inject_user_counts():
             total_users=User.query.count(),
             total_admins=User.query.filter_by(rol='admin').count(),
             total_jefes=User.query.filter_by(rol='jefe_carrera').count(),
-            total_profesores=User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).count()
+            total_profesores=User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()
         )
     return dict()
 
@@ -4660,7 +4663,7 @@ def editar_horario_academico(id):
 
     # Cargar opciones para los select
     profesores = User.query.filter(
-        User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+        db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
         User.activo == True
     ).order_by(User.nombre, User.apellido).all()
 
@@ -4839,7 +4842,7 @@ def gestionar_usuarios():
     # Aplicar filtros
     if rol_filter:
         if rol_filter == 'profesor':
-            query = query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura']))
+            query = query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))))
         else:
             query = query.filter_by(rol=rol_filter)
 
@@ -5342,7 +5345,7 @@ def reportes_sistema():
 
     # Estadísticas generales
     total_usuarios = User.query.count()
-    total_profesores = User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).count()
+    total_profesores = User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()
     total_carreras = Carrera.query.filter_by(activa=True).count()
     total_materias = Materia.query.filter_by(activa=True).count()
     total_horarios_academicos = HorarioAcademico.query.filter_by(activo=True).count()
@@ -5353,7 +5356,7 @@ def reportes_sistema():
     for carrera in carreras:
         profesores_carrera = User.query.filter(
             User.carrera_id == carrera.id,
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
 
@@ -6463,7 +6466,7 @@ def exportar_reportes_pdf():
 
     # Obtener datos para el reporte
     total_usuarios = User.query.count()
-    total_profesores = User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).count()
+    total_profesores = User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()
     total_carreras = Carrera.query.filter_by(activa=True).count()
     total_materias = Materia.query.filter_by(activa=True).count()
     total_horarios_academicos = HorarioAcademico.query.filter_by(activo=True).count()
@@ -6474,7 +6477,7 @@ def exportar_reportes_pdf():
     for carrera in carreras:
         profesores_carrera = User.query.filter(
             User.carrera_id == carrera.id,
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
 
@@ -6627,7 +6630,7 @@ def exportar_reportes_excel():
         ],
         'Valor': [
             User.query.count(),
-            User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).count(),
+            User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count(),
             Carrera.query.filter_by(activa=True).count(),
             Materia.query.filter_by(activa=True).count(),
             HorarioAcademico.query.filter_by(activo=True).count(),
@@ -6641,7 +6644,7 @@ def exportar_reportes_excel():
     for carrera in carreras:
         profesores_carrera = User.query.filter(
             User.carrera_id == carrera.id,
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
 
@@ -6726,7 +6729,7 @@ def exportar_reportes_csv():
     writer.writerow(['ESTADÍSTICAS GENERALES'])
     writer.writerow(['Métrica', 'Valor'])
     writer.writerow(['Total de Usuarios', User.query.count()])
-    writer.writerow(['Total de Profesores', User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura'])).count()])
+    writer.writerow(['Total de Profesores', User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()])
     writer.writerow(['Carreras Activas', Carrera.query.filter_by(activa=True).count()])
     writer.writerow(['Materias Activas', Materia.query.filter_by(activa=True).count()])
     writer.writerow(['Horarios Asignados', HorarioAcademico.query.filter_by(activo=True).count()])
@@ -6741,7 +6744,7 @@ def exportar_reportes_csv():
     for carrera in carreras:
         profesores_carrera = User.query.filter(
             User.carrera_id == carrera.id,
-            User.rol.in_(['profesor_completo', 'profesor_asignatura']),
+            db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
 
