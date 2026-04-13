@@ -690,8 +690,13 @@ def editar_profesor_jefe(id):
         profesor.email = form.email.data
         profesor.telefono = form.telefono.data
         profesor.rol = form.rol.data
+        # Limpiar tipo_profesor si el nuevo rol no es de profesor
+        if form.rol.data not in ('profesor_completo', 'profesor_asignatura'):
+            profesor.tipo_profesor = None
+        else:
+            profesor.tipo_profesor = form.rol.data
         profesor.activo = form.activo.data
-        
+
         # Procesar disponibilidad horaria para profesores
         if profesor.is_profesor():
             # Desactivar disponibilidades anteriores (mantener historial)
@@ -5102,6 +5107,11 @@ def editar_usuario(id):
         usuario.nombre = form.nombre.data
         usuario.apellido = form.apellido.data
         usuario.rol = rol_principal  # Campo legacy
+        # Limpiar tipo_profesor si el nuevo rol no es de profesor
+        if rol_principal not in ('profesor_completo', 'profesor_asignatura'):
+            usuario.tipo_profesor = None
+        else:
+            usuario.tipo_profesor = rol_principal
         usuario.telefono = form.telefono.data
         usuario.activo = form.activo.data
         

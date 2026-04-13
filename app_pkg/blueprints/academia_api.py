@@ -4,21 +4,35 @@ API REST académica para integración con sistemas externos (ej. sistema-evaluac
 Autenticación: header X-API-Key con el valor de la variable de entorno EXTERNAL_API_KEY.
 
 Endpoints disponibles:
-    POST /api/ext/auth/login                  — Autenticar cualquier usuario del sistema
-    GET  /api/ext/carreras                    — Listar carreras
-    GET  /api/ext/carreras/<id>               — Detalle de carrera
-    GET  /api/ext/grupos                      — Listar grupos
-    GET  /api/ext/grupos/<id>                 — Detalle de grupo
-    GET  /api/ext/grupos/<id>/materias        — Materias y profesor por grupo
-    GET  /api/ext/asignaciones-grupo          — Registros grupo-carrera-materia-profesor
-    GET  /api/ext/cuatrimestres               — Cuatrimestres registrados (distintos)
-    GET  /api/ext/relaciones                  — Relaciones docente-materia-carrera
-    GET  /api/ext/ping                        — Verificar conectividad (sin auth)
+    POST /api/ext/auth/login                          — Autenticar cualquier usuario del sistema
+    GET  /api/ext/ping                                — Verificar conectividad (sin auth)
+
+    GET  /api/ext/carreras                            — Listar carreras
+    GET  /api/ext/carreras/<id>                       — Detalle de carrera (con materias y profesores)
+
+    GET  /api/ext/grupos                              — Listar grupos
+    GET  /api/ext/grupos/<id>                         — Detalle de grupo
+    GET  /api/ext/grupos/<id>/materias                — Materias y profesor por grupo
+
+    GET  /api/ext/materias                            — Listar materias
+    GET  /api/ext/materias/<id>                       — Detalle de materia (con profesores)
+
+    GET  /api/ext/profesores                          — Listar profesores (completo: carreras, materias, disponibilidad)
+    GET  /api/ext/profesores/<id>                     — Detalle de un profesor
+
+    GET  /api/ext/asignaciones-grupo                  — Registros grupo-carrera-materia-profesor
+    GET  /api/ext/cuatrimestres                       — Cuatrimestres registrados (distintos)
+    GET  /api/ext/cuatrimestres/<num>/materias        — Materias de un cuatrimestre
+    GET  /api/ext/relaciones                          — Relaciones docente-materia-carrera
+
+    GET  /api/ext/horarios                            — Bloques horarios base (franjas)
+    GET  /api/ext/horarios-academicos                 — Horarios académicos generados
+    GET  /api/ext/horarios-academicos/profesor/<id>   — Horario completo de un profesor
 """
 import os
 from functools import wraps
 from flask import Blueprint, jsonify, request
-from models import User, Carrera, Materia, Grupo, AsignacionProfesorGrupo, db
+from models import User, Carrera, Materia, Grupo, AsignacionProfesorGrupo, Horario, HorarioAcademico, DisponibilidadProfesor, db
 
 academia_api_bp = Blueprint('academia_api', __name__)
 
@@ -104,7 +118,34 @@ def _serialize_materia_basica(m):
     }
 
 
-def _serialize_profesor_basico(p):
+def _serialize_horario(h):
+    return {
+        'id': h.id,
+        'nombre': h.nombre,
+        'turno': h.turno,
+        'hora_inicio': h.get_hora_inicio_str(),
+        'hora_fin': h.get_hora_fin_str(),
+        'duracion_minutos': h.get_duracion_minutos(),
+        'orden': h.orden,
+        'activo': h.activo,
+    }
+
+
+def _serialize_horario_academico(ha):
+    return {
+        'id': ha.id,
+        'dia_semana': ha.dia_semana,
+        'grupo': ha.grupo,
+        'periodo_academico': ha.periodo_academico,
+        'version_nombre': ha.version_nombre,
+        'activo': ha.activo,
+        'profesor': _serialize_profesor_basico(ha.profesor) if ha.profesor else None,
+        'materia': _serialize_materia(ha.materia) if ha.materia else None,
+        'horario': _serialize_horario(ha.horario) if ha.horario else None,
+    }
+
+
+def _serialize_profesor_completo(p):
     return {
         'id': p.id,
         'username': p.username,
@@ -112,7 +153,48 @@ def _serialize_profesor_basico(p):
         'apellido': p.apellido,
         'nombre_completo': p.get_nombre_completo(),
         'email': p.email,
-        'tipo_profesor': p.tipo_profesor or p.rol,
+        'telefono': p.telefono or None,
+        'tipo_profesor': p.rol if p.rol in ROLES_PROFESOR else (p.tipo_profesor if p.tipo_profesor in ROLES_PROFESOR else p.rol),
+        'rol': p.rol,
+        'activo': p.activo,
+        'fecha_registro': p.fecha_registro.isoformat() if p.fecha_registro else None,
+        'carreras': [
+            {'id': c.id, 'nombre': c.nombre, 'codigo': c.codigo}
+            for c in p.carreras
+        ],
+        'materias': [
+            {'id': m.id, 'nombre': m.nombre, 'codigo': m.codigo, 'cuatrimestre': m.cuatrimestre}
+            for m in p.materias
+        ],
+        'disponibilidad': [
+            {
+                'dia': d.dia_semana,
+                'hora_inicio': d.horario.get_hora_inicio_str() if d.horario else None,
+                'hora_fin': d.horario.get_hora_fin_str() if d.horario else None,
+                'disponible': d.disponible,
+            }
+            for d in p.disponibilidades
+            if d.activo
+        ],
+    }
+
+
+def _serialize_profesor_basico(p):
+    # Derivar tipo_profesor del rol actual, no del campo stale tipo_profesor
+    if p.rol in ROLES_PROFESOR:
+        tipo = p.rol
+    elif p.tipo_profesor in ROLES_PROFESOR:
+        tipo = p.tipo_profesor
+    else:
+        tipo = p.rol
+    return {
+        'id': p.id,
+        'username': p.username,
+        'nombre': p.nombre,
+        'apellido': p.apellido,
+        'nombre_completo': p.get_nombre_completo(),
+        'email': p.email,
+        'tipo_profesor': tipo,
         'activo': p.activo,
     }
 
@@ -128,7 +210,7 @@ def _serialize_user(u):
         'email': u.email,
         'rol': u.rol,
         'roles': u.get_roles_list(),
-        'tipo_profesor': u.tipo_profesor or None,
+        'tipo_profesor': u.tipo_profesor if u.rol in ROLES_PROFESOR else None,
         'activo': u.activo,
         'carreras': [
             {'id': c.id, 'nombre': c.nombre, 'codigo': c.codigo}
@@ -332,6 +414,7 @@ def materias_por_grupo(grupo_id):
         AsignacionProfesorGrupo.grupo_id == grupo_id,
         AsignacionProfesorGrupo.activo == True,
         User.activo == True,
+        User.rol.in_(ROLES_PROFESOR),
     ).order_by(User.apellido, User.nombre).all()
 
     profesor_por_materia = {}
@@ -385,6 +468,7 @@ def listar_asignaciones_grupo():
             Grupo.activo == True,
             Materia.activa == True,
             User.activo == True,
+            User.rol.in_(ROLES_PROFESOR),
         )
     elif activo_param == 'false':
         query = query.filter(AsignacionProfesorGrupo.activo == False)
@@ -576,4 +660,273 @@ def listar_relaciones():
     return jsonify({
         'total': len(relaciones),
         'relaciones': relaciones,
+    }), 200
+
+
+# ---- Profesores completos --------------------------------------------------
+
+@academia_api_bp.route('/api/ext/profesores')
+@require_api_key
+def listar_profesores():
+    """
+    Retorna la lista de profesores con datos completos (carreras, materias, disponibilidad).
+
+    Query params opcionales:
+      - activo=true|false
+      - tipo=profesor_completo|profesor_asignatura
+      - carrera_id=<int>
+    """
+    query = User.query.filter(User.rol.in_(ROLES_PROFESOR))
+
+    activo_param = request.args.get('activo', '').lower()
+    if activo_param == 'true':
+        query = query.filter(User.activo == True)
+    elif activo_param == 'false':
+        query = query.filter(User.activo == False)
+
+    tipo_param = request.args.get('tipo', '').strip()
+    if tipo_param in ROLES_PROFESOR:
+        query = query.filter(User.rol == tipo_param)
+
+    carrera_id_param = request.args.get('carrera_id', '').strip()
+    if carrera_id_param.isdigit():
+        query = query.filter(User.carreras.any(id=int(carrera_id_param)))
+
+    profesores = query.order_by(User.apellido, User.nombre).all()
+
+    return jsonify({
+        'total': len(profesores),
+        'profesores': [_serialize_profesor_completo(p) for p in profesores],
+    }), 200
+
+
+@academia_api_bp.route('/api/ext/profesores/<int:profesor_id>')
+@require_api_key
+def detalle_profesor(profesor_id):
+    """Retorna los datos completos de un profesor por su ID."""
+    profesor = User.query.filter(
+        User.id == profesor_id,
+        User.rol.in_(ROLES_PROFESOR),
+    ).first()
+
+    if profesor is None:
+        return jsonify({'error': 'Profesor no encontrado'}), 404
+
+    return jsonify(_serialize_profesor_completo(profesor)), 200
+
+
+# ---- Materias --------------------------------------------------------------
+
+@academia_api_bp.route('/api/ext/materias')
+@require_api_key
+def listar_materias():
+    """
+    Retorna el listado de materias.
+
+    Query params opcionales:
+      - activa=true|false
+      - carrera_id=<int>
+      - cuatrimestre=<int>
+    """
+    query = Materia.query
+
+    activa_param = request.args.get('activa', 'true').lower()
+    if activa_param == 'true':
+        query = query.filter(Materia.activa == True)
+    elif activa_param == 'false':
+        query = query.filter(Materia.activa == False)
+
+    carrera_id_param = request.args.get('carrera_id', '').strip()
+    if carrera_id_param.isdigit():
+        query = query.filter(Materia.carrera_id == int(carrera_id_param))
+
+    cuatrimestre_param = request.args.get('cuatrimestre', '').strip()
+    if cuatrimestre_param.isdigit():
+        query = query.filter(Materia.cuatrimestre == int(cuatrimestre_param))
+
+    materias = query.join(Carrera, Materia.carrera_id == Carrera.id).order_by(
+        Carrera.nombre, Materia.cuatrimestre, Materia.nombre
+    ).all()
+
+    return jsonify({
+        'total': len(materias),
+        'materias': [_serialize_materia(m) for m in materias],
+    }), 200
+
+
+@academia_api_bp.route('/api/ext/materias/<int:materia_id>')
+@require_api_key
+def detalle_materia(materia_id):
+    """Retorna los datos de una materia por su ID."""
+    materia = Materia.query.get(materia_id)
+    if materia is None:
+        return jsonify({'error': 'Materia no encontrada'}), 404
+
+    data = _serialize_materia(materia)
+
+    # Incluir profesores asignados a esta materia
+    profesores = User.query.filter(
+        User.materias.any(id=materia_id),
+        User.rol.in_(ROLES_PROFESOR),
+        User.activo == True,
+    ).order_by(User.apellido, User.nombre).all()
+    data['profesores'] = [_serialize_profesor_basico(p) for p in profesores]
+
+    return jsonify(data), 200
+
+
+# ---- Horarios (bloques base) -----------------------------------------------
+
+@academia_api_bp.route('/api/ext/horarios')
+@require_api_key
+def listar_horarios():
+    """
+    Retorna los bloques de horario base (franjas horarias configuradas en el sistema).
+
+    Query params opcionales:
+      - turno=matutino|vespertino
+      - activo=true|false
+    """
+    query = Horario.query
+
+    activo_param = request.args.get('activo', 'true').lower()
+    if activo_param == 'true':
+        query = query.filter(Horario.activo == True)
+    elif activo_param == 'false':
+        query = query.filter(Horario.activo == False)
+
+    turno_param = request.args.get('turno', '').strip().lower()
+    if turno_param in ('matutino', 'vespertino'):
+        query = query.filter(Horario.turno == turno_param)
+
+    horarios = query.order_by(Horario.turno, Horario.orden).all()
+
+    return jsonify({
+        'total': len(horarios),
+        'horarios': [_serialize_horario(h) for h in horarios],
+    }), 200
+
+
+# ---- Horarios académicos (asignaciones generadas) --------------------------
+
+@academia_api_bp.route('/api/ext/horarios-academicos')
+@require_api_key
+def listar_horarios_academicos():
+    """
+    Retorna las asignaciones de horario académico generadas.
+
+    Cada registro representa: un profesor impartiendo una materia en una franja
+    horaria específica, un día de la semana, para un grupo y periodo determinados.
+
+    Query params opcionales:
+      - activo=true|false          (default: true)
+      - profesor_id=<int>
+      - materia_id=<int>
+      - carrera_id=<int>           Filtrar por carrera de la materia
+      - dia=lunes|martes|...       Día de la semana
+      - periodo=<str>              Ej: "2025 - 2026"
+      - grupo=<str>                Ej: "A", "B"
+      - turno=matutino|vespertino  Filtrar por turno del bloque horario
+    """
+    query = db.session.query(HorarioAcademico).join(
+        User, HorarioAcademico.profesor_id == User.id
+    ).join(
+        Materia, HorarioAcademico.materia_id == Materia.id
+    ).join(
+        Horario, HorarioAcademico.horario_id == Horario.id
+    ).join(
+        Carrera, Materia.carrera_id == Carrera.id
+    )
+
+    activo_param = request.args.get('activo', 'true').lower()
+    if activo_param == 'true':
+        query = query.filter(
+            HorarioAcademico.activo == True,
+            User.activo == True,
+            User.rol.in_(ROLES_PROFESOR),
+        )
+    elif activo_param == 'false':
+        query = query.filter(HorarioAcademico.activo == False)
+
+    profesor_id_param = request.args.get('profesor_id', '').strip()
+    if profesor_id_param.isdigit():
+        query = query.filter(HorarioAcademico.profesor_id == int(profesor_id_param))
+
+    materia_id_param = request.args.get('materia_id', '').strip()
+    if materia_id_param.isdigit():
+        query = query.filter(HorarioAcademico.materia_id == int(materia_id_param))
+
+    carrera_id_param = request.args.get('carrera_id', '').strip()
+    if carrera_id_param.isdigit():
+        query = query.filter(Carrera.id == int(carrera_id_param))
+
+    dia_param = request.args.get('dia', '').strip().lower()
+    if dia_param:
+        query = query.filter(HorarioAcademico.dia_semana == dia_param)
+
+    periodo_param = request.args.get('periodo', '').strip()
+    if periodo_param:
+        query = query.filter(HorarioAcademico.periodo_academico == periodo_param)
+
+    grupo_param = request.args.get('grupo', '').strip().upper()
+    if grupo_param:
+        query = query.filter(HorarioAcademico.grupo == grupo_param)
+
+    turno_param = request.args.get('turno', '').strip().lower()
+    if turno_param in ('matutino', 'vespertino'):
+        query = query.filter(Horario.turno == turno_param)
+
+    registros = query.order_by(
+        Carrera.nombre,
+        HorarioAcademico.grupo,
+        HorarioAcademico.dia_semana,
+        Horario.orden,
+    ).all()
+
+    return jsonify({
+        'total': len(registros),
+        'horarios_academicos': [_serialize_horario_academico(ha) for ha in registros],
+    }), 200
+
+
+@academia_api_bp.route('/api/ext/horarios-academicos/profesor/<int:profesor_id>')
+@require_api_key
+def horario_por_profesor(profesor_id):
+    """
+    Retorna el horario académico completo de un profesor.
+
+    Query params opcionales:
+      - activo=true|false   (default: true)
+      - periodo=<str>
+    """
+    profesor = User.query.filter(
+        User.id == profesor_id,
+        User.rol.in_(ROLES_PROFESOR),
+    ).first()
+
+    if profesor is None:
+        return jsonify({'error': 'Profesor no encontrado'}), 404
+
+    query = HorarioAcademico.query.filter(
+        HorarioAcademico.profesor_id == profesor_id,
+    )
+
+    activo_param = request.args.get('activo', 'true').lower()
+    if activo_param == 'true':
+        query = query.filter(HorarioAcademico.activo == True)
+    elif activo_param == 'false':
+        query = query.filter(HorarioAcademico.activo == False)
+
+    periodo_param = request.args.get('periodo', '').strip()
+    if periodo_param:
+        query = query.filter(HorarioAcademico.periodo_academico == periodo_param)
+
+    registros = query.join(
+        Horario, HorarioAcademico.horario_id == Horario.id
+    ).order_by(HorarioAcademico.dia_semana, Horario.orden).all()
+
+    return jsonify({
+        'profesor': _serialize_profesor_completo(profesor),
+        'total': len(registros),
+        'horario': [_serialize_horario_academico(ha) for ha in registros],
     }), 200

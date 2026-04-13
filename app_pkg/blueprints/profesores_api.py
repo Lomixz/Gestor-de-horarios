@@ -41,7 +41,7 @@ def _serialize_profesor(p):
         'nombre_completo': p.get_nombre_completo(),
         'email': p.email,
         'telefono': p.telefono or None,
-        'tipo_profesor': p.tipo_profesor or p.rol,
+        'tipo_profesor': p.rol if p.rol in ROLES_PROFESOR else (p.tipo_profesor if p.tipo_profesor in ROLES_PROFESOR else p.rol),
         'rol': p.rol,
         'activo': p.activo,
         'fecha_registro': p.fecha_registro.isoformat() if p.fecha_registro else None,
