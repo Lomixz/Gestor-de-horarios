@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed, FileRequired
-from wtforms import StringField, PasswordField, SelectField, SelectMultipleField, SubmitField, IntegerField, TimeField, TextAreaField, BooleanField
+from wtforms import StringField, PasswordField, SelectField, SelectMultipleField, SubmitField, IntegerField, TimeField, TextAreaField, BooleanField, FloatField
 from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError, NumberRange, Optional, Regexp
 from models import User, Horario, Carrera, Materia
 import re
@@ -390,15 +390,15 @@ class MateriaForm(FlaskForm):
         NumberRange(min=0, max=10, message='El cuatrimestre debe estar entre 0 y 10')
     ])
     
-    creditos = IntegerField('Créditos', validators=[
+    creditos = FloatField('Créditos', validators=[
         DataRequired(message='Los créditos son obligatorios'),
         NumberRange(min=1, max=10, message='Los créditos deben estar entre 1 y 10')
-    ], default=3)
+    ], default=3.0)
     
-    horas_semanales = IntegerField('Horas Semanales', validators=[
+    horas_semanales = FloatField('Horas Semanales', validators=[
         DataRequired(message='Las horas semanales son obligatorias'),
         NumberRange(min=1, max=50, message='Las horas semanales deben estar entre 1 y 50')
-    ], default=5)
+    ], default=5.0)
     
     carrera = SelectField('Carrera', validators=[DataRequired(message='Debe seleccionar una carrera')])
     

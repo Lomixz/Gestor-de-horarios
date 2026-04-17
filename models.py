@@ -750,8 +750,8 @@ class Materia(db.Model):
     
     # Información académica
     cuatrimestre = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
-    creditos = db.Column(db.Integer, nullable=False, default=3)
-    horas_semanales = db.Column(db.Integer, nullable=False, default=0)  # Total de horas por semana
+    creditos = db.Column(db.Float, nullable=False, default=3)
+    horas_semanales = db.Column(db.Float, nullable=False, default=0)  # Total de horas por semana
     
     # Relaciones
     carrera_id = db.Column(db.Integer, db.ForeignKey('carrera.id'), nullable=False)

@@ -661,8 +661,8 @@ def procesar_archivo_materias(archivo, carrera_defecto_id=None, restar_horas=0):
                 materia_existente = Materia.query.filter_by(codigo=codigo, carrera_id=carrera_id, activa=True).first()
                 
                 # Obtener valores opcionales
-                creditos = int(row['creditos']) if 'creditos' in df.columns and not pd.isna(row['creditos']) else 3
-                horas_semanales = int(row['horas_semanales']) if 'horas_semanales' in df.columns and not pd.isna(row['horas_semanales']) else 5
+                creditos = float(row['creditos']) if 'creditos' in df.columns and not pd.isna(row['creditos']) else 3.0
+                horas_semanales = float(row['horas_semanales']) if 'horas_semanales' in df.columns and not pd.isna(row['horas_semanales']) else 5.0
                 
                 # Aplicar resta de horas si se especificó
                 if restar_horas > 0:

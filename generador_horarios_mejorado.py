@@ -132,7 +132,7 @@ class DiagnosticoGeneracion:
             for grupo in grupos_turno:
                 for materia in grupo.materias:
                     if materia.activa:
-                        horas_requeridas += materia.horas_semanales or 3
+                        horas_requeridas += int(round(materia.horas_semanales or 3))
 
             # Calcular disponibilidad
             profesores_turno = set()
@@ -286,7 +286,7 @@ class GeneradorHorariosMejorado:
             turno_str = "matutino" if grupo.turno == "M" else "vespertino"
 
             for materia in materias:
-                horas_requeridas = materia.horas_semanales or 3
+                horas_requeridas = int(round(materia.horas_semanales or 3))
 
                 # Buscar TODAS las asignaciones específicas (puede haber múltiples profesores asignados)
                 asignaciones = AsignacionProfesorGrupo.query.filter_by(
@@ -752,7 +752,7 @@ class GeneradorHorariosMejorado:
             horarios = self.horarios_por_turno[grupo.turno]
 
             for materia in materias:
-                horas = materia.horas_semanales or 3
+                horas = int(round(materia.horas_semanales or 3))
 
                 asignaciones = []
                 for horario in horarios:
