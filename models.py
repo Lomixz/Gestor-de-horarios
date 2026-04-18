@@ -658,55 +658,55 @@ def init_db():
         print("Horarios por defecto creados")
     
     # Crear carreras por defecto si no existen
-    if Carrera.query.count() == 0:
-        carreras_defecto = [
-            Carrera('Ingeniería en Sistemas', 'ING-SIS', 'Carrera de ingeniería en sistemas computacionales', 'Facultad de Ingeniería', admin.id),
-            Carrera('Medicina', 'MED', 'Carrera de medicina general', 'Facultad de Medicina', admin.id),
-            Carrera('Derecho', 'DER', 'Carrera de ciencias jurídicas', 'Facultad de Derecho', admin.id),
-            Carrera('Administración de Empresas', 'ADM', 'Carrera de administración y gestión empresarial', 'Facultad de Ciencias Económicas', admin.id),
-            Carrera('Psicología', 'PSI', 'Carrera de psicología clínica y educativa', 'Facultad de Humanidades', admin.id),
-            Carrera('Arquitectura', 'ARQ', 'Carrera de diseño arquitectónico', 'Facultad de Arquitectura', admin.id),
-            Carrera('Enfermería', 'ENF', 'Carrera de enfermería profesional', 'Facultad de Ciencias de la Salud', admin.id),
-            Carrera('Contaduría Pública', 'CPN', 'Carrera de contaduría y auditoría', 'Facultad de Ciencias Económicas', admin.id),
-        ]
-        
-        for carrera in carreras_defecto:
-            db.session.add(carrera)
-        
-        db.session.commit()
-        print("Carreras por defecto creadas")
+    # if Carrera.query.count() == 0:
+    #     carreras_defecto = [
+    #         Carrera('Ingeniería en Sistemas', 'ING-SIS', 'Carrera de ingeniería en sistemas computacionales', 'Facultad de Ingeniería', admin.id),
+    #         Carrera('Medicina', 'MED', 'Carrera de medicina general', 'Facultad de Medicina', admin.id),
+    #         Carrera('Derecho', 'DER', 'Carrera de ciencias jurídicas', 'Facultad de Derecho', admin.id),
+    #         Carrera('Administración de Empresas', 'ADM', 'Carrera de administración y gestión empresarial', 'Facultad de Ciencias Económicas', admin.id),
+    #         Carrera('Psicología', 'PSI', 'Carrera de psicología clínica y educativa', 'Facultad de Humanidades', admin.id),
+    #         Carrera('Arquitectura', 'ARQ', 'Carrera de diseño arquitectónico', 'Facultad de Arquitectura', admin.id),
+    #         Carrera('Enfermería', 'ENF', 'Carrera de enfermería profesional', 'Facultad de Ciencias de la Salud', admin.id),
+    #         Carrera('Contaduría Pública', 'CPN', 'Carrera de contaduría y auditoría', 'Facultad de Ciencias Económicas', admin.id),
+    #     ]
+    #     
+    #     for carrera in carreras_defecto:
+    #         db.session.add(carrera)
+    #     
+    #     db.session.commit()
+    #     print("Carreras por defecto creadas")
     
     # Crear materias por defecto si no existen
-    if Materia.query.count() == 0:
-        # Obtener IDs de carreras para crear materias
-        ing_sis = Carrera.query.filter_by(codigo='ING-SIS').first()
-        med = Carrera.query.filter_by(codigo='MED').first()
-        
-        if ing_sis:
-            materias_ingenieria = [
-                Materia('Introducción a la Programación', 'ISI-101', 1, ing_sis.id, 4, 5, 'Fundamentos de programación', admin.id),
-                Materia('Matemáticas Discretas', 'MAT-101', 1, ing_sis.id, 3, 3, 'Lógica y matemáticas básicas', admin.id),
-                Materia('Estructuras de Datos', 'ISI-201', 2, ing_sis.id, 4, 5, 'Algoritmos y estructuras de datos', admin.id),
-                Materia('Base de Datos', 'ISI-301', 3, ing_sis.id, 4, 5, 'Sistemas de gestión de bases de datos', admin.id),
-                Materia('Ingeniería de Software', 'ISI-401', 4, ing_sis.id, 4, 5, 'Metodologías de desarrollo de software', admin.id),
-            ]
-            
-            for materia in materias_ingenieria:
-                db.session.add(materia)
-        
-        if med:
-            materias_medicina = [
-                Materia('Anatomía Humana', 'MED-101', 1, med.id, 5, 6, 'Estudio del cuerpo humano', admin.id),
-                Materia('Bioquímica', 'MED-102', 1, med.id, 4, 5, 'Química de los procesos biológicos', admin.id),
-                Materia('Fisiología', 'MED-201', 2, med.id, 5, 6, 'Funcionamiento de los sistemas del cuerpo', admin.id),
-                Materia('Patología General', 'MED-301', 3, med.id, 4, 4, 'Estudio de las enfermedades', admin.id),
-            ]
-            
-            for materia in materias_medicina:
-                db.session.add(materia)
-        
-        db.session.commit()
-        print("Materias por defecto creadas")
+    # if Materia.query.count() == 0:
+    #     # Obtener IDs de carreras para crear materias
+    #     ing_sis = Carrera.query.filter_by(codigo='ING-SIS').first()
+    #     med = Carrera.query.filter_by(codigo='MED').first()
+    #     
+    #     if ing_sis:
+    #         materias_ingenieria = [
+    #             Materia('Introducción a la Programación', 'ISI-101', 1, ing_sis.id, 4, 5, 'Fundamentos de programación', admin.id),
+    #             Materia('Matemáticas Discretas', 'MAT-101', 1, ing_sis.id, 3, 3, 'Lógica y matemáticas básicas', admin.id),
+    #             Materia('Estructuras de Datos', 'ISI-201', 2, ing_sis.id, 4, 5, 'Algoritmos y estructuras de datos', admin.id),
+    #             Materia('Base de Datos', 'ISI-301', 3, ing_sis.id, 4, 5, 'Sistemas de gestión de bases de datos', admin.id),
+    #             Materia('Ingeniería de Software', 'ISI-401', 4, ing_sis.id, 4, 5, 'Metodologías de desarrollo de software', admin.id),
+    #         ]
+    #         
+    #         for materia in materias_ingenieria:
+    #             db.session.add(materia)
+    #     
+    #     if med:
+    #         materias_medicina = [
+    #             Materia('Anatomía Humana', 'MED-101', 1, med.id, 5, 6, 'Estudio del cuerpo humano', admin.id),
+    #             Materia('Bioquímica', 'MED-102', 1, med.id, 4, 5, 'Química de los procesos biológicos', admin.id),
+    #             Materia('Fisiología', 'MED-201', 2, med.id, 5, 6, 'Funcionamiento de los sistemas del cuerpo', admin.id),
+    #             Materia('Patología General', 'MED-301', 3, med.id, 4, 4, 'Estudio de las enfermedades', admin.id),
+    #         ]
+    #         
+    #         for materia in materias_medicina:
+    #             db.session.add(materia)
+    #     
+    #     db.session.commit()
+    #     print("Materias por defecto creadas")
 
     # Inicializar configuraciones de exportación Excel si no existen
     if not ConfiguracionSistema.query.filter_by(clave='director_academico_nombre').first():
@@ -748,13 +748,13 @@ class Materia(db.Model):
     
     # Información básica de la materia
     nombre = db.Column(db.String(200), nullable=False)
-    codigo = db.Column(db.String(20), nullable=False, unique=True)  # Ej: "ISI-101", "MAT-201"
+    codigo = db.Column(db.String(25), nullable=False, unique=True)  # Ej: "ISI-101", "MAT-201"
     descripcion = db.Column(db.Text)
     
     # Información académica
     cuatrimestre = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
-    creditos = db.Column(db.Integer, nullable=False, default=3)
-    horas_semanales = db.Column(db.Integer, nullable=False, default=0)  # Total de horas por semana
+    creditos = db.Column(db.Float, nullable=False, default=3)
+    horas_semanales = db.Column(db.Float, nullable=False, default=0)  # Total de horas por semana
     
     # Relaciones
     carrera_id = db.Column(db.Integer, db.ForeignKey('carrera.id'), nullable=False)
