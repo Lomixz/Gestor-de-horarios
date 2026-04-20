@@ -103,7 +103,7 @@ class AsignacionProfesorGrupo(db.Model):
     
     # Información adicional
     horas_semanales = db.Column(db.Integer, default=0)  # Horas para esta asignación específica
-    periodo_academico = db.Column(db.String(20))
+    periodo_academico = db.Column(db.String(50))
     notas = db.Column(db.Text)
     
     # Metadatos
@@ -977,7 +977,7 @@ class HorarioAcademico(db.Model):
     # Información adicional
     dia_semana = db.Column(db.String(10), nullable=False)  # 'lunes', 'martes', etc.
     grupo = db.Column(db.String(10), nullable=False, default='A')  # 'A', 'B', 'C', etc.
-    periodo_academico = db.Column(db.String(20))  # Ej: "2025 - 2025", "2025 - 2026"
+    periodo_academico = db.Column(db.String(50))  # Ej: "2025 - 2025", "2025 - 2026"
     version_nombre = db.Column(db.String(100))  # Etiqueta de la versión: "Final", "Borrador v1", etc.
     
     # Metadatos
