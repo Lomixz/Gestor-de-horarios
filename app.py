@@ -1612,9 +1612,12 @@ def importar_grupos_csv_route():
         archivo = form.archivo.data
         if archivo:
             nombre_archivo = secure_filename(archivo.filename)
-            resultado = procesar_archivo_grupos_csv(archivo, form.carrera_id.data if form.carrera_id.data != 0 else None)
+            resultado = procesar_archivo_grupos_csv(archivo, form.carrera_id.data if form.carrera_id.data != 0 else None, usuario_id=current_user.id)
             if resultado['exito']:
                 flash(resultado['mensaje'], 'success')
+                # Mostrar errores individuales si los hay
+                for error in resultado.get('errores', []):
+                    flash(error, 'warning')
                 return redirect(url_for('gestionar_grupos'))
             else:
                 flash(resultado['mensaje'], 'error')
