@@ -511,9 +511,9 @@ def generar_plantilla_grupos_csv():
     response.headers["Content-type"] = "text/csv; charset=utf-8"
     return response
 
-def procesar_archivo_grupos_csv(archivo, carrera_defecto_id=None):
+def procesar_archivo_grupos_csv(archivo, carrera_defecto_id=None, usuario_id=1):
     """Procesar archivo CSV/Excel con datos de grupos"""
-    from models import Grupo
+    from models import Grupo, Carrera
     resultado = {'exito': False, 'procesados': 0, 'creados': 0, 'actualizados': 0, 'errores': [], 'mensaje': ''}
     
     try:
@@ -535,32 +535,74 @@ def procesar_archivo_grupos_csv(archivo, carrera_defecto_id=None):
                     resultado['errores'].append(f"Fila {index + 2}: 'numero_grupo' es obligatorio.")
                     continue
                 
-                codigo = str(row['numero_grupo']).strip()
-                turno = str(row['turno']).lower().strip() if 'turno' in df.columns and not pd.isna(row['turno']) else 'matutino'
+                # Asegurar que numero_grupo sea un entero
+                try:
+                    num_grupo = int(float(row['numero_grupo']))
+                except (ValueError, TypeError):
+                    resultado['errores'].append(f"Fila {index + 2}: 'numero_grupo' debe ser un número válido.")
+                    continue
+
+                # Mapear turno a inicial (M/V)
+                turno_raw = str(row['turno']).lower().strip() if 'turno' in df.columns and not pd.isna(row['turno']) else 'matutino'
+                turno = 'M' if 'matutino' in turno_raw or turno_raw == 'm' else 'V'
+                
                 cuatrimestre = int(row['cuatrimestre']) if 'cuatrimestre' in df.columns and not pd.isna(row['cuatrimestre']) else 1
                 
-                # Carrera
+                # Determinar Carrera
                 carrera_id = carrera_defecto_id
-                if 'carrera_codigo' in df.columns and not pd.isna(row['carrera_codigo']):
-                    c = Carrera.query.filter_by(codigo=str(row['carrera_codigo']).upper().strip()).first()
-                    if c: carrera_id = c.id
+                carrera_tag = str(row['carrera_codigo']).strip() if 'carrera_codigo' in df.columns and not pd.isna(row['carrera_codigo']) else None
+                
+                if carrera_tag:
+                    # 1. Intentar buscar por código alfabético exacto
+                    c = Carrera.query.filter_by(codigo=carrera_tag.upper()).first()
+                    
+                    # 2. Si es numérico, intentar buscar por ID
+                    if not c and carrera_tag.isdigit():
+                        c = Carrera.query.get(int(carrera_tag))
+                    
+                    if c:
+                        carrera_id = c.id
+                    else:
+                        # Si no se encuentra, registrar el error pero intentar usar el defecto si existe
+                        msg_error = f"Fila {index + 2}: Carrera '{carrera_tag}' no encontrada."
+                        if not carrera_id:
+                            resultado['errores'].append(msg_error)
+                            continue
+                        else:
+                            # Si hay una carrera por defecto, solo registramos un aviso interno
+                            print(f"DEBUG: {msg_error} Usando carrera por defecto ID {carrera_id}")
                 
                 if not carrera_id:
-                    resultado['errores'].append(f"Fila {index + 2}: No se pudo determinar la carrera.")
+                    resultado['errores'].append(f"Fila {index + 2}: No se pudo determinar la carrera (columna vacía y sin carrera por defecto).")
                     continue
                 
-                grupo = Grupo.query.filter_by(codigo=codigo, carrera_id=carrera_id, activo=True).first()
+                # Buscar si ya existe el grupo (por sus atributos definitorios)
+                # Nota: El código se genera automáticamente a partir de estos 4 campos
+                grupo = Grupo.query.filter_by(
+                    numero_grupo=num_grupo, 
+                    carrera_id=carrera_id, 
+                    turno=turno, 
+                    cuatrimestre=cuatrimestre, 
+                    activo=True
+                ).first()
+
                 if grupo:
-                    grupo.turno = turno
-                    grupo.cuatrimestre = cuatrimestre
+                    # Si ya existe, podríamos actualizar campos adicionales si los hubiera
                     resultado['actualizados'] += 1
                 else:
-                    nuevo_grupo = Grupo(codigo=codigo, turno=turno, cuatrimestre=cuatrimestre, carrera_id=carrera_id)
+                    # Crear nuevo grupo con argumentos correctos del constructor
+                    nuevo_grupo = Grupo(
+                        numero_grupo=num_grupo, 
+                        turno=turno, 
+                        carrera_id=carrera_id, 
+                        cuatrimestre=cuatrimestre,
+                        creado_por=usuario_id
+                    )
                     db.session.add(nuevo_grupo)
                     resultado['creados'] += 1
                     
             except Exception as e:
-                resultado['errores'].append(f"Fila {index + 2}: {str(e)}")
+                resultado['errores'].append(f"Fila {index + 2}: Error inesperado - {str(e)}")
                 
         db.session.commit()
         resultado['exito'] = True
