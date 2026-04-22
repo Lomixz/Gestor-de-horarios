@@ -5417,11 +5417,15 @@ def configuracion_sistema():
         'firmas_habilitadas': ConfiguracionSistema.get_config('firmas_habilitadas', 'true')
     }
 
+    restriccion_horas_muertas = ConfiguracionSistema.get_config('restriccion_horas_muertas', True)
+    max_horas_muertas = ConfiguracionSistema.get_config('max_horas_muertas', 2)
     firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
 
     return render_template('admin/configuracion.html',
                            config_horas=config_horas,
                            config_excel=config_excel,
+                           restriccion_horas_muertas=restriccion_horas_muertas,
+                           max_horas_muertas=max_horas_muertas,
                            firmas_usuario_habilitadas=firmas_usuario_habilitadas)
 
 
@@ -5805,6 +5809,14 @@ def guardar_configuracion_horarios():
             'tiempo_entre_clases', data.get('tiempo_entre_clases', '10'),
             tipo='int', descripcion='Tiempo de descanso entre clases en minutos', categoria='horarios'
         )
+        ConfiguracionSistema.set_config(
+            'restriccion_horas_muertas', 'true' if data.get('restriccion_horas_muertas') else 'false',
+            tipo='bool', descripcion='Activar restricción de máximo de horas muertas por día para profesores', categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas', data.get('max_horas_muertas', '2'),
+            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor', categoria='horarios'
+        )
 
         return jsonify({'success': True, 'message': 'Configuración de horarios guardada exitosamente'})
 
@@ -5827,7 +5839,9 @@ def obtener_configuracion_horarios():
             'horas_max_dia': ConfiguracionSistema.get_config('horas_max_dia', '8'),
             'dias_clase': ConfiguracionSistema.get_config('dias_clase', '5'),
             'duracion_clase': ConfiguracionSistema.get_config('duracion_clase', '50'),
-            'tiempo_entre_clases': ConfiguracionSistema.get_config('tiempo_entre_clases', '10')
+            'tiempo_entre_clases': ConfiguracionSistema.get_config('tiempo_entre_clases', '10'),
+            'restriccion_horas_muertas': ConfiguracionSistema.get_config('restriccion_horas_muertas', True),
+            'max_horas_muertas': ConfiguracionSistema.get_config('max_horas_muertas', 2)
         }
 
         return jsonify({'success': True, 'data': config})

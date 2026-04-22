@@ -741,6 +741,20 @@ def init_db():
         )
         print("Configuración de firmas de usuario inicializada")
 
+    # Inicializar configuración de restricción de horas muertas si no existe
+    if not ConfiguracionSistema.query.filter_by(clave='restriccion_horas_muertas').first():
+        ConfiguracionSistema.set_config(
+            'restriccion_horas_muertas', 'true',
+            tipo='bool', descripcion='Activar restricción de máximo de horas muertas por día para profesores',
+            categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas', '2',
+            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor',
+            categoria='horarios'
+        )
+        print("Configuración de restricción de horas muertas inicializada")
+
 
 class Materia(db.Model):
     """Modelo para gestionar materias académicas"""

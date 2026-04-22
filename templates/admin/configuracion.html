@@ -139,6 +139,31 @@
                                 <input type="number" class="form-control" id="tiempo_entre_clases" value="10" min="0" max="30">
                                 <div class="form-text">Tiempo de descanso entre clases</div>
                             </div>
+
+                            <!-- Restricción de Horas Muertas -->
+                            <div class="col-12">
+                                <hr class="my-2">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="restriccion_horas_muertas"
+                                           {% if restriccion_horas_muertas == 'true' or restriccion_horas_muertas == True %}checked{% endif %}>
+                                    <label class="form-check-label fw-bold" for="restriccion_horas_muertas">
+                                        <i class="fas fa-hourglass-end me-1"></i>
+                                        Restricción de Horas Muertas
+                                    </label>
+                                </div>
+                                <div class="form-text">Cuando está activado, el generador intentará limitar los huecos entre clases por día para los profesores.</div>
+                            </div>
+
+                            <!-- Límite de Horas Muertas -->
+                            <div class="col-md-6" id="max_horas_muertas_container" style="{% if not (restriccion_horas_muertas == 'true' or restriccion_horas_muertas == True) %}display: none;{% endif %}">
+                                <label for="max_horas_muertas" class="form-label">Horas Muertas Máximas por Día</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="max_horas_muertas" 
+                                           value="{{ max_horas_muertas or 2 }}" min="1" max="10">
+                                    <span class="input-group-text">horas</span>
+                                </div>
+                                <div class="form-text">Número máximo de huecos permitidos por día por profesor</div>
+                            </div>
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
@@ -639,12 +664,29 @@ function guardarConfiguracion() {
     mostrarMensaje('Configuración general guardada exitosamente', 'success');
 }
 
+function toggleMaxHorasMuertas() {
+    const isChecked = document.getElementById('restriccion_horas_muertas').checked;
+    const container = document.getElementById('max_horas_muertas_container');
+    if (container) {
+        container.style.display = isChecked ? 'block' : 'none';
+    }
+}
+
+// Escuchar cambios en el switch de horas muertas
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'restriccion_horas_muertas') {
+        toggleMaxHorasMuertas();
+    }
+});
+
 function guardarHorarios() {
     const formData = {
         horas_max_dia: document.getElementById('horas_max_dia').value,
         dias_clase: document.getElementById('dias_clase').value,
         duracion_clase: document.getElementById('duracion_clase').value,
-        tiempo_entre_clases: document.getElementById('tiempo_entre_clases').value
+        tiempo_entre_clases: document.getElementById('tiempo_entre_clases').value,
+        restriccion_horas_muertas: document.getElementById('restriccion_horas_muertas').checked,
+        max_horas_muertas: document.getElementById('max_horas_muertas').value
     };
 
     secureFetch('/admin/configuracion/horarios', {
@@ -982,6 +1024,13 @@ function cargarConfiguracionHorarios() {
                 document.getElementById('dias_clase').value = data.data.dias_clase;
                 document.getElementById('duracion_clase').value = data.data.duracion_clase;
                 document.getElementById('tiempo_entre_clases').value = data.data.tiempo_entre_clases;
+                if (document.getElementById('restriccion_horas_muertas')) {
+                    document.getElementById('restriccion_horas_muertas').checked = data.data.restriccion_horas_muertas;
+                    toggleMaxHorasMuertas();
+                }
+                if (document.getElementById('max_horas_muertas')) {
+                    document.getElementById('max_horas_muertas').value = data.data.max_horas_muertas;
+                }
             }
         })
         .catch(error => {
