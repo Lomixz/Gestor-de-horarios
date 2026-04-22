@@ -5358,7 +5358,7 @@ def reportes_sistema():
     carreras = Carrera.query.filter_by(activa=True).all()
     for carrera in carreras:
         profesores_carrera = User.query.filter(
-            User.carrera_id == carrera.id,
+            User.carreras.any(id=carrera.id),
             db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
@@ -5373,11 +5373,18 @@ def reportes_sistema():
             HorarioAcademico.activo == True
         ).count()
 
+        # Pre-calculate coverage percentage capped at 100%
+        if materias_carrera > 0:
+            cobertura = min((horarios_carrera / materias_carrera) * 100, 100.0)
+        else:
+            cobertura = 0
+
         carreras_stats.append({
             'carrera': carrera,
             'profesores': profesores_carrera,
             'materias': materias_carrera,
-            'horarios': horarios_carrera
+            'horarios': horarios_carrera,
+            'cobertura': round(cobertura, 1)
         })
 
     return render_template('admin/reportes.html',
@@ -5417,11 +5424,15 @@ def configuracion_sistema():
         'firmas_habilitadas': ConfiguracionSistema.get_config('firmas_habilitadas', 'true')
     }
 
+    restriccion_horas_muertas = ConfiguracionSistema.get_config('restriccion_horas_muertas', True)
+    max_horas_muertas = ConfiguracionSistema.get_config('max_horas_muertas', 2)
     firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
 
     return render_template('admin/configuracion.html',
                            config_horas=config_horas,
                            config_excel=config_excel,
+                           restriccion_horas_muertas=restriccion_horas_muertas,
+                           max_horas_muertas=max_horas_muertas,
                            firmas_usuario_habilitadas=firmas_usuario_habilitadas)
 
 
@@ -5805,6 +5816,14 @@ def guardar_configuracion_horarios():
             'tiempo_entre_clases', data.get('tiempo_entre_clases', '10'),
             tipo='int', descripcion='Tiempo de descanso entre clases en minutos', categoria='horarios'
         )
+        ConfiguracionSistema.set_config(
+            'restriccion_horas_muertas', 'true' if data.get('restriccion_horas_muertas') else 'false',
+            tipo='bool', descripcion='Activar restricción de máximo de horas muertas por día para profesores', categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas', data.get('max_horas_muertas', '2'),
+            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor', categoria='horarios'
+        )
 
         return jsonify({'success': True, 'message': 'Configuración de horarios guardada exitosamente'})
 
@@ -5827,7 +5846,9 @@ def obtener_configuracion_horarios():
             'horas_max_dia': ConfiguracionSistema.get_config('horas_max_dia', '8'),
             'dias_clase': ConfiguracionSistema.get_config('dias_clase', '5'),
             'duracion_clase': ConfiguracionSistema.get_config('duracion_clase', '50'),
-            'tiempo_entre_clases': ConfiguracionSistema.get_config('tiempo_entre_clases', '10')
+            'tiempo_entre_clases': ConfiguracionSistema.get_config('tiempo_entre_clases', '10'),
+            'restriccion_horas_muertas': ConfiguracionSistema.get_config('restriccion_horas_muertas', True),
+            'max_horas_muertas': ConfiguracionSistema.get_config('max_horas_muertas', 2)
         }
 
         return jsonify({'success': True, 'data': config})
@@ -6462,24 +6483,23 @@ def admin_eliminar_firma_usuario(id):
 @app.route('/admin/reportes/exportar/pdf')
 @login_required
 def exportar_reportes_pdf():
-    """Exportar reportes del sistema a PDF"""
+    """Exportar reportes del sistema a PDF usando plantilla HTML"""
     if not current_user.is_admin():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
 
-    # Obtener datos para el reporte
+    # Obtener datos para el reporte (mismo cálculo que la vista web)
     total_usuarios = User.query.count()
     total_profesores = User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()
     total_carreras = Carrera.query.filter_by(activa=True).count()
     total_materias = Materia.query.filter_by(activa=True).count()
     total_horarios_academicos = HorarioAcademico.query.filter_by(activo=True).count()
 
-    # Datos por carrera
+    carreras_stats = []
     carreras = Carrera.query.filter_by(activa=True).all()
-    carreras_data = []
     for carrera in carreras:
         profesores_carrera = User.query.filter(
-            User.carrera_id == carrera.id,
+            User.carreras.any(id=carrera.id),
             db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
@@ -6494,116 +6514,48 @@ def exportar_reportes_pdf():
             HorarioAcademico.activo == True
         ).count()
 
-        cobertura = (horarios_carrera / materias_carrera * 100) if materias_carrera > 0 else 0
+        if materias_carrera > 0:
+            cobertura = min((horarios_carrera / materias_carrera) * 100, 100.0)
+        else:
+            cobertura = 0
 
-        carreras_data.append([
-            carrera.nombre,
-            str(profesores_carrera),
-            str(materias_carrera),
-            str(horarios_carrera),
-            ".1f"
-        ])
+        carreras_stats.append({
+            'carrera': carrera,
+            'profesores': profesores_carrera,
+            'materias': materias_carrera,
+            'horarios': horarios_carrera,
+            'cobertura': round(cobertura, 1)
+        })
 
-    # Crear PDF
-    import os
+    # Logo en base64 para el PDF
+    logo_data_uri = None
+    logo_path = os.path.join(app.root_path, 'static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        import base64
+        with open(logo_path, 'rb') as img_file:
+            logo_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            logo_data_uri = f"data:image/png;base64,{logo_b64}"
+
+    # Renderizar HTML
+    html = render_template('exports/reporte_sistema_pdf.html',
+                         total_usuarios=total_usuarios,
+                         total_profesores=total_profesores,
+                         total_carreras=total_carreras,
+                         total_materias=total_materias,
+                         total_horarios_academicos=total_horarios_academicos,
+                         carreras_stats=carreras_stats,
+                         fecha_generacion=datetime.now().strftime("%d/%m/%Y %H:%M"),
+                         logo_data_uri=logo_data_uri)
+
+    # Convertir a PDF usando xhtml2pdf
+    from xhtml2pdf import pisa
     buffer = BytesIO()
-    page_w, page_h = A4
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                            topMargin=85, bottomMargin=35,
-                            leftMargin=40, rightMargin=40)
-
-    COLOR_TEAL = colors.HexColor('#00847C')
-    COLOR_GOLD = colors.HexColor('#FFD600')
-
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
-    logo_exists = os.path.exists(logo_path)
-
-    def draw_page(canvas_obj, doc_obj):
-        canvas_obj.saveState()
-        canvas_obj.setFillColor(COLOR_TEAL)
-        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
-        canvas_obj.setFillColor(COLOR_GOLD)
-        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
-        if logo_exists:
-            try:
-                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
-                                     preserveAspectRatio=True, mask='auto')
-            except Exception:
-                pass
-        canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFont('Helvetica-Bold', 13)
-        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Reporte del Sistema Académico')
-        canvas_obj.setFont('Helvetica', 8)
-        canvas_obj.drawCentredString(page_w / 2, page_h - 46, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
-        canvas_obj.setFillColor(colors.HexColor('#546E7A'))
-        canvas_obj.setFont('Helvetica-Oblique', 7)
-        canvas_obj.drawCentredString(
-            page_w / 2, 18,
-            f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
-        )
-        canvas_obj.restoreState()
-
-    elements = []
-
-    # Estilos
-    styles = getSampleStyleSheet()
-
-    # Estadísticas Generales
-    elements.append(Paragraph("Estadísticas Generales", styles['Heading2']))
-    elements.append(Spacer(1, 12))
-
-    general_data = [
-        ['Métrica', 'Valor'],
-        ['Total de Usuarios', str(total_usuarios)],
-        ['Total de Profesores', str(total_profesores)],
-        ['Carreras Activas', str(total_carreras)],
-        ['Materias Activas', str(total_materias)],
-        ['Horarios Asignados', str(total_horarios_academicos)],
-        ['Promedio Horarios por Profesor', ".1f"]
-    ]
-
-    general_table = Table(general_data, colWidths=[3*inch, 2*inch])
-    general_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    elements.append(general_table)
-    elements.append(Spacer(1, 20))
-
-    # Estadísticas por Carrera
-    elements.append(Paragraph("Estadísticas por Carrera", styles['Heading2']))
-    elements.append(Spacer(1, 12))
-
-    if carreras_data:
-        carrera_headers = [['Carrera', 'Profesores', 'Materias', 'Horarios', 'Cobertura (%)']]
-        carrera_table_data = carrera_headers + carreras_data
-
-        carrera_table = Table(carrera_table_data, colWidths=[2.5*inch, 1*inch, 1*inch, 1*inch, 1.2*inch])
-        carrera_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ]))
-        elements.append(carrera_table)
-    else:
-        elements.append(Paragraph("No hay datos de carreras disponibles.", styles['Normal']))
-
-    # Generar PDF
-    doc.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
-
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+    
+    if pisa_status.err:
+        flash('Error al generar el reporte PDF.', 'error')
+        return redirect(url_for('reportes_sistema'))
+        
     buffer.seek(0)
     return send_file(
         buffer,
@@ -6637,7 +6589,7 @@ def exportar_reportes_excel():
             Carrera.query.filter_by(activa=True).count(),
             Materia.query.filter_by(activa=True).count(),
             HorarioAcademico.query.filter_by(activo=True).count(),
-            ".1f"
+            f"{(HorarioAcademico.query.filter_by(activo=True).count() / max(User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count(), 1)):.1f}"
         ]
     }
 
@@ -6646,7 +6598,7 @@ def exportar_reportes_excel():
     carreras_data = []
     for carrera in carreras:
         profesores_carrera = User.query.filter(
-            User.carrera_id == carrera.id,
+            User.carreras.any(id=carrera.id),
             db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
@@ -6661,7 +6613,7 @@ def exportar_reportes_excel():
             HorarioAcademico.activo == True
         ).count()
 
-        cobertura = (horarios_carrera / materias_carrera * 100) if materias_carrera > 0 else 0
+        cobertura = min((horarios_carrera / materias_carrera * 100), 100.0) if materias_carrera > 0 else 0
 
         carreras_data.append({
             'Carrera': carrera.nombre,
@@ -6736,7 +6688,9 @@ def exportar_reportes_csv():
     writer.writerow(['Carreras Activas', Carrera.query.filter_by(activa=True).count()])
     writer.writerow(['Materias Activas', Materia.query.filter_by(activa=True).count()])
     writer.writerow(['Horarios Asignados', HorarioAcademico.query.filter_by(activo=True).count()])
-    writer.writerow(['Promedio Horarios por Profesor', ".1f"])
+    total_profs_csv = User.query.filter(db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura'])))).count()
+    total_horarios_csv = HorarioAcademico.query.filter_by(activo=True).count()
+    writer.writerow(['Promedio Horarios por Profesor', f"{(total_horarios_csv / max(total_profs_csv, 1)):.1f}"])
     writer.writerow([])
 
     # Estadísticas por Carrera
@@ -6746,7 +6700,7 @@ def exportar_reportes_csv():
     carreras = Carrera.query.filter_by(activa=True).all()
     for carrera in carreras:
         profesores_carrera = User.query.filter(
-            User.carrera_id == carrera.id,
+            User.carreras.any(id=carrera.id),
             db.or_(User.rol.in_(['profesor_completo', 'profesor_asignatura']), User.roles.any(Role.nombre.in_(['profesor_completo', 'profesor_asignatura']))),
             User.activo == True
         ).count()
@@ -6761,7 +6715,7 @@ def exportar_reportes_csv():
             HorarioAcademico.activo == True
         ).count()
 
-        cobertura = (horarios_carrera / materias_carrera * 100) if materias_carrera > 0 else 0
+        cobertura = min((horarios_carrera / materias_carrera * 100), 100.0) if materias_carrera > 0 else 0
 
         writer.writerow([
             carrera.nombre,

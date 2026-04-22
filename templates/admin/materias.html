@@ -147,7 +147,7 @@
                             </label>
                             <select id="filtro-cuatrimestre" class="form-select">
                                 <option value="">Todos</option>
-                                {% for i in range(1, 13) %}
+                                {% for i in range(1, 11) %}
                                 <option value="Cuatrimestre {{ i }}">{{ i }}</option>
                                 {% endfor %}
                             </select>
@@ -257,8 +257,8 @@
                                         <span class="badge bg-success">{{ materia.creditos }}</span>
                                     </td>
                                     <td>
-                                        <span class="badge bg-info">{{ materia.get_horas_totales() }}h</span>
-                                        <br><small class="text-muted">({{ materia.horas_semanales }}h/semana)</small>
+                                        <span class="badge bg-info">{{ materia.get_horas_totales()|round|int }}h</span>
+                                        <br><small class="text-muted">({{ materia.horas_semanales|round|int }}h/semana)</small>
                                     </td>
                                     <td>
                                         {% if materia.activa %}

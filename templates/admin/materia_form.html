@@ -87,7 +87,7 @@
                                     <span class="input-group-text">
                                         <i class="fas fa-clock"></i>
                                     </span>
-                                    {{ form.horas_semanales(class="form-control", type="number", min="1", max="50") }}
+                                    {{ form.horas_semanales(class="form-control", type="number", min="1", max="50", step="1") }}
                                     <span class="input-group-text">h/semana</span>
                                 </div>
                                 {% if form.horas_semanales.errors %}
@@ -163,7 +163,7 @@
                         <div class="col-md-6">
                             <p><strong>Horas Semanales:</strong></p>
                             <p class="text-muted">
-                                <span class="badge bg-primary">{{ materia.horas_semanales }} horas/semana</span>
+                                <span class="badge bg-primary">{{ materia.horas_semanales|round|int }} horas/semana</span>
                             </p>
                         </div>
                     </div>

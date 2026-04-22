@@ -18,6 +18,7 @@ from models import (
     Grupo,
     AsignacionProfesorGrupo,
     DisponibilidadProfesor,
+    ConfiguracionSistema,
 )
 from datetime import datetime
 from collections import defaultdict
@@ -735,7 +736,10 @@ class GeneradorHorariosMejorado:
         self._restriccion_max_horas_dia_profesor()
 
         # 9. NUEVO: Máximo 2 horas muertas por profesor por día
-        self._restriccion_max_horas_muertas_profesor()
+        if ConfiguracionSistema.get_config('restriccion_horas_muertas', True):
+            self._restriccion_max_horas_muertas_profesor()
+        else:
+            print("   ⏰ Restricción de horas muertas DESACTIVADA por configuración")
 
         # 10. NUEVO: Máximo horas semanales según tipo de profesor
         # Tiempo Completo: 40h/semana, Asignatura: 20h/semana
@@ -1104,8 +1108,12 @@ class GeneradorHorariosMejorado:
                             profesor_dia_horarios[key][idx].append(var)
 
         # Para cada (profesor, día), crear restricción de huecos
-        # Garantiza: entre cualquier par de clases, máximo 2 slots vacíos.
+        # Garantiza: entre cualquier par de clases, máximo X slots vacíos.
         # Corrige el bug original que no contaba slots sin variables (siempre vacíos).
+        
+        # Obtener el límite máximo de horas muertas desde la configuración
+        max_muertas = ConfiguracionSistema.get_config('max_horas_muertas', 2)
+        
         for (profesor_id, dia_idx), horarios_dict in profesor_dia_horarios.items():
             if len(horarios_dict) < 2:
                 continue
@@ -1124,7 +1132,7 @@ class GeneradorHorariosMejorado:
             ordered_indices = sorted(slot_ocupado.keys())
 
             # Para cada par (i, j) de slots donde el profesor PUEDE tener clase:
-            # Si ambos están ocupados, los huecos entre ellos deben ser <= 2.
+            # Si ambos están ocupados, los huecos entre ellos deben ser <= max_muertas.
             # Los huecos incluyen tanto slots con variables vacías como slots sin
             # variables (donde no puede haber clase → siempre vacíos).
             for i_pos in range(len(ordered_indices)):
@@ -1135,8 +1143,8 @@ class GeneradorHorariosMejorado:
                     # Total de slots intermedios en el rango real (incluyendo sin variables)
                     total_intermedios = idx_j - idx_i - 1
 
-                    if total_intermedios <= 2:
-                        continue  # Máximo 2 huecos posibles, restricción siempre cumplida
+                    if total_intermedios <= max_muertas:
+                        continue  # Máximo huecos posibles, restricción siempre cumplida
 
                     # Slots intermedios CON variables (podrían estar ocupados)
                     intermedios_con_var = [
@@ -1146,11 +1154,11 @@ class GeneradorHorariosMejorado:
                     # Slots intermedios SIN variables = siempre vacíos (huecos fijos)
                     huecos_fijos = total_intermedios - len(intermedios_con_var)
 
-                    # Restricción: huecos_fijos + intermedios_vacios <= 2
-                    # => intermedios_vacios <= 2 - huecos_fijos
-                    # => len(intermedios_con_var) - sum(intermedios_con_var) <= 2 - huecos_fijos
-                    # => sum(intermedios_con_var) >= len(intermedios_con_var) - 2 + huecos_fijos
-                    min_ocupados = len(intermedios_con_var) - 2 + huecos_fijos
+                    # Restricción: huecos_fijos + intermedios_vacios <= max_muertas
+                    # => intermedios_vacios <= max_muertas - huecos_fijos
+                    # => len(intermedios_con_var) - sum(intermedios_con_var) <= max_muertas - huecos_fijos
+                    # => sum(intermedios_con_var) >= len(intermedios_con_var) - max_muertas + huecos_fijos
+                    min_ocupados = len(intermedios_con_var) - max_muertas + huecos_fijos
 
                     if min_ocupados > 0 and intermedios_con_var:
                         self.model.Add(
