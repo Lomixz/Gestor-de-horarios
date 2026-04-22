@@ -898,11 +898,16 @@ class Grupo(db.Model):
         return f"Cuatrimestre {self.cuatrimestre}"
     
     def get_profesores_asignados(self):
-        """Obtener profesores que imparten materias en este grupo"""
+        """Obtener profesores que tienen asignación real (AsignacionProfesorGrupo) en este grupo"""
+        from models import AsignacionProfesorGrupo, User
+        asignaciones = AsignacionProfesorGrupo.query.filter_by(
+            grupo_id=self.id,
+            activo=True
+        ).all()
         profesores = set()
-        for materia in self.materias:
-            for profesor in materia.profesores:
-                profesores.add(profesor)
+        for a in asignaciones:
+            if a.profesor and a.profesor.activo:
+                profesores.add(a.profesor)
         return list(profesores)
     
     def get_profesores_count(self):
@@ -910,10 +915,17 @@ class Grupo(db.Model):
         return len(self.get_profesores_asignados())
     
     def get_materias_con_profesores(self):
-        """Obtener materias con sus profesores asignados"""
+        """Obtener materias con sus profesores asignados en ESTE grupo (via AsignacionProfesorGrupo)"""
+        from models import AsignacionProfesorGrupo
         materias_info = []
         for materia in self.materias:
-            profesores_materia = [p for p in materia.profesores if p.activo]
+            # Buscar asignaciones reales en este grupo para esta materia
+            asignaciones = AsignacionProfesorGrupo.query.filter_by(
+                grupo_id=self.id,
+                materia_id=materia.id,
+                activo=True
+            ).all()
+            profesores_materia = [a.profesor for a in asignaciones if a.profesor and a.profesor.activo]
             materias_info.append({
                 'materia': materia,
                 'profesores': profesores_materia,
@@ -922,20 +934,34 @@ class Grupo(db.Model):
         return materias_info
     
     def get_materias_sin_profesor(self):
-        """Obtener materias que no tienen profesor asignado"""
+        """Obtener materias que no tienen profesor asignado en ESTE grupo"""
+        from models import AsignacionProfesorGrupo
         materias_sin_profesor = []
         for materia in self.materias:
-            if not any(p.activo for p in materia.profesores):
+            tiene_asignacion = AsignacionProfesorGrupo.query.filter_by(
+                grupo_id=self.id,
+                materia_id=materia.id,
+                activo=True
+            ).first()
+            if not tiene_asignacion:
                 materias_sin_profesor.append(materia)
         return materias_sin_profesor
     
     def get_completitud_asignaciones(self):
-        """Obtener porcentaje de materias con profesor asignado"""
+        """Obtener porcentaje de materias con profesor asignado en ESTE grupo (via AsignacionProfesorGrupo)"""
         if not self.materias:
             return 0
         
-        materias_con_profesor = sum(1 for materia in self.materias 
-                                  if any(p.activo for p in materia.profesores))
+        from models import AsignacionProfesorGrupo
+        materias_con_profesor = 0
+        for materia in self.materias:
+            tiene_asignacion = AsignacionProfesorGrupo.query.filter_by(
+                grupo_id=self.id,
+                materia_id=materia.id,
+                activo=True
+            ).first()
+            if tiene_asignacion:
+                materias_con_profesor += 1
         return round((materias_con_profesor / len(self.materias)) * 100, 1)
     
     def get_estado_grupo(self):

@@ -1079,10 +1079,21 @@ select[multiple] option:checked {
     .admin-ui .th-w-120 {
         width: 130px;
     }
+    .admin-ui .admin-col-career {
+        min-width: 160px;
+    }
 }
 
 .admin-ui .badge-nowrap {
     white-space: nowrap !important;
+}
+
+.admin-ui .admin-table .badge {
+    white-space: normal;
+    line-height: 1.2;
+    text-align: left;
+    max-width: 100%;
+    word-break: break-word;
 }
 
 .admin-ui .admin-users-table-wrap .admin-table-users {

@@ -986,8 +986,8 @@ def generar_pdf_materias(materias, nombre_carrera=None, cuatrimestre=None, ciclo
                     Paragraph(mat.nombre, cell_style),
                     Paragraph(f'Cuatrimestre {mat.cuatrimestre}', cell_center_style),
                     Paragraph(str(mat.creditos), cell_center_style),
-                    Paragraph(f'{mat.horas_semanales}h', cell_center_style),
-                    Paragraph(f'{hrs_totales}h', cell_center_style),
+                    Paragraph(f'{int(round(mat.horas_semanales))}h', cell_center_style),
+                    Paragraph(f'{int(round(hrs_totales))}h', cell_center_style),
                     Paragraph(ciclo_text, cell_center_style),
                 ]
                 data.append(row)
@@ -999,7 +999,7 @@ def generar_pdf_materias(materias, nombre_carrera=None, cuatrimestre=None, ciclo
                 '',
                 Paragraph(f'<b>{grupo_creditos}</b>', cell_center_style),
                 '',
-                Paragraph(f'<b>{grupo_horas}h</b>', cell_center_style),
+                Paragraph(f'<b>{int(round(grupo_horas))}h</b>', cell_center_style),
                 ''
             ]
             data.append(totals_row)

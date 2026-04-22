@@ -115,7 +115,7 @@
                                             <span class="badge bg-light text-dark border">{{ materia.creditos }} créd.</span>
                                         </td>
                                         <td class="text-center">
-                                            <span class="fw-semibold text-dark">{{ materia.get_horas_totales() }}h</span>
+                                            <span class="fw-semibold text-dark">{{ materia.get_horas_totales()|round|int }}h</span>
                                         </td>
                                         <td>
                                             {% if info.profesores %}
@@ -149,7 +149,7 @@
                                     <tr>
                                         <th class="ps-4">Total</th>
                                         <td class="text-center fw-bold">{{ grupo.materias|sum(attribute='creditos') }}</td>
-                                        <td class="text-center fw-bold">{{ grupo.materias|sum(attribute='horas_semanales') }}h</td>
+                                        <td class="text-center fw-bold">{{ grupo.materias|sum(attribute='horas_semanales')|round|int }}h</td>
                                         <td><small class="text-muted">{{ resumen.profesores_count }} prof. únicos</small></td>
                                         <td></td>
                                     </tr>

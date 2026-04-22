@@ -203,9 +203,9 @@
                             <tbody>
                                 {% for profesor in profesores %}
                                 <tr class="align-middle admin-click-row" data-bs-toggle="collapse" data-bs-target="#detalles{{ profesor.id }}" aria-expanded="false">
-                                    <td>
+                                    <td style="word-break: break-word; overflow-wrap: break-word;">
                                         <div class="d-flex align-items-center">
-                                            <div class="avatar-circle bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2">
+                                            <div class="avatar-circle bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2 flex-shrink-0">
                                                 {% if profesor.nombre and profesor.apellido %}
                                                     {{ profesor.nombre[0]|upper }}{{ profesor.apellido.split()[0][0]|upper if profesor.apellido.split() else '' }}
                                                 {% else %}
@@ -219,18 +219,18 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>{{ profesor.email }}</td>
+                                    <td style="word-break: break-word; overflow-wrap: break-word;">{{ profesor.email }}</td>
                                     <td class="admin-col-career">
                                         {% if profesor.is_profesor() %}
                                             {% if profesor.carreras %}
                                                 {% for carrera in profesor.carreras %}
-                                                    <span class="badge badge-nowrap bg-info mb-1">{{ carrera.nombre }}</span>
+                                                    <span class="badge bg-info mb-1">{{ carrera.nombre }}</span>
                                                 {% endfor %}
                                             {% else %}
                                                 <span class="text-muted">Sin carrera</span>
                                             {% endif %}
                                         {% elif profesor.carrera %}
-                                            <span class="badge badge-nowrap bg-info">{{ profesor.carrera.nombre }}</span>
+                                            <span class="badge bg-info">{{ profesor.carrera.nombre }}</span>
                                         {% else %}
                                             <span class="text-muted">Sin carrera</span>
                                         {% endif %}

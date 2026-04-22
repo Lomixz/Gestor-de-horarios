@@ -4,6 +4,26 @@
 {% block body_class %}admin-ui{% endblock %}
 
 {% block content %}
+<style>
+    /* Fix text overflow in report stats and tables */
+    .card-body .text-center small.text-muted {
+        word-break: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+    .admin-table td,
+    .admin-table th {
+        word-break: break-word;
+        overflow-wrap: break-word;
+        max-width: 250px;
+    }
+    .admin-table td strong {
+        display: inline-block;
+        max-width: 100%;
+        overflow-wrap: break-word;
+    }
+</style>
+
 <div class="container-fluid">
     <!-- Encabezado -->
     <div class="row mb-4">
@@ -99,30 +119,46 @@
                         <table class="table table-hover admin-table">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>Carrera</th>
-                                    <th class="text-center">Profesores</th>
-                                    <th class="text-center">Materias</th>
-                                    <th class="text-center">Horarios Asignados</th>
-                                    <th class="text-center">Cobertura (%)</th>
+                                    <th class="admin-col-career">Carrera</th>
+                                    <th class="text-center admin-col-type">Profesores</th>
+                                    <th class="text-center admin-col-type">Materias</th>
+                                    <th class="text-center admin-col-type">Horarios Asignados</th>
+                                    <th class="text-center admin-col-status">Cobertura (%)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for stat in carreras_stats %}
                                 <tr>
                                     <td>
-                                        <strong>{{ stat.carrera.nombre }}</strong>
-                                        {% if not stat.carrera.activa %}
-                                            <span class="badge bg-secondary ms-1">Inactiva</span>
-                                        {% endif %}
+                                        <div class="d-flex align-items-center">
+                                            <span class="fw-bold">{{ stat.carrera.nombre }}</span>
+                                            {% if not stat.carrera.activa %}
+                                                <span class="badge bg-secondary ms-2">Inactiva</span>
+                                            {% endif %}
+                                        </div>
                                     </td>
-                                    <td class="text-center">{{ stat.profesores }}</td>
-                                    <td class="text-center">{{ stat.materias }}</td>
-                                    <td class="text-center">{{ stat.horarios }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">{{ stat.profesores }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">{{ stat.materias }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border">{{ stat.horarios }}</span>
+                                    </td>
                                     <td class="text-center">
                                         {% if stat.materias > 0 %}
-                                            <span class="badge bg-{{ 'success' if (stat.horarios / stat.materias) >= 0.8 else 'warning' if (stat.horarios / stat.materias) >= 0.5 else 'danger' }}">
-                                                {{ "%.1f"|format((stat.horarios / stat.materias) * 100) }}%
-                                            </span>
+                                            {% set pct = (stat.horarios / stat.materias) * 100 %}
+                                            <div class="d-flex flex-column align-items-center">
+                                                <span class="badge badge-nowrap bg-{{ 'success' if pct >= 80 else 'warning' if pct >= 50 else 'danger' }} mb-1" style="font-size: 0.9rem; padding: 0.5em 0.8em;">
+                                                    {{ "%.1f"|format([pct, 100.0]|min) }}%
+                                                </span>
+                                                <div class="progress w-100" style="height: 4px; max-width: 80px;">
+                                                    <div class="progress-bar bg-{{ 'success' if pct >= 80 else 'warning' if pct >= 50 else 'danger' }}" 
+                                                         role="progressbar" 
+                                                         style="width: {{ [pct, 100.0]|min }}%"></div>
+                                                </div>
+                                            </div>
                                         {% else %}
                                             <span class="badge bg-secondary">N/A</span>
                                         {% endif %}
@@ -149,28 +185,22 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <button class="btn btn-outline-primary w-100" onclick="exportarPDF()">
                                 <i class="fas fa-file-pdf me-2"></i>
                                 Exportar PDF
                             </button>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <button class="btn btn-outline-success w-100" onclick="exportarExcel()">
                                 <i class="fas fa-file-excel me-2"></i>
                                 Exportar Excel
                             </button>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <button class="btn btn-outline-warning w-100" onclick="exportarCSV()">
                                 <i class="fas fa-file-csv me-2"></i>
                                 Exportar CSV
-                            </button>
-                        </div>
-                        <div class="col-md-3">
-                            <button class="btn btn-outline-info w-100" onclick="imprimirReporte()">
-                                <i class="fas fa-print me-2"></i>
-                                Imprimir
                             </button>
                         </div>
                     </div>
@@ -194,9 +224,7 @@ function exportarCSV() {
     window.location.href = '/admin/reportes/exportar/csv';
 }
 
-function imprimirReporte() {
-    window.print();
-}
+
 </script>
 
 {% endblock %}

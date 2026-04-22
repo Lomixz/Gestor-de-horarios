@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte del Sistema Académico</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 10pt;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* --- Colores Institucionales --- */
+        .color-teal { color: #00847C; }
+        .bg-teal { background-color: #00847C; }
+        .bg-gold { background-color: #FFD600; }
+
+        /* --- Encabezado --- */
+        .header {
+            background-color: #00847C;
+            height: 70px;
+            width: 100%;
+            position: relative;
+        }
+        .header-gold-line {
+            background-color: #FFD600;
+            height: 3px;
+            width: 100%;
+        }
+        .header-content {
+            padding: 10px 30px;
+            color: white;
+            text-align: center;
+        }
+        .logo {
+            position: absolute;
+            left: 30px;
+            top: 10px;
+            width: 60px;
+            height: auto;
+        }
+        .header-title {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .header-subtitle {
+            font-size: 8pt;
+            margin-top: 2px;
+        }
+
+        /* --- Portada --- */
+        .portada {
+            text-align: center;
+            padding: 100px 50px;
+        }
+        .portada h1 {
+            color: #00847C;
+            font-size: 28pt;
+            margin-bottom: 10px;
+        }
+        .portada .date {
+            color: #666;
+            font-size: 12pt;
+            margin-bottom: 50px;
+        }
+        .stats-grid {
+            width: 100%;
+            margin: 0 auto;
+            border-collapse: separate;
+            border-spacing: 15px;
+        }
+        .stat-card {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 20px;
+            border-radius: 8px;
+            width: 33%;
+        }
+        .stat-value {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #00847C;
+        }
+        .stat-label {
+            font-size: 10pt;
+            color: #546E7A;
+            margin-top: 5px;
+        }
+
+        /* --- Contenido --- */
+        .content {
+            padding: 30px 40px;
+            page-break-before: always;
+        }
+        .section-title {
+            color: #00847C;
+            font-size: 16pt;
+            font-weight: bold;
+            border-bottom: 2px solid #FFD600;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
+        }
+
+        /* --- Tablas --- */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        .report-table th {
+            background-color: #00847C;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-size: 10pt;
+        }
+        .report-table td {
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 9pt;
+        }
+        .report-table tr:nth-child(even) {
+            background-color: #f1f8f7;
+        }
+        .text-center { text-align: center; }
+        .fw-bold { font-weight: bold; }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 8pt;
+            color: white;
+            font-weight: bold;
+        }
+        .bg-success { background-color: #28a745; }
+        .bg-warning { background-color: #ffc107; color: #333; }
+        .bg-danger { background-color: #dc3545; }
+        .bg-secondary { background-color: #6c757d; }
+
+        /* --- Footer --- */
+        .footer {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 7pt;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <!-- ENCABEZADO -->
+    <div class="header">
+        {% if logo_data_uri %}
+        <img src="{{ logo_data_uri }}" class="logo" alt="Logo" />
+        {% endif %}
+        <div class="header-content">
+            <div class="header-title">Reporte del Sistema Académico</div>
+            <div class="header-subtitle">Universidad Politécnica de Texcoco — Sistema de Gestión Académica</div>
+        </div>
+    </div>
+    <div class="header-gold-line"></div>
+
+    <!-- PORTADA -->
+    <div class="portada">
+        <h1>Resumen Ejecutivo</h1>
+        <div class="date">Generado el {{ fecha_generacion }}</div>
+
+        <table class="stats-grid">
+            <tr>
+                <td class="stat-card">
+                    <div class="stat-value">{{ total_usuarios }}</div>
+                    <div class="stat-label">Total Usuarios</div>
+                </td>
+                <td class="stat-card">
+                    <div class="stat-value">{{ total_profesores }}</div>
+                    <div class="stat-label">Profesores</div>
+                </td>
+                <td class="stat-card">
+                    <div class="stat-value">{{ total_carreras }}</div>
+                    <div class="stat-label">Carreras Activas</div>
+                </td>
+            </tr>
+            <tr>
+                <td class="stat-card">
+                    <div class="stat-value">{{ total_materias }}</div>
+                    <div class="stat-label">Materias Activas</div>
+                </td>
+                <td class="stat-card">
+                    <div class="stat-value">{{ total_horarios_academicos }}</div>
+                    <div class="stat-label">Horarios Asignados</div>
+                </td>
+                <td class="stat-card">
+                    <div class="stat-value">
+                        {% if total_profesores > 0 %}
+                            {{ "%.1f"|format(total_horarios_academicos / total_profesores) }}
+                        {% else %}
+                            0
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">Horarios por Profesor</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- DETALLE POR CARRERA -->
+    <div class="content">
+        <div class="section-title">Estadísticas por Carrera</div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th style="width: 45%;">Carrera</th>
+                    <th class="text-center" style="width: 12%;">Profesores</th>
+                    <th class="text-center" style="width: 12%;">Materias</th>
+                    <th class="text-center" style="width: 12%;">Horarios</th>
+                    <th class="text-center" style="width: 19%;">Cobertura (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stat in carreras_stats %}
+                <tr>
+                    <td class="fw-bold">{{ stat.carrera.nombre }}</td>
+                    <td class="text-center">{{ stat.profesores }}</td>
+                    <td class="text-center">{{ stat.materias }}</td>
+                    <td class="text-center">{{ stat.horarios }}</td>
+                    <td class="text-center">
+                        {% if stat.materias > 0 %}
+                            {% set pct = stat.cobertura %}
+                            <span class="badge bg-{{ 'success' if pct >= 80 else 'warning' if pct >= 50 else 'danger' }}">
+                                {{ "%.1f"|format(pct) }}%
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary">N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        Página 1 — Generado por el Sistema de Gestión Académica — UPTex
+    </div>
+</body>
+</html>
