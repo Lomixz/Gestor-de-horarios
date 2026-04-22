@@ -90,7 +90,6 @@ class RegistrationForm(FlaskForm):
 
     rol = SelectField('Rol', choices=[
         ('', 'Seleccione un rol'),
-        ('admin', 'Administrador'),
         ('jefe_carrera', 'Jefe de Carrera'),
         ('profesor', 'Profesor'),
         ('recursos_humanos', 'Recursos Humanos')
