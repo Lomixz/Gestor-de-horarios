@@ -442,13 +442,16 @@ class User(UserMixin, db.Model):
         ).all()
     
     def get_carreras_jefe_ids(self):
-        """Obtener IDs de las carreras donde el usuario es jefe de carrera.
-        Usa carrera_id (campo específico para jefe de carrera)."""
+        """Obtener IDs de las carreras donde el usuario es jefe de carrera."""
         if not self.is_jefe_carrera():
             return []
+        
+        # Combinar IDs de la relación many-to-many y el campo carrera_id legacy
+        ids = {c.id for c in self.carreras}
         if self.carrera_id:
-            return [self.carrera_id]
-        return []
+            ids.add(self.carrera_id)
+            
+        return list(ids)
     
     @property
     def primera_carrera(self):

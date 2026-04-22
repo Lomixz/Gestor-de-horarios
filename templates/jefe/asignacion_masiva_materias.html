@@ -214,8 +214,8 @@
                                                 <div class="progress flex-grow-1 me-2 mass-progress-xs">
                                                     <div class="progress-bar bg-{{ carga.color }}" style="width: {{ [carga.porcentaje, 100]|min }}%"></div>
                                                 </div>
-                                                <small class="{{ 'text-danger fw-bold' if en_limite else 'text-muted' }} metric-label-xs" title="Horas asignadas: {{ carga.total_horas }}h | Límite: {{ carga.limite_maximo }}h{% if carga.horas_horarios != carga.total_horas %} | Horarios generados: {{ carga.horas_horarios }}h{% endif %}">
-                                                    {{ carga.total_horas }}/{{ carga.limite_maximo }}h
+                                                <small class="{{ 'text-danger fw-bold' if en_limite else 'text-muted' }} metric-label-xs" title="Horas asignadas: {{ carga.total_horas|round|int }}h | Límite: {{ carga.limite_maximo|round|int }}h{% if carga.horas_horarios != carga.total_horas %} | Horarios generados: {{ carga.horas_horarios|round|int }}h{% endif %}">
+                                                    {{ carga.total_horas|round|int }}/{{ carga.limite_maximo|round|int }}h
                                                 </small>
                                             </div>
                                         </div>

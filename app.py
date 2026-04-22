@@ -813,9 +813,9 @@ def gestionar_materias_profesor_jefe(id):
     form = AsignarMateriasProfesorForm(profesor=profesor)
     
     # Filtrar solo materias de la carrera del jefe
-    materias_carrera = Materia.query.filter_by(
-        carrera_id=current_user.primera_carrera_id,
-        activa=True
+    materias_carrera = Materia.query.filter(
+        Materia.carrera_id.in_(current_user.get_carreras_jefe_ids()),
+        Materia.activa == True
     ).order_by(Materia.cuatrimestre, Materia.nombre).all()
     
     form.materias.choices = [
@@ -1065,9 +1065,9 @@ def asignacion_masiva_materias_jefe():
                 User.carreras.any(Carrera.id.in_(current_user.get_carreras_jefe_ids()))
             ).all()
             
-            materias_query = Materia.query.filter_by(
-                carrera_id=current_user.primera_carrera_id,
-                activa=True
+            materias_query = Materia.query.filter(
+                Materia.carrera_id.in_(current_user.get_carreras_jefe_ids()),
+                Materia.activa == True
             )
             if cuatrimestre:
                 materias_query = materias_query.filter_by(cuatrimestre=cuatrimestre)
@@ -1132,9 +1132,9 @@ def asignacion_masiva_materias_jefe():
     ).order_by(User.apellido, User.nombre).all()
     
     # Obtener materias activas de la carrera del jefe
-    materias_query = Materia.query.filter_by(
-        carrera_id=current_user.primera_carrera_id,
-        activa=True
+    materias_query = Materia.query.filter(
+        Materia.carrera_id.in_(current_user.get_carreras_jefe_ids()),
+        Materia.activa == True
     )
     
     if cuatrimestre:
@@ -1531,12 +1531,12 @@ def gestionar_grupos():
             flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
             return redirect(url_for('dashboard'))
         
-        grupos = Grupo.query.filter_by(carrera_id=current_user.primera_carrera_id).join(Carrera).order_by(
+        grupos = Grupo.query.filter(Grupo.carrera_id.in_(current_user.get_carreras_jefe_ids())).join(Carrera).order_by(
             Grupo.cuatrimestre, Grupo.numero_grupo
         ).all()
         
-        # Obtener carreras únicas (solo la del jefe)
-        carreras = Carrera.query.filter_by(id=current_user.primera_carrera_id).all()
+        # Obtener carreras únicas (solo las del jefe)
+        carreras = Carrera.query.filter(Carrera.id.in_(current_user.get_carreras_jefe_ids())).all()
 
     
     return render_template('admin/grupos.html', grupos=grupos, carreras=carreras)
@@ -1855,10 +1855,10 @@ def asignacion_masiva_materias_grupos():
     # Obtener filtros
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
-    
-    # Si es solo jefe de carrera (no admin), forzar su carrera
+    # Si es solo jefe de carrera (no admin), validar que la carrera le pertenezca
     if current_user.is_jefe_carrera() and not current_user.is_admin():
-        carrera_id = current_user.primera_carrera_id
+        if not carrera_id or not current_user.tiene_carrera(carrera_id):
+            carrera_id = current_user.primera_carrera_id
 
     # Obtener carreras para el filtro
     if current_user.is_admin():
@@ -2074,9 +2074,10 @@ def exportar_asignaciones_grupos():
     carrera_id = request.args.get('carrera_id', type=int)
     cuatrimestre = request.args.get('cuatrimestre', type=int)
 
-    # Si es solo jefe de carrera (no admin), forzar su carrera
+    # Si es solo jefe de carrera (no admin), validar que la carrera le pertenezca
     if current_user.is_jefe_carrera() and not current_user.is_admin():
-        carrera_id = current_user.primera_carrera_id
+        if not carrera_id or not current_user.tiene_carrera(carrera_id):
+            carrera_id = current_user.primera_carrera_id
 
     from utils import exportar_asignaciones_grupo_csv
     contenido_csv = exportar_asignaciones_grupo_csv(carrera_id, cuatrimestre)
@@ -2107,9 +2108,10 @@ def auto_asignar_materias_grupos():
     carrera_id = request.form.get('carrera_id', type=int)
     cuatrimestre = request.form.get('cuatrimestre', type=int)
 
-    # Si es solo jefe de carrera (no admin), forzar su carrera
+    # Si es solo jefe de carrera (no admin), validar que la carrera le pertenezca
     if current_user.is_jefe_carrera() and not current_user.is_admin():
-        carrera_id = current_user.primera_carrera_id
+        if not carrera_id or not current_user.tiene_carrera(carrera_id):
+            carrera_id = current_user.primera_carrera_id
 
     if not carrera_id or not cuatrimestre:
         return jsonify({'exito': False, 'mensaje': 'Faltan parámetros'}), 400
