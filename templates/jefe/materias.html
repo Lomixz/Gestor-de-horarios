@@ -115,7 +115,7 @@
                                             <small class="text-muted">{{ materia.get_ciclo_escolar()['nombre'] }}</small>
                                         </td>
                                         <td>{{ materia.creditos }}</td>
-                                        <td>{{ materia.get_horas_totales() }}</td>
+                                        <td>{{ materia.get_horas_totales()|round|int }}</td>
                                         <td>
                                             {% if materia.activa %}
                                                 <span class="badge bg-success text-white">Activa</span>
