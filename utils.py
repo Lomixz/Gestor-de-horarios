@@ -499,7 +499,8 @@ def exportar_grupos_csv():
     
     for g in grupos:
         carrera_codigo = g.carrera.codigo if g.carrera else ''
-        lineas.append(f"{g.codigo},{g.turno or ''},{g.cuatrimestre or ''},{carrera_codigo}")
+        turno_display = g.get_turno_display().lower()
+        lineas.append(f"{g.numero_grupo},{turno_display},{g.cuatrimestre or ''},{carrera_codigo}")
     
     return '\n'.join(lineas)
 
