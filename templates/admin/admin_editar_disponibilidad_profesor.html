@@ -113,26 +113,12 @@
                     </div>
                 </div>
 
-                <!-- Botones de selección rápida por turno -->
-                <div class="mb-3">
-                    <h6>Selección rápida por turno:</h6>
-                    <div class="btn-group btn-group-sm flex-wrap" role="group">
-                        <button type="button" class="btn btn-outline-warning" onclick="toggleTurno('matutino')">
-                            <i class="bi bi-sunrise"></i> Turno Matutino
-                        </button>
-                        <button type="button" class="btn btn-outline-info" onclick="toggleTurno('vespertino')">
-                            <i class="bi bi-sunset"></i> Turno Vespertino
-                        </button>
-                    </div>
-                </div>
-
                 <!-- Tabla de disponibilidad -->
                 <div class="table-responsive">
                     {% if horarios %}
                     <table class="table table-bordered table-hover availability-table">
                         <thead class="table-dark">
                             <tr>
-                                <th class="text-center">Turno</th>
                                 <th class="text-center">Horario</th>
                                 <th class="text-center">Lunes</th>
                                 <th class="text-center">Martes</th>
@@ -140,67 +126,61 @@
                                 <th class="text-center">Jueves</th>
                                 <th class="text-center">Viernes</th>
                                 <th class="text-center">Sábado</th>
-                                <th class="text-center">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for horario in horarios %}
                             <tr>
-                                <td class="text-center">
-                                    {% if horario.turno == 'matutino' %}
-                                    <span class="badge bg-warning text-dark">Matutino</span>
-                                    {% elif horario.turno == 'vespertino' %}
-                                    <span class="badge bg-primary">Vespertino</span>
-                                    {% else %}
-                                    <span class="badge bg-dark">Nocturno</span>
-                                    {% endif %}
+                                <td class="text-center align-middle">
+                                    {{ horario.hora_inicio.strftime('%H:%M') }} - {{ horario.hora_fin.strftime('%H:%M') }}
                                 </td>
-                                <td class="text-center">
-                                    <strong>{{ horario.hora_inicio }} - {{ horario.hora_fin }}</strong>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_lunes"
+                                               class="form-check-input disp-checkbox dia-lunes horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'lunes')) %}checked{% endif %}>
+                                    </div>
                                 </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_lunes" 
-                                           class="form-check-input disp-checkbox dia-lunes horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'lunes')) %}checked{% endif %}>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_martes"
+                                               class="form-check-input disp-checkbox dia-martes horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'martes')) %}checked{% endif %}>
+                                    </div>
                                 </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_martes" 
-                                           class="form-check-input disp-checkbox dia-martes horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'martes')) %}checked{% endif %}>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_miercoles"
+                                               class="form-check-input disp-checkbox dia-miercoles horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'miercoles')) %}checked{% endif %}>
+                                    </div>
                                 </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_miercoles" 
-                                           class="form-check-input disp-checkbox dia-miercoles horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'miercoles')) %}checked{% endif %}>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_jueves"
+                                               class="form-check-input disp-checkbox dia-jueves horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'jueves')) %}checked{% endif %}>
+                                    </div>
                                 </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_jueves" 
-                                           class="form-check-input disp-checkbox dia-jueves horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'jueves')) %}checked{% endif %}>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_viernes"
+                                               class="form-check-input disp-checkbox dia-viernes horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'viernes')) %}checked{% endif %}>
+                                    </div>
                                 </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_viernes" 
-                                           class="form-check-input disp-checkbox dia-viernes horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'viernes')) %}checked{% endif %}>
-                                </td>
-                                <td class="text-center">
-                                    <input type="checkbox" 
-                                           name="disp_{{ horario.id }}_sabado" 
-                                           class="form-check-input disp-checkbox dia-sabado horario-{{ horario.id }} turno-{{ horario.turno }}"
-                                           {% if disponibilidad_dict.get((horario.id, 'sabado')) %}checked{% endif %}>
-                                </td>
-                                <td class="text-center">
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-secondary" 
-                                            onclick="toggleHorario({{ horario.id }})"
-                                            title="Marcar/Desmarcar toda la fila">
-                                        <i class="bi bi-arrow-left-right"></i>
-                                    </button>
+                                <td class="text-center align-middle">
+                                    <div class="d-flex justify-content-center">
+                                        <input type="checkbox"
+                                               name="disp_{{ horario.id }}_sabado"
+                                               class="form-check-input disp-checkbox dia-sabado horario-{{ horario.id }}"
+                                               {% if disponibilidad_dict.get((horario.id, 'sabado')) %}checked{% endif %}>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}

@@ -209,6 +209,26 @@ def login():
     
     return render_template('login.html', form=form)
 
+
+def _construir_horarios_unicos(horarios):
+    """Deduplica horarios por franja (hora_inicio, hora_fin).
+
+    Retorna (horarios_unicos, horario_map) donde:
+    - horarios_unicos: un objeto Horario por franja única (el representativo).
+    - horario_map: {rep_id: [id1, id2, ...]} para propagar disponibilidad a todos los IDs del grupo.
+    """
+    from collections import OrderedDict
+    grupos = OrderedDict()
+    for h in horarios:
+        key = (h.hora_inicio, h.hora_fin)
+        if key not in grupos:
+            grupos[key] = []
+        grupos[key].append(h)
+    horarios_unicos = [v[0] for v in grupos.values()]
+    horario_map = {v[0].id: [h.id for h in v] for v in grupos.values()}
+    return horarios_unicos, horario_map
+
+
 @app.route('/register', methods=['GET', 'POST'])
 @limiter.limit("20 per minute")
 def register():
@@ -220,6 +240,7 @@ def register():
     
     # Obtener horarios para el formulario de disponibilidad
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
 
     if request.method == 'POST' and not form.validate_on_submit():
         logger.warning(f"Register form validation failed: {form.errors}")
@@ -253,18 +274,18 @@ def register():
             if rol_final in ['profesor_completo', 'profesor_asignatura']:
                 dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
 
-                for horario in horarios:
+                for rep_id, all_ids in horario_map.items():
                     for dia in dias:
-                        # Verificar si el checkbox fue marcado
-                        field_name = f"availability_{horario.id}_{dia}"
+                        field_name = f"availability_{rep_id}_{dia}"
                         if request.form.get(field_name):
-                            disponibilidad = DisponibilidadProfesor(
-                                profesor_id=user.id,
-                                horario_id=horario.id,
-                                dia_semana=dia,
-                                disponible=True
-                            )
-                            db.session.add(disponibilidad)
+                            for hid in all_ids:
+                                disponibilidad = DisponibilidadProfesor(
+                                    profesor_id=user.id,
+                                    horario_id=hid,
+                                    dia_semana=dia,
+                                    disponible=True
+                                )
+                                db.session.add(disponibilidad)
 
                 db.session.commit()
 
@@ -273,7 +294,7 @@ def register():
             flash('Error al crear la cuenta. Inténtalo de nuevo.', 'error')
             import traceback
             logger.error(f"Error en registro: {e}\n{traceback.format_exc()}")
-            return render_template('register.html', form=form, horarios=horarios)
+            return render_template('register.html', form=form, horarios=horarios_unicos)
 
         # Usuario creado exitosamente — login automático fuera del try/except
         nombre_completo = f"{user.nombre} {user.apellido}"
@@ -283,8 +304,8 @@ def register():
         session['chatbot_login_token'] = str(_uuid.uuid4())
         audit_logger.info(f"REGISTER user={user.username} rol={user.rol} ip={request.remote_addr}")
         return redirect(url_for('dashboard'))
-    
-    return render_template('register.html', form=form, horarios=horarios)
+
+    return render_template('register.html', form=form, horarios=horarios_unicos)
 
 @app.route('/cambiar-password-obligatorio', methods=['GET', 'POST'])
 @login_required
@@ -680,9 +701,10 @@ def editar_profesor_jefe(id):
     
     # Obtener horarios para mostrar en la tabla de disponibilidad
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     form = EditarUsuarioForm(user=profesor)
-    
+
     if form.validate_on_submit():
         profesor.username = form.username.data
         profesor.nombre = form.nombre.data
@@ -704,24 +726,22 @@ def editar_profesor_jefe(id):
                 profesor_id=profesor.id,
                 activo=True
             ).update({'activo': False})
-            
-            # Crear nuevas disponibilidades basadas en los checkboxes MARCADOS
-            # Solo guardamos los horarios donde el profesor SÍ está disponible
+
             dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-            for horario in horarios:
+            for rep_id, all_ids in horario_map.items():
                 for dia in dias:
-                    field_name = f'disp_{horario.id}_{dia}'
-                    # Si el checkbox está marcado (existe en el form), crear disponibilidad
+                    field_name = f'disp_{rep_id}_{dia}'
                     if request.form.get(field_name):
-                        nueva_disponibilidad = DisponibilidadProfesor(
-                            profesor_id=profesor.id,
-                            horario_id=horario.id,
-                            dia_semana=dia,
-                            disponible=True,
-                            creado_por=current_user.id
-                        )
-                        db.session.add(nueva_disponibilidad)
-        
+                        for hid in all_ids:
+                            nueva_disponibilidad = DisponibilidadProfesor(
+                                profesor_id=profesor.id,
+                                horario_id=hid,
+                                dia_semana=dia,
+                                disponible=True,
+                                creado_por=current_user.id
+                            )
+                            db.session.add(nueva_disponibilidad)
+
         db.session.commit()
         flash('Profesor actualizado exitosamente.', 'success')
         return redirect(url_for('gestionar_profesores_jefe'))
@@ -730,7 +750,7 @@ def editar_profesor_jefe(id):
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f'Error en {field}: {error}', 'error')
-    
+
     # Pre-llenar el formulario
     if request.method == 'GET':
         form.username.data = profesor.username
@@ -742,7 +762,7 @@ def editar_profesor_jefe(id):
         form.activo.data = profesor.activo
         if profesor.carreras:
             form.carreras.data = [c.id for c in profesor.carreras]
-    
+
     # Cargar disponibilidades actuales del profesor
     disponibilidad_dict = {}
     if profesor.is_profesor():
@@ -750,15 +770,22 @@ def editar_profesor_jefe(id):
             profesor_id=profesor.id,
             activo=True
         ).all()
-        
+
+        raw_disp = {}
         for disp in disponibilidades_actuales:
             if disp.disponible:
-                disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
-    return render_template('jefe/editar_profesor.html', 
-                         form=form, 
+                raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+        dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+        for rep_id, all_ids in horario_map.items():
+            for dia in dias:
+                if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                    disponibilidad_dict[(rep_id, dia)] = True
+
+    return render_template('jefe/editar_profesor.html',
+                         form=form,
                          profesor=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict)
 
 @app.route('/jefe-carrera/profesor/<int:id>/eliminar', methods=['POST'])
@@ -945,54 +972,60 @@ def editar_disponibilidad_profesor_jefe(id):
     
     # Obtener horarios del sistema
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     if request.method == 'POST':
         try:
-            # Procesar disponibilidad
             dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-            
+
             # Desactivar disponibilidades anteriores
             DisponibilidadProfesor.query.filter_by(
                 profesor_id=profesor.id,
                 activo=True
             ).update({'activo': False})
-            
-            # Crear nuevas disponibilidades basadas en los checkboxes marcados
-            for horario in horarios:
+
+            for rep_id, all_ids in horario_map.items():
                 for dia in dias:
-                    field_name = f"disp_{horario.id}_{dia}"
+                    field_name = f"disp_{rep_id}_{dia}"
                     if request.form.get(field_name):
-                        nueva_disponibilidad = DisponibilidadProfesor(
-                            profesor_id=profesor.id,
-                            horario_id=horario.id,
-                            dia_semana=dia,
-                            disponible=True,
-                            creado_por=current_user.id
-                        )
-                        db.session.add(nueva_disponibilidad)
-            
+                        for hid in all_ids:
+                            nueva_disponibilidad = DisponibilidadProfesor(
+                                profesor_id=profesor.id,
+                                horario_id=hid,
+                                dia_semana=dia,
+                                disponible=True,
+                                creado_por=current_user.id
+                            )
+                            db.session.add(nueva_disponibilidad)
+
             db.session.commit()
             flash(f'Disponibilidad de {profesor.get_nombre_completo()} actualizada exitosamente.', 'success')
             return redirect(url_for('disponibilidad_profesores_jefe'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error al actualizar disponibilidad: {str(e)}', 'error')
-    
+
     # Cargar disponibilidades actuales
-    disponibilidad_dict = {}
+    raw_disp = {}
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=profesor.id,
         activo=True
     ).all()
-    
     for disp in disponibilidades_actuales:
         if disp.disponible:
-            disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
+            raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    disponibilidad_dict = {}
+    for rep_id, all_ids in horario_map.items():
+        for dia in dias:
+            if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                disponibilidad_dict[(rep_id, dia)] = True
+
     return render_template('jefe/editar_disponibilidad_profesor.html',
                          profesor=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict,
                          carrera=current_user.primera_carrera)
 
@@ -1013,24 +1046,32 @@ def ver_disponibilidad_profesor_jefe(id):
     
     # Obtener horarios del sistema
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     # Cargar disponibilidades actuales
-    disponibilidad_dict = {}
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=profesor.id,
         activo=True
     ).all()
-    
+
+    raw_disp = {}
     for disp in disponibilidades_actuales:
         if disp.disponible:
-            disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
-    # Calcular total de horas disponibles
-    total_horas_disponibles = len(disponibilidades_actuales)
-    
+            raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    disponibilidad_dict = {}
+    for rep_id, all_ids in horario_map.items():
+        for dia in dias:
+            if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                disponibilidad_dict[(rep_id, dia)] = True
+
+    # Calcular total de horas disponibles (franjas únicas marcadas)
+    total_horas_disponibles = len(disponibilidad_dict)
+
     return render_template('jefe/ver_disponibilidad_profesor.html',
                          profesor=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict,
                          carrera=current_user.primera_carrera,
                          total_horas_disponibles=total_horas_disponibles)
@@ -3281,12 +3322,13 @@ def editar_profesor(id):
     
     # Obtener horarios para mostrar en la tabla de disponibilidad
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     if form.validate_on_submit():
         try:
             # Obtener el rol final (considerando tipo de profesor)
             rol_final = form.get_final_rol()
-            
+
             # Actualizar datos del profesor
             profesor.username = form.username.data
             profesor.email = form.email.data
@@ -3295,7 +3337,7 @@ def editar_profesor(id):
             profesor.rol = rol_final
             profesor.telefono = form.telefono.data
             profesor.activo = form.activo.data
-            
+
             # Actualizar carreras (many-to-many)
             from models import Carrera
             if form.carreras.data:
@@ -3303,41 +3345,39 @@ def editar_profesor(id):
                 profesor.carreras = carreras_seleccionadas
             else:
                 profesor.carreras = []
-            
+
             # Limpiar carrera_id si existía (por si antes era jefe de carrera)
             profesor.carrera_id = None
-            
+
             # Procesar disponibilidad horaria
-            # Desactivar disponibilidades anteriores (mantener historial)
             DisponibilidadProfesor.query.filter_by(
                 profesor_id=profesor.id,
                 activo=True
             ).update({'activo': False})
-            
-            # Crear nuevas disponibilidades basadas en el formulario
+
             dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-            for horario in horarios:
+            for rep_id, all_ids in horario_map.items():
                 for dia in dias:
-                    field_name = f'disp_{horario.id}_{dia}'
-                    disponible = request.form.get(field_name) == 'True'
-                    
-                    nueva_disponibilidad = DisponibilidadProfesor(
-                        profesor_id=profesor.id,
-                        horario_id=horario.id,
-                        dia_semana=dia,
-                        disponible=disponible,
-                        creado_por=current_user.id
-                    )
-                    db.session.add(nueva_disponibilidad)
-            
+                    field_name = f'disp_{rep_id}_{dia}'
+                    disponible = bool(request.form.get(field_name))
+                    for hid in all_ids:
+                        nueva_disponibilidad = DisponibilidadProfesor(
+                            profesor_id=profesor.id,
+                            horario_id=hid,
+                            dia_semana=dia,
+                            disponible=disponible,
+                            creado_por=current_user.id
+                        )
+                        db.session.add(nueva_disponibilidad)
+
             db.session.commit()
             flash(f'Profesor {profesor.get_nombre_completo()} actualizado exitosamente.', 'success')
             return redirect(url_for('gestionar_profesores'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error al actualizar profesor: {str(e)}', 'error')
-    
+
     # Llenar formulario con datos actuales
     elif request.method == 'GET':
         form.username.data = profesor.username
@@ -3346,29 +3386,36 @@ def editar_profesor(id):
         form.apellido.data = profesor.apellido
         form.telefono.data = profesor.telefono
         form.activo.data = profesor.activo
-        
+
         # Configurar rol y tipo de profesor
         form.rol.data = 'profesor'
         form.tipo_profesor.data = profesor.rol
         # Cargar carreras del profesor
         form.carreras.data = [c.id for c in profesor.carreras]
-    
+
     # Cargar disponibilidades actuales del profesor
-    disponibilidad_dict = {}
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=profesor.id,
         activo=True
     ).all()
-    
+
+    raw_disp = {}
     for disp in disponibilidades_actuales:
         if disp.disponible:
-            disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
-    return render_template('admin/usuario_form.html', 
-                         form=form, 
-                         titulo=f"Editar Profesor - {profesor.get_nombre_completo()}", 
+            raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    disponibilidad_dict = {}
+    for rep_id, all_ids in horario_map.items():
+        for dia in dias:
+            if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                disponibilidad_dict[(rep_id, dia)] = True
+
+    return render_template('admin/usuario_form.html',
+                         form=form,
+                         titulo=f"Editar Profesor - {profesor.get_nombre_completo()}",
                          usuario=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict)
 
 @app.route('/admin/profesores/<int:id>/cambiar-password', methods=['GET', 'POST'])
@@ -3475,54 +3522,60 @@ def admin_editar_disponibilidad_profesor(id):
     
     # Obtener horarios del sistema
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     if request.method == 'POST':
         try:
-            # Procesar disponibilidad
             dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-            
+
             # Desactivar disponibilidades anteriores
             DisponibilidadProfesor.query.filter_by(
                 profesor_id=profesor.id,
                 activo=True
             ).update({'activo': False})
-            
-            # Crear nuevas disponibilidades basadas en los checkboxes marcados
-            for horario in horarios:
+
+            for rep_id, all_ids in horario_map.items():
                 for dia in dias:
-                    field_name = f"disp_{horario.id}_{dia}"
+                    field_name = f"disp_{rep_id}_{dia}"
                     if request.form.get(field_name):
-                        nueva_disponibilidad = DisponibilidadProfesor(
-                            profesor_id=profesor.id,
-                            horario_id=horario.id,
-                            dia_semana=dia,
-                            disponible=True,
-                            creado_por=current_user.id
-                        )
-                        db.session.add(nueva_disponibilidad)
-            
+                        for hid in all_ids:
+                            nueva_disponibilidad = DisponibilidadProfesor(
+                                profesor_id=profesor.id,
+                                horario_id=hid,
+                                dia_semana=dia,
+                                disponible=True,
+                                creado_por=current_user.id
+                            )
+                            db.session.add(nueva_disponibilidad)
+
             db.session.commit()
             flash(f'Disponibilidad de {profesor.get_nombre_completo()} actualizada exitosamente.', 'success')
             return redirect(url_for('admin_disponibilidad_profesores'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'Error al actualizar disponibilidad: {str(e)}', 'error')
-    
+
     # Cargar disponibilidades actuales
-    disponibilidad_dict = {}
+    raw_disp = {}
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=profesor.id,
         activo=True
     ).all()
-    
     for disp in disponibilidades_actuales:
         if disp.disponible:
-            disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
+            raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    disponibilidad_dict = {}
+    for rep_id, all_ids in horario_map.items():
+        for dia in dias:
+            if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                disponibilidad_dict[(rep_id, dia)] = True
+
     return render_template('admin/admin_editar_disponibilidad_profesor.html',
                          profesor=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict)
 
 @app.route('/admin/profesor/<int:id>/disponibilidad/ver')
@@ -3532,34 +3585,41 @@ def admin_ver_disponibilidad_profesor(id):
     if not current_user.is_admin():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
-    
+
     profesor = User.query.get_or_404(id)
-    
+
     # Verificar que sea un profesor
     if not profesor.is_profesor():
         flash('El usuario seleccionado no es un profesor.', 'error')
         return redirect(url_for('admin_disponibilidad_profesores'))
-    
+
     # Obtener horarios del sistema
     horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios)
+
     # Cargar disponibilidades actuales
-    disponibilidad_dict = {}
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=profesor.id,
         activo=True
     ).all()
-    
+
+    raw_disp = {}
     for disp in disponibilidades_actuales:
         if disp.disponible:
-            disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
-    
-    # Calcular total de horas disponibles
-    total_horas_disponibles = len(disponibilidades_actuales)
-    
+            raw_disp[(disp.horario_id, disp.dia_semana)] = True
+
+    dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    disponibilidad_dict = {}
+    for rep_id, all_ids in horario_map.items():
+        for dia in dias:
+            if any(raw_disp.get((hid, dia), False) for hid in all_ids):
+                disponibilidad_dict[(rep_id, dia)] = True
+
+    total_horas_disponibles = len(disponibilidad_dict)
+
     return render_template('admin/admin_ver_disponibilidad_profesor.html',
                          profesor=profesor,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict,
                          total_horas_disponibles=total_horas_disponibles)
 

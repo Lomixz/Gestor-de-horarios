@@ -100,7 +100,6 @@
                 <table class="table table-bordered table-hover admin-table" style="white-space: nowrap;">
                     <thead class="table-dark">
                         <tr>
-                            <th class="text-center">Turno</th>
                             <th class="text-center">Horario</th>
                             <th class="text-center">Lunes</th>
                             <th class="text-center">Martes</th>
@@ -114,16 +113,7 @@
                         {% for horario in horarios %}
                         <tr>
                             <td class="text-center">
-                                {% if horario.turno == 'matutino' %}
-                                <span class="badge bg-warning text-dark">Matutino</span>
-                                {% elif horario.turno == 'vespertino' %}
-                                <span class="badge bg-primary">Vespertino</span>
-                                {% else %}
-                                <span class="badge bg-dark">Nocturno</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                <strong>{{ horario.hora_inicio }} - {{ horario.hora_fin }}</strong>
+                                {{ horario.hora_inicio.strftime('%H:%M') }} - {{ horario.hora_fin.strftime('%H:%M') }}
                             </td>
                             {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
                             <td class="text-center {% if disponibilidad_dict.get((horario.id, dia)) %}table-success{% endif %}">

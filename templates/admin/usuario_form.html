@@ -364,65 +364,29 @@
                                     <tbody>
                                         {% if horarios %}
                                         {% for horario in horarios %}
-                                            {% if horario.turno == 'matutino' %}
-                                                <tr class="matutino-row">
-                                                    <td class="text-center fw-bold">
-                                                        {{ horario.nombre }}<br>
-                                                        <small class="text-muted">
-                                                            {% if horario.hora_inicio and horario.hora_fin %}
-                                                                {{ horario.hora_inicio.strftime('%H:%M') }} - {{ horario.hora_fin.strftime('%H:%M') }}
-                                                            {% else %}
-                                                                Horario no disponible
-                                                            {% endif %}
-                                                        </small>
+                                            <tr>
+                                                <td class="text-center">
+                                                    {% if horario.hora_inicio and horario.hora_fin %}
+                                                        {{ horario.hora_inicio.strftime('%H:%M') }} - {{ horario.hora_fin.strftime('%H:%M') }}
+                                                    {% else %}
+                                                        Horario no disponible
+                                                    {% endif %}
+                                                </td>
+                                                {% set dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
+                                                {% for dia in dias %}
+                                                    <td class="text-center align-middle">
+                                                        {% set field_name = 'disp_' + horario.id|string + '_' + dia %}
+                                                        {% set is_checked = disponibilidad_dict.get((horario.id, dia), False) %}
+                                                        <div class="d-flex justify-content-center">
+                                                            <input type="checkbox"
+                                                                   name="{{ field_name }}"
+                                                                   value="True"
+                                                                   class="form-check-input disponibilidad-checkbox"
+                                                                   {% if is_checked %}checked{% endif %}>
+                                                        </div>
                                                     </td>
-                                                    {% set dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
-                                                    {% for dia in dias %}
-                                                        <td class="text-center">
-                                                            {% set field_name = 'disp_' + horario.id|string + '_' + dia %}
-                                                            {% set is_checked = disponibilidad_dict.get((horario.id, dia), False) %}
-                                                            <div class="form-check">
-                                                                <input type="checkbox" 
-                                                                       name="{{ field_name }}" 
-                                                                       value="True"
-                                                                       class="form-check-input disponibilidad-checkbox matutino-checkbox" 
-                                                                       {% if is_checked %}checked{% endif %}>
-                                                            </div>
-                                                        </td>
-                                                    {% endfor %}
-                                                </tr>
-                                            {% endif %}
-                                        {% endfor %}
-
-                                        {% for horario in horarios %}
-                                            {% if horario.turno == 'vespertino' %}
-                                                <tr class="vespertino-row">
-                                                    <td class="text-center fw-bold">
-                                                        {{ horario.nombre }}<br>
-                                                        <small class="text-muted">
-                                                            {% if horario.hora_inicio and horario.hora_fin %}
-                                                                {{ horario.hora_inicio.strftime('%H:%M') }} - {{ horario.hora_fin.strftime('%H:%M') }}
-                                                            {% else %}
-                                                                Horario no disponible
-                                                            {% endif %}
-                                                        </small>
-                                                    </td>
-                                                    {% set dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
-                                                    {% for dia in dias %}
-                                                        <td class="text-center">
-                                                            {% set field_name = 'disp_' + horario.id|string + '_' + dia %}
-                                                            {% set is_checked = disponibilidad_dict.get((horario.id, dia), False) %}
-                                                            <div class="form-check">
-                                                                <input type="checkbox" 
-                                                                       name="{{ field_name }}" 
-                                                                       value="True"
-                                                                       class="form-check-input disponibilidad-checkbox vespertino-checkbox" 
-                                                                       {% if is_checked %}checked{% endif %}>
-                                                            </div>
-                                                        </td>
-                                                    {% endfor %}
-                                                </tr>
-                                            {% endif %}
+                                                {% endfor %}
+                                            </tr>
                                         {% endfor %}
                                         {% else %}
                                         <tr>
