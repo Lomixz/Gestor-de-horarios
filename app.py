@@ -2156,7 +2156,7 @@ def exportar_asignaciones_grupos():
 
     # Si es solo jefe de carrera (no admin), validar que la carrera le pertenezca
     if current_user.is_jefe_carrera() and not current_user.is_admin():
-        if not carrera_id or not current_user.tiene_carrera(carrera_id):
+        if carrera_id is None or not current_user.tiene_carrera(carrera_id):
             carrera_id = current_user.primera_carrera_id
 
     from utils import exportar_asignaciones_grupo_csv
@@ -2166,15 +2166,16 @@ def exportar_asignaciones_grupos():
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     
     filename = 'asignaciones_grupos'
-    if carrera_id:
+    if carrera_id is not None:
         carrera = Carrera.query.get(carrera_id)
         if carrera:
             filename += f'_{carrera.codigo}'
-    if cuatrimestre:
+    if cuatrimestre is not None:
         filename += f'_C{cuatrimestre}'
     filename += '.csv'
     
-    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    # Asegurar que el nombre de archivo esté entre comillas para evitar problemas con espacios
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     return response
 
@@ -3455,7 +3456,8 @@ def editar_profesor(id):
                          titulo=f"Editar Profesor - {profesor.get_nombre_completo()}",
                          usuario=profesor,
                          horarios=horarios_unicos,
-                         disponibilidad_dict=disponibilidad_dict)
+                         disponibilidad_dict=disponibilidad_dict,
+                         back_url=url_for('gestionar_profesores'))
 
 @app.route('/admin/profesores/<int:id>/cambiar-password', methods=['GET', 'POST'])
 @login_required
@@ -5186,7 +5188,7 @@ def agregar_usuario():
             db.session.rollback()
             flash(f'Error al crear usuario: {str(e)}', 'error')
 
-    return render_template('admin/usuario_form.html', form=form, titulo="Agregar Usuario", usuario=None, horarios=horarios, disponibilidad_dict={})
+    return render_template('admin/usuario_form.html', form=form, titulo="Agregar Usuario", usuario=None, horarios=horarios, disponibilidad_dict={}, back_url=url_for('gestionar_usuarios'))
 
 @app.route('/admin/usuario/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -5312,7 +5314,7 @@ def editar_usuario(id):
             if disp.disponible:
                 disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
 
-    return render_template('admin/usuario_form.html', form=form, titulo="Editar Usuario", usuario=usuario, horarios=horarios, disponibilidad_dict=disponibilidad_dict)
+    return render_template('admin/usuario_form.html', form=form, titulo="Editar Usuario", usuario=usuario, horarios=horarios, disponibilidad_dict=disponibilidad_dict, back_url=url_for('gestionar_usuarios'))
 
 @app.route('/admin/usuario/<int:id>/eliminar', methods=['GET', 'POST'])
 @login_required

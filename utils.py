@@ -1599,10 +1599,10 @@ def exportar_asignaciones_grupo_csv(carrera_id=None, cuatrimestre=None):
     # Construir query con filtros
     query = Grupo.query.filter_by(activo=True)
     
-    if carrera_id:
+    if carrera_id is not None:
         query = query.filter_by(carrera_id=carrera_id)
     
-    if cuatrimestre:
+    if cuatrimestre is not None:
         query = query.filter_by(cuatrimestre=cuatrimestre)
     
     grupos = query.order_by(Grupo.codigo).all()

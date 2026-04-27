@@ -61,20 +61,12 @@
                         <!-- Exportar Actuales -->
                         <div class="col-md-4">
                             <div class="d-grid">
-                                {% if carrera_id and cuatrimestre %}
-                                <a href="{{ url_for('exportar_asignaciones_grupos', carrera_id=carrera_id, cuatrimestre=cuatrimestre) }}" 
+                                <a href="{{ url_for('exportar_asignaciones_grupos') }}" 
                                    class="btn btn-warning btn-lg">
                                     <i class="fas fa-file-export me-2"></i>
                                     Exportar Actuales
                                 </a>
-                                <small class="text-muted mt-2">Descarga asignaciones actuales en CSV</small>
-                                {% else %}
-                                <button class="btn btn-warning btn-lg" disabled>
-                                    <i class="fas fa-file-export me-2"></i>
-                                    Exportar Actuales
-                                </button>
-                                <small class="text-muted mt-2">Selecciona carrera y cuatrimestre</small>
-                                {% endif %}
+                                <small class="text-muted mt-2">Exportar todas las asignaciones actuales</small>
                             </div>
                         </div>
                     </div>
