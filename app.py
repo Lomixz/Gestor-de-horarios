@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape
 from sqlalchemy import func, text
@@ -132,6 +133,7 @@ csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per hour"], storage_uri="memory://")
 login_manager = LoginManager()
 login_manager.init_app(app)
+migrate = Migrate(app, db)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
@@ -164,6 +166,29 @@ def set_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
+# Seguridad: Restricción de sesión única
+@app.before_request
+def check_single_session():
+    """Verifica que el ID de sesión en la cookie coincida con el de la base de datos"""
+    # Ignorar rutas estáticas y de salida/entrada para evitar bucles
+    if not current_user.is_authenticated or request.endpoint in ['static', 'logout', 'login']:
+        return
+
+    # Si la sesión en la cookie no tiene ID, sincronizamos (útil para usuarios ya logueados o 'remember me')
+    if 'session_id' not in session:
+        if not current_user.session_id:
+            current_user.session_id = secrets.token_hex(16)
+            db.session.commit()
+        session['session_id'] = current_user.session_id
+        return
+
+    # Si el ID de la cookie no coincide con el de la BD, alguien más inició sesión
+    if session.get('session_id') != current_user.session_id:
+        audit_logger.warning(f"SESSION_CONFLICT user={current_user.username} ip={request.remote_addr}")
+        logout_user()
+        flash('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'warning')
+        return redirect(url_for('login'))
+
 # Rutas principales
 @app.route('/')
 def index():
@@ -184,6 +209,13 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
+                
+                # Restricción de sesión única: generar nuevo ID de sesión
+                new_session_id = secrets.token_hex(16)
+                user.session_id = new_session_id
+                session['session_id'] = new_session_id
+                db.session.commit()
+                
                 import uuid as _uuid
                 session['chatbot_login_token'] = str(_uuid.uuid4())
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
@@ -300,6 +332,13 @@ def register():
         nombre_completo = f"{user.nombre} {user.apellido}"
         flash(f'¡Registro exitoso! Bienvenido, {nombre_completo}.', 'success')
         login_user(user, remember=True)
+        
+        # Restricción de sesión única: generar nuevo ID de sesión
+        new_session_id = secrets.token_hex(16)
+        user.session_id = new_session_id
+        session['session_id'] = new_session_id
+        db.session.commit()
+        
         import uuid as _uuid
         session['chatbot_login_token'] = str(_uuid.uuid4())
         audit_logger.info(f"REGISTER user={user.username} rol={user.rol} ip={request.remote_addr}")

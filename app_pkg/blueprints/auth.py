@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 import logging
+import secrets
 
 auth_bp = Blueprint('auth', __name__)
 logger = logging.getLogger('sistema_academico')
@@ -34,6 +35,15 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
+                
+                # Restricción de sesión única
+                from flask import session
+                new_session_id = secrets.token_hex(16)
+                user.session_id = new_session_id
+                session['session_id'] = new_session_id
+                from models import db
+                db.session.commit()
+                
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
 
                 if user.requiere_cambio_password:

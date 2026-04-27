@@ -103,6 +103,29 @@ def _init_extensions(app):
         from models import User
         return User.query.get(int(user_id))
 
+    @app.before_request
+    def check_single_session():
+        """Verifica que el ID de sesión en la cookie coincida con el de la base de datos"""
+        from flask import session, request, redirect, url_for, flash
+        from flask_login import current_user, logout_user
+        from models import db
+        import secrets
+
+        if not current_user.is_authenticated or request.endpoint in ['static', 'auth.logout', 'auth.login']:
+            return
+
+        if 'session_id' not in session:
+            if not current_user.session_id:
+                current_user.session_id = secrets.token_hex(16)
+                db.session.commit()
+            session['session_id'] = current_user.session_id
+            return
+
+        if session.get('session_id') != current_user.session_id:
+            logout_user()
+            flash('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'warning')
+            return redirect(url_for('auth.login'))
+
 
 def _register_blueprints(app):
     """Register all application blueprints."""
