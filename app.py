@@ -3935,7 +3935,9 @@ def exportar_asignaciones_actuales():
         profesores = profesores_query.order_by(User.apellido, User.nombre).all()
         
         # Generar CSV
-        csv_content = "profesor_email,materia_codigo\n"
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['profesor_email', 'materia_codigo'])
         
         for profesor in profesores:
             for materia in profesor.materias:
@@ -3944,12 +3946,8 @@ def exportar_asignaciones_actuales():
                     continue
                 if carrera_id and materia.carrera_id != carrera_id:
                     continue
-                    
-                csv_content += f"{profesor.email},{materia.codigo}\n"
+                writer.writerow([profesor.email, materia.codigo])
         
-        response = make_response(csv_content.encode('utf-8-sig'))
-        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-
         # Nombre del archivo con filtros aplicados
         filename = 'asignaciones_actuales'
         if carrera_id:
@@ -3960,9 +3958,13 @@ def exportar_asignaciones_actuales():
             filename += f'_cuatri{cuatrimestre}'
         filename += '.csv'
         
-        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
-        
-        return response
+        output.seek(0)
+        return send_file(
+            BytesIO(output.getvalue().encode('utf-8-sig')),
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/csv'
+        )
         
     except Exception as e:
         flash(f'Error al exportar asignaciones: {str(e)}', 'error')
