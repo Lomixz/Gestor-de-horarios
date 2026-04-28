@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import io
+import csv
 import random
 import string
 from flask import make_response
@@ -428,9 +429,9 @@ def generar_plantilla_csv():
     # Crear encabezados y ejemplos de datos
     contenido_csv = """nombre,apellido_paterno,apellido_materno,email,telefono,rol,tipo_profesor,carrera_codigo
 Juan,Pérez,García,juan.perez@universidad.edu,555-1234,profesor,profesor_completo,IRO
-María,González,López,maria.gonzalez@universidad.edu,555-5678,profesor,profesor_asignatura,IRO,ISC
+María,González,López,maria.gonzalez@universidad.edu,555-5678,profesor,profesor_asignatura,"IRO,ISC"
 Carlos,Rodríguez,Martínez,carlos.rodriguez@universidad.edu,555-9012,jefe_carrera,,IRO
-Ana,López,Hernández,ana.lopez@universidad.edu,,profesor,asignatura,IRO,ISC,IND
+Ana,López,Hernández,ana.lopez@universidad.edu,,profesor,asignatura,"IRO,ISC,IND"
 Pedro,Sánchez,Ramírez,pedro.sanchez@universidad.edu,555-3456,admin,,
 """
     
@@ -445,7 +446,9 @@ def exportar_profesores_csv():
     """Exportar todos los profesores en formato compatible con la plantilla"""
     profesores = User.query.filter(User.rol.in_(['profesor_completo', 'profesor_asignatura', 'jefe_carrera'])).all()
     
-    lineas = ['nombre,apellido_paterno,apellido_materno,email,telefono,rol,tipo_profesor,carrera_codigo']
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['nombre', 'apellido_paterno', 'apellido_materno', 'email', 'telefono', 'rol', 'tipo_profesor', 'carrera_codigo'])
     
     for p in profesores:
         # Dividir apellido si es posible (asumiendo Paterno Materno)
@@ -463,46 +466,55 @@ def exportar_profesores_csv():
         elif p.carreras:
             carreras = ','.join([c.codigo for c in p.carreras])
             
-        lineas.append(f"{p.nombre},{paterno},{materno},{p.email},{p.telefono or ''},{rol},{tipo},{carreras}")
+        writer.writerow([p.nombre, paterno, materno, p.email, p.telefono or '', rol, tipo, carreras])
     
-    return '\n'.join(lineas)
+    return output.getvalue()
 
 def exportar_materias_csv():
     """Exportar todas las materias en formato compatible con la plantilla"""
     materias = Materia.query.filter_by(activa=True).all()
-    lineas = ['nombre,codigo,cuatrimestre,carrera_codigo,creditos,horas_semanales,descripcion']
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['nombre', 'codigo', 'cuatrimestre', 'carrera_codigo', 'creditos', 'horas_semanales', 'descripcion'])
     
     for m in materias:
         carrera_codigo = m.carrera.codigo if m.carrera else ''
         descripcion = m.descripcion if m.descripcion else ''
-        lineas.append(f"{m.nombre},{m.codigo},{m.cuatrimestre},{carrera_codigo},{m.creditos},{m.horas_semanales},{descripcion}")
+        writer.writerow([m.nombre, m.codigo, m.cuatrimestre, carrera_codigo, m.creditos, m.horas_semanales, descripcion])
     
-    return '\n'.join(lineas)
+    return output.getvalue()
 
 def exportar_carreras_csv():
     """Exportar todas las carreras en formato compatible con la plantilla"""
     carreras = Carrera.query.filter_by(activa=True).all()
-    lineas = ['codigo,nombre,descripcion,facultad']
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['codigo', 'nombre', 'descripcion', 'facultad'])
     
     for c in carreras:
         descripcion = c.descripcion if c.descripcion else ''
         facultad = c.facultad if c.facultad else ''
-        lineas.append(f"{c.codigo},{c.nombre},{descripcion},{facultad}")
+        writer.writerow([c.codigo, c.nombre, descripcion, facultad])
     
-    return '\n'.join(lineas)
+    return output.getvalue()
 
 def exportar_grupos_csv():
     """Exportar todos los grupos en formato compatible con la plantilla"""
     from models import Grupo
     grupos = Grupo.query.filter_by(activo=True).all()
-    lineas = ['numero_grupo,turno,cuatrimestre,carrera_codigo']
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['numero_grupo', 'turno', 'cuatrimestre', 'carrera_codigo'])
     
     for g in grupos:
         carrera_codigo = g.carrera.codigo if g.carrera else ''
         turno_display = g.get_turno_display().lower()
-        lineas.append(f"{g.numero_grupo},{turno_display},{g.cuatrimestre or ''},{carrera_codigo}")
+        writer.writerow([g.numero_grupo, turno_display, g.cuatrimestre or '', carrera_codigo])
     
-    return '\n'.join(lineas)
+    return output.getvalue()
 
 def generar_plantilla_grupos_csv():
     """Generar archivo CSV de plantilla para importar grupos"""
@@ -1587,23 +1599,25 @@ def exportar_asignaciones_grupo_csv(carrera_id=None, cuatrimestre=None):
     # Construir query con filtros
     query = Grupo.query.filter_by(activo=True)
     
-    if carrera_id:
+    if carrera_id is not None:
         query = query.filter_by(carrera_id=carrera_id)
     
-    if cuatrimestre:
+    if cuatrimestre is not None:
         query = query.filter_by(cuatrimestre=cuatrimestre)
     
     grupos = query.order_by(Grupo.codigo).all()
     
     # Generar CSV
-    lineas = ['grupo_codigo,materia_codigo']
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['grupo_codigo', 'materia_codigo'])
     
     for grupo in grupos:
         for materia in grupo.materias:
             if materia.activa:
-                lineas.append(f'{grupo.codigo},{materia.codigo}')
+                writer.writerow([grupo.codigo, materia.codigo])
     
-    return '\n'.join(lineas)
+    return output.getvalue()
 
 
 def auto_asignar_materias_grupo(carrera_id, cuatrimestre):

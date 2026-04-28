@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, make_response, abort, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 from markupsafe import Markup, escape
 from sqlalchemy import func, text
@@ -132,6 +133,7 @@ csrf = CSRFProtect(app)
 limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["200 per hour"], storage_uri="memory://")
 login_manager = LoginManager()
 login_manager.init_app(app)
+migrate = Migrate(app, db)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Por favor inicia sesión para acceder a esta página.'
 login_manager.login_message_category = 'info'
@@ -164,6 +166,29 @@ def set_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
+# Seguridad: Restricción de sesión única
+@app.before_request
+def check_single_session():
+    """Verifica que el ID de sesión en la cookie coincida con el de la base de datos"""
+    # Ignorar rutas estáticas y de salida/entrada para evitar bucles
+    if not current_user.is_authenticated or request.endpoint in ['static', 'logout', 'login']:
+        return
+
+    # Si la sesión en la cookie no tiene ID, sincronizamos (útil para usuarios ya logueados o 'remember me')
+    if 'session_id' not in session:
+        if not current_user.session_id:
+            current_user.session_id = secrets.token_hex(16)
+            db.session.commit()
+        session['session_id'] = current_user.session_id
+        return
+
+    # Si el ID de la cookie no coincide con el de la BD, alguien más inició sesión
+    if session.get('session_id') != current_user.session_id:
+        audit_logger.warning(f"SESSION_CONFLICT user={current_user.username} ip={request.remote_addr}")
+        logout_user()
+        flash('Tu sesión ha sido cerrada porque se inició sesión en otro dispositivo.', 'warning')
+        return redirect(url_for('login'))
+
 # Rutas principales
 @app.route('/')
 def index():
@@ -184,6 +209,13 @@ def login():
         if user and user.check_password(form.password.data):
             if user.activo:
                 login_user(user)
+                
+                # Restricción de sesión única: generar nuevo ID de sesión
+                new_session_id = secrets.token_hex(16)
+                user.session_id = new_session_id
+                session['session_id'] = new_session_id
+                db.session.commit()
+                
                 import uuid as _uuid
                 session['chatbot_login_token'] = str(_uuid.uuid4())
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
@@ -300,6 +332,13 @@ def register():
         nombre_completo = f"{user.nombre} {user.apellido}"
         flash(f'¡Registro exitoso! Bienvenido, {nombre_completo}.', 'success')
         login_user(user, remember=True)
+        
+        # Restricción de sesión única: generar nuevo ID de sesión
+        new_session_id = secrets.token_hex(16)
+        user.session_id = new_session_id
+        session['session_id'] = new_session_id
+        db.session.commit()
+        
         import uuid as _uuid
         session['chatbot_login_token'] = str(_uuid.uuid4())
         audit_logger.info(f"REGISTER user={user.username} rol={user.rol} ip={request.remote_addr}")
@@ -2117,7 +2156,7 @@ def exportar_asignaciones_grupos():
 
     # Si es solo jefe de carrera (no admin), validar que la carrera le pertenezca
     if current_user.is_jefe_carrera() and not current_user.is_admin():
-        if not carrera_id or not current_user.tiene_carrera(carrera_id):
+        if carrera_id is None or not current_user.tiene_carrera(carrera_id):
             carrera_id = current_user.primera_carrera_id
 
     from utils import exportar_asignaciones_grupo_csv
@@ -2127,15 +2166,16 @@ def exportar_asignaciones_grupos():
     response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     
     filename = 'asignaciones_grupos'
-    if carrera_id:
+    if carrera_id is not None:
         carrera = Carrera.query.get(carrera_id)
         if carrera:
             filename += f'_{carrera.codigo}'
-    if cuatrimestre:
+    if cuatrimestre is not None:
         filename += f'_C{cuatrimestre}'
     filename += '.csv'
     
-    response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+    # Asegurar que el nombre de archivo esté entre comillas para evitar problemas con espacios
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     
     return response
 
@@ -3416,7 +3456,8 @@ def editar_profesor(id):
                          titulo=f"Editar Profesor - {profesor.get_nombre_completo()}",
                          usuario=profesor,
                          horarios=horarios_unicos,
-                         disponibilidad_dict=disponibilidad_dict)
+                         disponibilidad_dict=disponibilidad_dict,
+                         back_url=url_for('gestionar_profesores'))
 
 @app.route('/admin/profesores/<int:id>/cambiar-password', methods=['GET', 'POST'])
 @login_required
@@ -3896,7 +3937,9 @@ def exportar_asignaciones_actuales():
         profesores = profesores_query.order_by(User.apellido, User.nombre).all()
         
         # Generar CSV
-        csv_content = "profesor_email,materia_codigo\n"
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['profesor_email', 'materia_codigo'])
         
         for profesor in profesores:
             for materia in profesor.materias:
@@ -3905,12 +3948,8 @@ def exportar_asignaciones_actuales():
                     continue
                 if carrera_id and materia.carrera_id != carrera_id:
                     continue
-                    
-                csv_content += f"{profesor.email},{materia.codigo}\n"
+                writer.writerow([profesor.email, materia.codigo])
         
-        response = make_response(csv_content.encode('utf-8-sig'))
-        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
-
         # Nombre del archivo con filtros aplicados
         filename = 'asignaciones_actuales'
         if carrera_id:
@@ -3921,9 +3960,13 @@ def exportar_asignaciones_actuales():
             filename += f'_cuatri{cuatrimestre}'
         filename += '.csv'
         
-        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
-        
-        return response
+        output.seek(0)
+        return send_file(
+            BytesIO(output.getvalue().encode('utf-8-sig')),
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/csv'
+        )
         
     except Exception as e:
         flash(f'Error al exportar asignaciones: {str(e)}', 'error')
@@ -5145,7 +5188,7 @@ def agregar_usuario():
             db.session.rollback()
             flash(f'Error al crear usuario: {str(e)}', 'error')
 
-    return render_template('admin/usuario_form.html', form=form, titulo="Agregar Usuario", usuario=None, horarios=horarios, disponibilidad_dict={})
+    return render_template('admin/usuario_form.html', form=form, titulo="Agregar Usuario", usuario=None, horarios=horarios, disponibilidad_dict={}, back_url=url_for('gestionar_usuarios'))
 
 @app.route('/admin/usuario/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
@@ -5271,7 +5314,7 @@ def editar_usuario(id):
             if disp.disponible:
                 disponibilidad_dict[(disp.horario_id, disp.dia_semana)] = True
 
-    return render_template('admin/usuario_form.html', form=form, titulo="Editar Usuario", usuario=usuario, horarios=horarios, disponibilidad_dict=disponibilidad_dict)
+    return render_template('admin/usuario_form.html', form=form, titulo="Editar Usuario", usuario=usuario, horarios=horarios, disponibilidad_dict=disponibilidad_dict, back_url=url_for('gestionar_usuarios'))
 
 @app.route('/admin/usuario/<int:id>/eliminar', methods=['GET', 'POST'])
 @login_required
