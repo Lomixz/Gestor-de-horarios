@@ -187,10 +187,10 @@
             <div class="card-body p-0">
                 {% if profesores %}
                     <div class="table-responsive">
-                        <table class="table table-hover admin-table mb-0">
+                        <table class="table table-hover admin-table table-xwide mb-0">
                             <thead class="table-dark">
                                 <tr>
-                                    <th>NOMBRE</th>
+                                    <th class="col-nombre">NOMBRE</th>
                                     <th>EMAIL</th>
                                     <th class="admin-col-career">CARRERA</th>
                                     <th class="admin-col-phone">TELÉFONO</th>
@@ -203,7 +203,7 @@
                             <tbody>
                                 {% for profesor in profesores %}
                                 <tr class="align-middle admin-click-row" data-bs-toggle="collapse" data-bs-target="#detalles{{ profesor.id }}" aria-expanded="false">
-                                    <td style="word-break: break-word; overflow-wrap: break-word;">
+                                    <td class="col-nombre">
                                         <div class="d-flex align-items-center">
                                             <div class="avatar-circle bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2 flex-shrink-0">
                                                 {% if profesor.nombre and profesor.apellido %}
@@ -219,7 +219,7 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td style="word-break: break-word; overflow-wrap: break-word;">{{ profesor.email }}</td>
+                                    <td>{{ profesor.email }}</td>
                                     <td class="admin-col-career">
                                         {% if profesor.is_profesor() %}
                                             {% if profesor.carreras %}

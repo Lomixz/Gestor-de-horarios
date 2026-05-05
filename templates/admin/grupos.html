@@ -121,11 +121,11 @@
                 <div class="card-body p-0">
                     {% if grupos %}
                     <div class="table-responsive">
-                        <table class="table table-hover admin-table">
+                        <table class="table table-hover admin-table table-xwide">
                             <thead class="table-dark">
                                 <tr>
                                     <th>Código</th>
-                                    <th>Carrera</th>
+                                    <th class="col-text-wide">Carrera</th>
                                     <th>Cuatrimestre</th>
                                     <th>Turno</th>
                                     <th>Materias</th>
@@ -140,7 +140,7 @@
                                 {% set resumen = grupo.get_resumen_completo() %}
                                 <tr class="fila-grupo">
                                     <td><strong>{{ grupo.codigo }}</strong></td>
-                                    <td>{{ grupo.get_carrera_nombre() }}</td>
+                                    <td class="col-text-wide">{{ grupo.get_carrera_nombre() }}</td>
                                     <td>{{ grupo.get_cuatrimestre_display() }}</td>
                                     <td>
                                         {% if grupo.turno == 'M' %}
