@@ -207,15 +207,25 @@ def login():
         user = User.query.filter_by(username=form.username.data).first()
         
         if user and user.check_password(form.password.data):
-            if user.activo:
+            if not user.activo:
+                audit_logger.warning(f"LOGIN_DISABLED user={user.username} ip={request.remote_addr}")
+                flash('Tu cuenta está desactivada. Contacta al administrador.', 'error')
+            elif user.locked_until and user.locked_until > datetime.utcnow():
+                remaining = max(1, int((user.locked_until - datetime.utcnow()).total_seconds() // 60) + 1)
+                audit_logger.warning(f"LOGIN_BLOCKED user={user.username} ip={request.remote_addr}")
+                flash(f'Cuenta bloqueada temporalmente. Intenta de nuevo en {remaining} minuto(s).', 'error')
+            else:
+                # Login exitoso: resetear contador de intentos fallidos
+                user.failed_login_attempts = 0
+                user.locked_until = None
                 login_user(user)
-                
+
                 # Restricción de sesión única: generar nuevo ID de sesión
                 new_session_id = secrets.token_hex(16)
                 user.session_id = new_session_id
                 session['session_id'] = new_session_id
                 db.session.commit()
-                
+
                 import uuid as _uuid
                 session['chatbot_login_token'] = str(_uuid.uuid4())
                 audit_logger.info(f"LOGIN_SUCCESS user={user.username} ip={request.remote_addr}")
@@ -224,20 +234,26 @@ def login():
                 if user.requiere_cambio_password:
                     flash(f'Bienvenido, {user.get_nombre_completo()}. Por seguridad, debes cambiar tu contraseña temporal.', 'warning')
                     return redirect(url_for('cambiar_password_obligatorio'))
-                
+
                 flash(f'¡Bienvenido, {user.get_nombre_completo()}!', 'success')
-                
+
                 # Redirigir a la página solicitada o al dashboard (validando que sea URL interna)
                 next_page = request.args.get('next')
                 if next_page and urlparse(next_page).netloc == '' and next_page.startswith('/'):
                     return redirect(next_page)
                 return redirect(url_for('dashboard'))
-            else:
-                audit_logger.warning(f"LOGIN_DISABLED user={user.username} ip={request.remote_addr}")
-                flash('Tu cuenta está desactivada. Contacta al administrador.', 'error')
         else:
             audit_logger.warning(f"LOGIN_FAILED user={form.username.data} ip={request.remote_addr}")
             flash('Usuario o contraseña incorrectos.', 'error')
+            # Incrementar contador de intentos fallidos si el usuario existe
+            if user:
+                user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+                if user.failed_login_attempts >= 5:
+                    user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                    user.failed_login_attempts = 0
+                    audit_logger.warning(f"LOGIN_LOCKOUT user={user.username} ip={request.remote_addr}")
+                    flash('Cuenta bloqueada por 15 minutos debido a demasiados intentos fallidos.', 'error')
+                db.session.commit()
     
     return render_template('login.html', form=form)
 
@@ -1868,15 +1884,16 @@ def eliminar_grupo(id):
     try:
         # 1. Eliminar bloqueos de generación (para evitar errores de FK)
         from models import GeneracionEnProgreso
-        GeneracionEnProgreso.query.filter_by(grupo_id=id).delete()
-        
+        GeneracionEnProgreso.query.filter_by(grupo_id=id).delete(synchronize_session=False)
+
         # 2. Eliminar asignaciones de profesores (para evitar errores de FK)
-        AsignacionProfesorGrupo.query.filter_by(grupo_id=id).delete()
-        
+        AsignacionProfesorGrupo.query.filter_by(grupo_id=id).delete(synchronize_session=False)
+
         # 3. Eliminar horarios académicos (vinculados por código de grupo)
-        HorarioAcademico.query.filter_by(grupo=codigo.upper()).delete()
-        
+        HorarioAcademico.query.filter_by(grupo=codigo.upper()).delete(synchronize_session=False)
+
         # 4. Finalmente eliminar el grupo
+        db.session.flush()
         db.session.delete(grupo)
         db.session.commit()
         

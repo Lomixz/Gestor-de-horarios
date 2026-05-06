@@ -37,3 +37,13 @@ Thumbs.db
 .claude/
 tmp/
 API_PROFESORES.md
+
+# Archivos de producción y respaldos
+*.bak_*
+*.backup_*
+*.original
+*.tar.gz
+*.sql.gz
+instance/empty_db.py
+.venv/
+scratch/

@@ -114,7 +114,7 @@ class AsignacionProfesorGrupo(db.Model):
     # Relaciones
     profesor = db.relationship('User', foreign_keys=[profesor_id], backref=db.backref('asignaciones_grupo', lazy='dynamic'))
     materia = db.relationship('Materia', backref=db.backref('asignaciones_grupo', lazy='dynamic'))
-    grupo = db.relationship('Grupo', backref=db.backref('asignaciones_profesor', lazy='dynamic'))
+    grupo = db.relationship('Grupo', backref=db.backref('asignaciones_profesor', lazy='dynamic', passive_deletes=True))
     creador = db.relationship('User', foreign_keys=[creado_por])
     
     def __init__(self, profesor_id, materia_id, grupo_id, horas_semanales=0, 
@@ -216,6 +216,8 @@ class User(UserMixin, db.Model):
     activo = db.Column(db.Boolean, default=True)
     requiere_cambio_password = db.Column(db.Boolean, default=False)  # Forzar cambio de contraseña
     session_id = db.Column(db.String(100), nullable=True)  # Token de sesión activa
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
+    locked_until = db.Column(db.DateTime, nullable=True)
     
     # ========== MÉTODOS PARA MÚLTIPLES ROLES (NUEVO) ==========
     
@@ -1398,7 +1400,7 @@ class GeneracionEnProgreso(db.Model):
     iniciado_por = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     fecha_inicio = db.Column(db.DateTime, default=datetime.utcnow)
 
-    grupo = db.relationship('Grupo', backref=db.backref('generacion_lock', uselist=False))
+    grupo = db.relationship('Grupo', backref=db.backref('generacion_lock', uselist=False, passive_deletes=True))
     usuario = db.relationship('User', foreign_keys=[iniciado_por])
 
     def __repr__(self):

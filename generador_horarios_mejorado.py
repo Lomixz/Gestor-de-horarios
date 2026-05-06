@@ -334,14 +334,16 @@ class GeneradorHorariosMejorado:
                                 msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
                                        f"tiene {disponibilidad_seleccionada}h disponibles (Requeridas: {horas_requeridas}h). "
                                        "Se usará de todos modos.")
+                                materias_con_advertencia.append(msg)
+                                logger.error(msg)
                             else:
                                 # Profesor asignado sin disponibilidad registrada en este turno
                                 # Se asumirá disponibilidad completa (la asignación explícita lo autoriza)
                                 msg = (f"{grupo.codigo}/{materia.codigo}: Prof. asignado {profesor_seleccionado.nombre} "
                                        f"sin disponibilidad en turno {turno_str}. "
                                        "Se asumirá disponibilidad completa por asignación directa.")
-                            materias_con_advertencia.append(msg)
-                            logger.warning(msg)
+                                materias_con_advertencia.append(msg)
+                                logger.warning(msg)
 
                         # Marcar como asignación directa para override de disponibilidad
                         if profesor_seleccionado:
