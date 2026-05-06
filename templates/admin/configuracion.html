@@ -403,44 +403,6 @@
                                 </div>
                             </div>
 
-                            <hr class="my-3">
-
-                            <!-- Responsable del PA (Recibió) -->
-                            <div class="col-12">
-                                <h6 class="text-success mb-3">
-                                    <i class="fas fa-user-check me-2"></i>
-                                    Responsable del PA (Recibió)
-                                </h6>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="responsable_pa_nombre" class="form-label">
-                                    Nombre del Responsable del PA
-                                </label>
-                                <input type="text" class="form-control" id="responsable_pa_nombre"
-                                       value="{{ config_excel.responsable_pa_nombre or '' }}"
-                                       placeholder="Ej: Lic. María López Hernández">
-                                <div class="form-text">Nombre completo que aparecerá en los documentos exportados</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="responsable_pa_firma" class="form-label">
-                                    Firma Digital del Responsable
-                                </label>
-                                <div class="input-group">
-                                    <input type="file" class="form-control" id="responsable_pa_firma_file"
-                                           accept="image/*" onchange="previewFirmaResponsable(this)">
-                                    <button type="button" class="btn btn-outline-danger" onclick="eliminarFirmaResponsable()">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                                <div class="form-text">Imagen de la firma (PNG, JPG). Se recomienda fondo transparente.</div>
-                                <div id="preview_firma_responsable" class="mt-2">
-                                    {% if config_excel.responsable_pa_firma %}
-                                    <img src="{{ url_for('static', filename='uploads/firmas/' + config_excel.responsable_pa_firma) }}"
-                                         alt="Firma Responsable" class="img-thumbnail admin-signature-preview-sm">
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
                         </div><!-- cierre firmasSection -->
 
                         <hr class="my-4">
@@ -1086,16 +1048,6 @@ function previewFirmaDirector(input) {
     }
 }
 
-function previewFirmaResponsable(input) {
-    if (input.files && input.files[0]) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('preview_firma_responsable').innerHTML =
-                `<img src="${e.target.result}" alt="Preview Firma" class="img-thumbnail admin-signature-preview-sm">`;
-        };
-        reader.readAsDataURL(input.files[0]);
-    }
-}
 
 function eliminarFirmaDirector() {
     document.getElementById('director_academico_firma_file').value = '';
@@ -1115,23 +1067,6 @@ function eliminarFirmaDirector() {
     });
 }
 
-function eliminarFirmaResponsable() {
-    document.getElementById('responsable_pa_firma_file').value = '';
-    document.getElementById('preview_firma_responsable').innerHTML = '';
-
-    // Marcar para eliminar en el servidor
-    secureFetch('/admin/configuracion/exportacion-excel/eliminar-firma', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo: 'responsable_pa' })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            mostrarMensaje('Firma del responsable eliminada', 'success');
-        }
-    });
-}
 
 function toggleDatabaseConfig() {
     // Esta función se mantiene por compatibilidad con el evento load,
@@ -1185,18 +1120,12 @@ function guardarConfigExcel() {
 
     // Agregar nombres
     formData.append('director_academico_nombre', document.getElementById('director_academico_nombre').value);
-    formData.append('responsable_pa_nombre', document.getElementById('responsable_pa_nombre').value);
     formData.append('fecha_inicio_periodo', document.getElementById('fecha_inicio_periodo').value);
 
     // Agregar archivos de firma si existen
     const firmaDirectorInput = document.getElementById('director_academico_firma_file');
     if (firmaDirectorInput.files.length > 0) {
         formData.append('director_academico_firma', firmaDirectorInput.files[0]);
-    }
-
-    const firmaResponsableInput = document.getElementById('responsable_pa_firma_file');
-    if (firmaResponsableInput.files.length > 0) {
-        formData.append('responsable_pa_firma', firmaResponsableInput.files[0]);
     }
 
     secureFetch('/admin/configuracion/exportacion-excel', {

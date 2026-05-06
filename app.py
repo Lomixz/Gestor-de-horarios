@@ -5883,7 +5883,6 @@ def guardar_configuracion_exportacion_excel():
         # Obtener datos del formulario
         firmas_habilitadas = request.form.get('firmas_habilitadas', 'false')
         director_nombre = request.form.get('director_academico_nombre', '')
-        responsable_nombre = request.form.get('responsable_pa_nombre', '')
         fecha_inicio = request.form.get('fecha_inicio_periodo', '')
 
         # Guardar toggle de firmas
@@ -5897,11 +5896,6 @@ def guardar_configuracion_exportacion_excel():
         ConfiguracionSistema.set_config(
             'director_academico_nombre', director_nombre,
             tipo='string', descripcion='Nombre del Director Académico para exportación Excel',
-            categoria='exportacion'
-        )
-        ConfiguracionSistema.set_config(
-            'responsable_pa_nombre', responsable_nombre,
-            tipo='string', descripcion='Nombre del Responsable del PA para exportación Excel',
             categoria='exportacion'
         )
         ConfiguracionSistema.set_config(
@@ -5924,19 +5918,6 @@ def guardar_configuracion_exportacion_excel():
                     categoria='exportacion'
                 )
 
-        # Procesar firma del responsable si se subió
-        if 'responsable_pa_firma' in request.files:
-            file = request.files['responsable_pa_firma']
-            if file and file.filename:
-                filename = secure_filename(f"firma_responsable_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
-                upload_path = os.path.join('static', 'uploads', 'firmas')
-                os.makedirs(upload_path, exist_ok=True)
-                file.save(os.path.join(upload_path, filename))
-                ConfiguracionSistema.set_config(
-                    'responsable_pa_firma', filename,
-                    tipo='string', descripcion='Archivo de firma del Responsable del PA',
-                    categoria='exportacion'
-                )
 
         return jsonify({
             'success': True,
@@ -5971,14 +5952,6 @@ def eliminar_firma_exportacion():
                 config.valor = ''
                 db.session.commit()
 
-        elif tipo == 'responsable_pa':
-            config = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
-            if config and config.valor:
-                file_path = os.path.join('static', 'uploads', 'firmas', config.valor)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                config.valor = ''
-                db.session.commit()
 
         return jsonify({'success': True, 'message': 'Firma eliminada correctamente'})
 

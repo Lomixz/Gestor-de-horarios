@@ -544,7 +544,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     # Nombres
     fila_nombres = fila_firma + 1
     ws.merge_cells(f'A{fila_nombres}:C{fila_nombres}')
-    ws[f'A{fila_nombres}'] = datos_profesor['info']['nombre_completo']
+    ws[f'A{fila_nombres}'] = nombre_responsable
     ws[f'A{fila_nombres}'].font = normal_font
     ws[f'A{fila_nombres}'].alignment = center_align
     ws[f'A{fila_nombres}'].border = thin_border
@@ -560,7 +560,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         ws[f'{col}{fila_nombres}'].border = thin_border
 
     ws.merge_cells(f'G{fila_nombres}:L{fila_nombres}')
-    ws[f'G{fila_nombres}'] = nombre_responsable
+    ws[f'G{fila_nombres}'] = datos_profesor['info']['nombre_completo']
     ws[f'G{fila_nombres}'].font = normal_font
     ws[f'G{fila_nombres}'].alignment = center_align
     ws[f'G{fila_nombres}'].border = thin_border
@@ -572,7 +572,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     cargo_profesor = "PROFESOR DE TIEMPO COMPLETO" if datos_profesor['info']['es_tc'] else "PROFESOR DE ASIGNATURA"
 
     ws.merge_cells(f'A{fila_cargos}:C{fila_cargos}')
-    ws[f'A{fila_cargos}'] = cargo_profesor
+    ws[f'A{fila_cargos}'] = "Responsable del PA"
     ws[f'A{fila_cargos}'].font = normal_font
     ws[f'A{fila_cargos}'].alignment = center_align
     ws[f'A{fila_cargos}'].border = thin_border
@@ -588,7 +588,7 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         ws[f'{col}{fila_cargos}'].border = thin_border
 
     ws.merge_cells(f'G{fila_cargos}:L{fila_cargos}')
-    ws[f'G{fila_cargos}'] = "Responsable del PA"
+    ws[f'G{fila_cargos}'] = cargo_profesor
     ws[f'G{fila_cargos}'].font = normal_font
     ws[f'G{fila_cargos}'].alignment = center_align
     ws[f'G{fila_cargos}'].border = thin_border
@@ -663,18 +663,18 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         marker = AnchorMk(col=col_idx, colOff=pixels_to_EMU(col_off_px), row=row_idx, rowOff=row_off)
         return OneCellAnchor(_from=marker, ext=firma_ext)
 
-    # 1. Firma del profesor (Elaboró) — centrada en A-C
-    profesor = User.query.get(datos_profesor['info']['id'])
-    if profesor and profesor.firma:
-        firma_path = os.path.join('static', 'uploads', 'firmas', profesor.firma)
-        if os.path.exists(firma_path):
+    # 1. Firma del Responsable del PA (Elaboró) — centrada en A-C
+    config_firma_responsable = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
+    if config_firma_responsable and config_firma_responsable.valor:
+        firma_resp_path = os.path.join('static', 'uploads', 'firmas', config_firma_responsable.valor)
+        if os.path.exists(firma_resp_path):
             try:
-                firma_img = convertir_imagen_para_excel(firma_path)
-                if firma_img:
-                    firma_img.anchor = crear_anchor_firma(1, 55)
-                    ws.add_image(firma_img)
+                firma_resp_img = convertir_imagen_para_excel(firma_resp_path)
+                if firma_resp_img:
+                    firma_resp_img.anchor = crear_anchor_firma(1, 55)
+                    ws.add_image(firma_resp_img)
             except Exception as e:
-                logger.error(f"Error al cargar firma del profesor: {e}")
+                logger.error(f"Error al cargar firma del responsable: {e}")
 
     # 2. Firma del Director Académico (Autorizó) — centrada en D-F
     config_firma_director = ConfiguracionSistema.query.filter_by(clave='director_academico_firma').first()
@@ -689,18 +689,18 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
             except Exception as e:
                 logger.error(f"Error al cargar firma del director: {e}")
 
-    # 3. Firma del Responsable del PA (Recibió) — centrada en G-L
-    config_firma_responsable = ConfiguracionSistema.query.filter_by(clave='responsable_pa_firma').first()
-    if config_firma_responsable and config_firma_responsable.valor:
-        firma_resp_path = os.path.join('static', 'uploads', 'firmas', config_firma_responsable.valor)
-        if os.path.exists(firma_resp_path):
+    # 3. Firma del profesor (Recibió) — centrada en G-L
+    profesor = User.query.get(datos_profesor['info']['id'])
+    if profesor and profesor.firma:
+        firma_path = os.path.join('static', 'uploads', 'firmas', profesor.firma)
+        if os.path.exists(firma_path):
             try:
-                firma_resp_img = convertir_imagen_para_excel(firma_resp_path)
-                if firma_resp_img:
-                    firma_resp_img.anchor = crear_anchor_firma(9, 15)
-                    ws.add_image(firma_resp_img)
+                firma_img = convertir_imagen_para_excel(firma_path)
+                if firma_img:
+                    firma_img.anchor = crear_anchor_firma(9, 15)
+                    ws.add_image(firma_img)
             except Exception as e:
-                logger.error(f"Error al cargar firma del responsable: {e}")
+                logger.error(f"Error al cargar firma del profesor: {e}")
 
     # ========== 13. GUARDAR EN BUFFER ==========
     buffer = BytesIO()
@@ -1152,15 +1152,15 @@ def generar_pdf_profesor_buffer(profesor_nombre):
             [Paragraph('<b>Elaboró:</b>', label_style),
              Paragraph('<b>Autorizó:</b>', label_style),
              Paragraph('<b>Recibió:</b>', label_style)],
-            [Paragraph(f'<b>{profesor_nombre.upper()}</b>', label_style),
+            [Paragraph(f'<b>{nombre_responsable.upper()}</b>', label_style),
              Paragraph(f'<b>{nombre_director}</b>', label_style),
-             Paragraph(f'<b>{nombre_responsable}</b>', label_style)],
-            [Paragraph(cargo_profesor, small_style),
+             Paragraph(f'<b>{profesor_nombre.upper()}</b>', label_style)],
+            [Paragraph('Responsable del PA', small_style),
              Paragraph('Director Académico', small_style),
-             Paragraph('Responsable del PA', small_style)],
-            [firma_prof_elem or '',
+             Paragraph(cargo_profesor, small_style)],
+            [firma_resp_elem or '',
              firma_dir_elem or '',
-             firma_resp_elem or ''],
+             firma_prof_elem or ''],
             [Paragraph('Firma', label_style),
              Paragraph('Firma', label_style),
              Paragraph('Firma', label_style)],
