@@ -456,7 +456,7 @@ def admin_panel():
 #         return redirect(url_for('dashboard'))
 #     
 #     # Verificar que el jefe tenga una carrera asignada
-#     if not current_user.carreras:
+#     if not current_user.get_carreras_jefe_ids():
 #         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
 #         return redirect(url_for('dashboard'))
 #     
@@ -722,7 +722,7 @@ def gestionar_profesores_jefe():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    if not current_user.carreras:
+    if not current_user.get_carreras_jefe_ids():
         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
         return redirect(url_for('dashboard'))
     
@@ -981,7 +981,7 @@ def disponibilidad_profesores_jefe():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    if not current_user.carreras:
+    if not current_user.get_carreras_jefe_ids():
         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
         return redirect(url_for('dashboard'))
     
@@ -1142,7 +1142,7 @@ def asignacion_masiva_materias_jefe():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    if not current_user.carreras:
+    if not current_user.get_carreras_jefe_ids():
         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
         return redirect(url_for('dashboard'))
     
@@ -1276,7 +1276,7 @@ def gestionar_materias_jefe():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    if not current_user.carreras:
+    if not current_user.get_carreras_jefe_ids():
         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
         return redirect(url_for('dashboard'))
     
@@ -1369,7 +1369,7 @@ def gestionar_horarios_academicos_jefe():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
     
-    if not current_user.carreras:
+    if not current_user.get_carreras_jefe_ids():
         flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
         return redirect(url_for('dashboard'))
     
@@ -1822,7 +1822,7 @@ def gestionar_grupos():
         carreras = Carrera.query.filter_by(activa=True).order_by(Carrera.nombre).all()
     # Si es solo jefe de carrera (sin ser admin), mostrar grupos de su carrera
     elif current_user.is_jefe_carrera():
-        if not current_user.carreras:
+        if not current_user.get_carreras_jefe_ids():
             flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
             return redirect(url_for('dashboard'))
         
@@ -1941,7 +1941,7 @@ def crear_grupo():
     es_solo_jefe = current_user.is_jefe_carrera() and not current_user.is_admin()
     
     if es_solo_jefe:
-        if not current_user.carreras:
+        if not current_user.get_carreras_jefe_ids():
             flash('No tienes carreras asignadas. Contacta al administrador.', 'warning')
             return redirect(url_for('dashboard'))
         
@@ -2085,18 +2085,21 @@ def eliminar_grupo(id):
     codigo = grupo.codigo
     
     try:
-        # 1. Eliminar bloqueos de generación (para evitar errores de FK)
+        # 1. Eliminar bloqueos de generación
         from models import GeneracionEnProgreso
-        GeneracionEnProgreso.query.filter_by(grupo_id=id).delete(synchronize_session=False)
+        GeneracionEnProgreso.query.filter_by(grupo_id=id).delete(synchronize_session='fetch')
 
-        # 2. Eliminar asignaciones de profesores (para evitar errores de FK)
-        AsignacionProfesorGrupo.query.filter_by(grupo_id=id).delete(synchronize_session=False)
+        # 2. Eliminar asignaciones de profesores (de forma explícita para evitar IntegrityError)
+        # Esto asegura que SQLAlchemy procese cada eliminación correctamente antes de borrar el padre
+        asignaciones = AsignacionProfesorGrupo.query.filter_by(grupo_id=id).all()
+        for asig in asignaciones:
+            db.session.delete(asig)
+        db.session.flush()
 
         # 3. Eliminar horarios académicos (vinculados por código de grupo)
-        HorarioAcademico.query.filter_by(grupo=codigo.upper()).delete(synchronize_session=False)
+        HorarioAcademico.query.filter_by(grupo=codigo.upper()).delete(synchronize_session='fetch')
 
         # 4. Finalmente eliminar el grupo
-        db.session.flush()
         db.session.delete(grupo)
         db.session.commit()
         
