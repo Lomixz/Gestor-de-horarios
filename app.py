@@ -1863,14 +1863,32 @@ def eliminar_grupo(id):
             flash('No tienes permisos para eliminar este grupo.', 'error')
             return redirect(url_for('gestionar_grupos'))
     
-    # Verificar si tiene horarios asignados (cuando se implemente la relación)
-    # Por ahora solo eliminar
     codigo = grupo.codigo
-    db.session.delete(grupo)
-    db.session.commit()
     
-    flash(f'Grupo {codigo} eliminado exitosamente.', 'success')
+    try:
+        # 1. Eliminar bloqueos de generación (para evitar errores de FK)
+        from models import GeneracionEnProgreso
+        GeneracionEnProgreso.query.filter_by(grupo_id=id).delete()
+        
+        # 2. Eliminar asignaciones de profesores (para evitar errores de FK)
+        AsignacionProfesorGrupo.query.filter_by(grupo_id=id).delete()
+        
+        # 3. Eliminar horarios académicos (vinculados por código de grupo)
+        HorarioAcademico.query.filter_by(grupo=codigo.upper()).delete()
+        
+        # 4. Finalmente eliminar el grupo
+        db.session.delete(grupo)
+        db.session.commit()
+        
+        flash(f'Grupo {codigo} y todos sus registros asociados han sido eliminados.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar el grupo: {str(e)}', 'error')
+        if 'logger' in globals():
+            logger.error(f"Error al eliminar grupo {id} ({codigo}): {e}")
+            
     return redirect(url_for('gestionar_grupos'))
+
 
 @app.route('/admin/grupo/<int:id>/materias', methods=['GET', 'POST'])
 @login_required
