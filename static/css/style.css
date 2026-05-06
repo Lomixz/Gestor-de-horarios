@@ -381,9 +381,14 @@ h4 { font-size: clamp(1.1rem, 0.95rem + 0.5vw, 1.4rem); }
     flex-wrap: wrap;
 }
 
-.app-main .table.table-wide,
+.app-main .table.table-wide {
+    table-layout: auto;
+    min-width: 800px !important;
+}
+
 .app-main .table.table-xwide {
     table-layout: auto;
+    min-width: 950px !important;
 }
 
 .app-main .table.table-schedule {
@@ -397,9 +402,7 @@ h4 { font-size: clamp(1.1rem, 0.95rem + 0.5vw, 1.4rem); }
 
 @media (min-width: 768px) {
 
-    .app-main .table.table-narrow,
-    .app-main .table.table-wide,
-    .app-main .table.table-xwide {
+    .app-main .table.table-narrow {
         width: 100%;
         min-width: 100%;
     }
@@ -484,11 +487,11 @@ h4 { font-size: clamp(1.1rem, 0.95rem + 0.5vw, 1.4rem); }
     }
 
     .app-main .table.table-wide {
-        min-width: 600px;
+        min-width: 850px;
     }
 
     .app-main .table.table-xwide {
-        min-width: 720px;
+        min-width: 1100px;
     }
 
     .app-main .table.table-wide th,
@@ -500,8 +503,8 @@ h4 { font-size: clamp(1.1rem, 0.95rem + 0.5vw, 1.4rem); }
     .admin-ui .admin-table th,
     .admin-ui .admin-table td {
         white-space: normal;
-        overflow-wrap: anywhere;
-        word-break: break-word;
+        overflow-wrap: break-word;
+        word-break: normal;
         line-height: 1.25;
     }
 
@@ -1019,6 +1022,27 @@ select[multiple] option:checked {
 .admin-ui .admin-table th,
 .admin-ui .admin-table td {
     vertical-align: middle;
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+.admin-ui .admin-table .col-nombre {
+    min-width: 220px !important;
+    white-space: nowrap !important;
+}
+
+.admin-ui .admin-table .col-text-wide {
+    min-width: 200px !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+}
+
+.admin-ui .admin-table .admin-col-text {
+    min-width: 150px;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 @media (min-width: 768px) {
@@ -1086,6 +1110,9 @@ select[multiple] option:checked {
 
 .admin-ui .badge-nowrap {
     white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    display: inline-block !important;
 }
 
 .admin-ui .admin-table .badge {
@@ -1093,7 +1120,8 @@ select[multiple] option:checked {
     line-height: 1.2;
     text-align: left;
     max-width: 100%;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .admin-ui .admin-users-table-wrap .admin-table-users {
@@ -1102,8 +1130,9 @@ select[multiple] option:checked {
 
 .admin-ui .admin-table-users .admin-col-text {
     white-space: normal;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    overflow-wrap: break-word;
+    word-break: normal;
+    min-width: 150px;
     line-height: 1.3;
 }
 

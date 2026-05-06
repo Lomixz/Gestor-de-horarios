@@ -185,13 +185,13 @@
             </div>
             <div class="card-body">
                 {% if usuarios %}
-                    <div class="table-responsive admin-users-table-wrap">
-                        <table class="table table-hover admin-table admin-table-users">
+                    <div class="table-responsive">
+                        <table class="table table-hover admin-table table-xwide mb-0">
                             <thead class="table-dark">
                                 <tr>
                                     <th class="admin-col-text">Usuario</th>
-                                    <th class="admin-col-text">Nombre Completo</th>
-                                    <th class="admin-col-text">Email</th>
+                                    <th class="col-text-wide">Nombre Completo</th>
+                                    <th class="col-text-wide">Email</th>
                                     <th class="text-center admin-col-type">Rol</th>
                                     <th class="admin-col-text">Carrera</th>
                                     <th class="text-center admin-col-status">Estado</th>
@@ -208,8 +208,8 @@
                                     data-rol="{{ usuario.get_rol_display() }}"
                                     data-estado="{{ 'Activo' if usuario.activo else 'Inactivo' }}">
                                     <td class="admin-col-text">{{ usuario.username }}</td>
-                                    <td class="admin-col-text">{{ usuario.get_nombre_completo() }}</td>
-                                    <td class="admin-col-text">{{ usuario.email }}</td>
+                                    <td class="col-text-wide">{{ usuario.get_nombre_completo() }}</td>
+                                    <td class="col-text-wide">{{ usuario.email }}</td>
                                     <td class="text-center admin-col-type">
                                         <span class="badge badge-nowrap bg-{% if usuario.rol == 'admin' %}danger{% elif usuario.rol == 'jefe_carrera' %}warning{% elif usuario.rol == 'recursos_humanos' %}success{% else %}primary{% endif %}">
                                             {{ usuario.get_rol_display() }}

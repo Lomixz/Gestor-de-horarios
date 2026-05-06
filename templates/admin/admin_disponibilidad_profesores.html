@@ -120,10 +120,10 @@
         <div class="card-body">
             {% if profesores %}
             <div class="table-responsive">
-                <table class="table table-hover admin-table">
+                <table class="table table-hover admin-table table-xwide">
                     <thead class="table-dark">
                         <tr>
-                            <th>Nombre Completo</th>
+                            <th class="col-nombre">Nombre Completo</th>
                             <th>Email</th>
                             <th>Teléfono</th>
                             <th>Rol</th>
@@ -136,7 +136,7 @@
                         {% for profesor in profesores %}
                         {% set tiene_disponibilidad = profesor.disponibilidades|selectattr('activo', 'equalto', True)|list|length > 0 %}
                         <tr>
-                            <td>
+                            <td class="col-nombre">
                                 <strong>{{ profesor.get_nombre_completo() }}</strong>
                             </td>
                             <td>
@@ -151,15 +151,15 @@
                             </td>
                             <td>
                                 {% if profesor.rol == 'profesor_completo' %}
-                                <span class="badge bg-primary">Tiempo Completo</span>
+                                <span class="badge badge-nowrap bg-primary">Tiempo Completo</span>
                                 {% else %}
-                                <span class="badge bg-info">Asignatura</span>
+                                <span class="badge badge-nowrap bg-info">Asignatura</span>
                                 {% endif %}
                             </td>
                             <td>
                                 {% if profesor.carreras %}
                                 {% for carrera in profesor.carreras %}
-                                <span class="badge bg-secondary me-1">{{ carrera.codigo }}</span>
+                                <span class="badge badge-nowrap bg-secondary me-1">{{ carrera.codigo }}</span>
                                 {% endfor %}
                                 {% else %}
                                 <span class="text-muted">Sin carrera</span>
@@ -167,11 +167,11 @@
                             </td>
                             <td class="text-center">
                                 {% if tiene_disponibilidad %}
-                                <span class="badge bg-success">
+                                <span class="badge badge-nowrap bg-success">
                                     <i class="bi bi-check-circle"></i> Configurada
                                 </span>
                                 {% else %}
-                                <span class="badge bg-warning">
+                                <span class="badge badge-nowrap bg-warning">
                                     <i class="bi bi-exclamation-triangle"></i> Sin configurar
                                 </span>
                                 {% endif %}

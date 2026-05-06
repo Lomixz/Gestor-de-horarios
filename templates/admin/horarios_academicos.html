@@ -155,11 +155,11 @@
                 <div class="card-body p-0">
                     {% if grupos_con_horarios %}
                         <div class="table-responsive">
-                            <table class="table table-hover admin-table mb-0">
+                            <table class="table table-hover admin-table table-xwide mb-0">
                                 <thead class="table-dark">
                                     <tr>
                                         <th class="th-w-120">Grupo</th>
-                                        <th>Carrera</th>
+                                        <th class="col-text-wide">Carrera</th>
                                         <th class="text-center th-w-100">Cuatrimestre</th>
                                         <th class="text-center th-w-100 admin-col-type">Turno</th>
                                         <th class="text-center th-w-100 admin-col-status">Horarios</th>
@@ -174,7 +174,7 @@
                                         <td>
                                             <strong class="text-primary fs-6">{{ grupo.codigo }}</strong>
                                         </td>
-                                        <td>
+                                        <td class="col-text-wide">
                                             <span class="text-dark">{{ grupo.get_carrera_nombre() }}</span>
                                         </td>
                                         <td class="text-center">
