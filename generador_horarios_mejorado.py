@@ -347,35 +347,10 @@ class GeneradorHorariosMejorado:
                         if profesor_seleccionado:
                             self._profesores_asignacion_directa.add(profesor_seleccionado.id)
 
-                # PRIORIDAD 2: Fallback a relación M2M si no hay asignación específica o ningún asignado tiene disponibilidad
-                if profesor_seleccionado is None:
-                    profesores = [p for p in materia.profesores if p.activo]
+                # PRIORIDAD 2: Eliminada para evitar asignaciones automáticas no deseadas.
+                # Solo se consideran profesores asignados explícitamente al grupo.
+                pass
 
-                    if profesores:
-                        # Ordenar por disponibilidad y seleccionar el mejor
-                        candidatos = []
-                        for profesor in profesores:
-                            disp_count = self._contar_capacidad_restante(profesor.id, turno_str)
-                            candidatos.append((profesor, disp_count))
-
-                        candidatos.sort(key=lambda x: x[1], reverse=True)
-
-                        for profesor, disp in candidatos:
-                            if disp >= horas_requeridas:
-                                profesor_seleccionado = profesor
-                                disponibilidad_seleccionada = disp
-                                if usar_fallback:
-                                    logger.info(f"  Usando profesor alternativo: {profesor.nombre}")
-                                break
-
-                        # Si ninguno cumple completamente, usar el de mayor disponibilidad
-                        if not profesor_seleccionado and candidatos and candidatos[0][1] > 0:
-                            profesor_seleccionado, disponibilidad_seleccionada = candidatos[0]
-                            msg = (f"{grupo.codigo}/{materia.codigo}: Prof. {profesor_seleccionado.nombre} "
-                                   f"tiene {disponibilidad_seleccionada}h disponibles (Requeridas: {horas_requeridas}h). "
-                                   "Se intentará completar, pero podría fallar.")
-                            materias_con_advertencia.append(msg)
-                            logger.warning(msg)
 
                 if profesor_seleccionado:
                     self.profesor_por_materia_grupo[(grupo.id, materia.id)] = profesor_seleccionado
