@@ -114,7 +114,7 @@ class AsignacionProfesorGrupo(db.Model):
     # Relaciones
     profesor = db.relationship('User', foreign_keys=[profesor_id], backref=db.backref('asignaciones_grupo', lazy='dynamic'))
     materia = db.relationship('Materia', backref=db.backref('asignaciones_grupo', lazy='dynamic'))
-    grupo = db.relationship('Grupo', backref=db.backref('asignaciones_profesor', lazy='dynamic', passive_deletes=True))
+    grupo = db.relationship('Grupo', back_populates='asignaciones_profesor')
     creador = db.relationship('User', foreign_keys=[creado_por])
     
     def __init__(self, profesor_id, materia_id, grupo_id, horas_semanales=0, 
@@ -857,6 +857,9 @@ class Grupo(db.Model):
     
     # Relación many-to-many con materias
     materias = db.relationship('Materia', secondary='grupo_materias', backref=db.backref('grupos', lazy=True))
+    
+    # Relaciones adicionales
+    asignaciones_profesor = db.relationship('AsignacionProfesorGrupo', back_populates='grupo', cascade='all, delete-orphan')
     
     # Metadatos
     activo = db.Column(db.Boolean, default=True)

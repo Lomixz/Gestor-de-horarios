@@ -32,7 +32,7 @@ services:
       retries: 5
 
   web:
-    build: .
+    image: sistema_login-web:latest
     container_name: sistema_login
     restart: unless-stopped
     ports:
@@ -62,7 +62,7 @@ services:
         condition: service_healthy
 
   celery_worker:
-    build: .
+    image: sistema_login-celery_worker:latest
     container_name: gestor_celery_worker
     restart: unless-stopped
     command: celery -A celery_app worker --loglevel=info --concurrency=2
