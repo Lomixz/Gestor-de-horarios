@@ -151,18 +151,49 @@
                                         Restricción de Horas Muertas
                                     </label>
                                 </div>
-                                <div class="form-text">Cuando está activado, el generador intentará limitar los huecos entre clases por día para los profesores.</div>
+                                <div class="form-text">Cuando está activado, el generador limitará los huecos entre clases por día para los profesores.</div>
                             </div>
 
-                            <!-- Límite de Horas Muertas -->
-                            <div class="col-md-6" id="max_horas_muertas_container" style="{% if not (restriccion_horas_muertas == 'true' or restriccion_horas_muertas == True) %}display: none;{% endif %}">
-                                <label for="max_horas_muertas" class="form-label">Horas Muertas Máximas por Día</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" id="max_horas_muertas" 
-                                           value="{{ max_horas_muertas or 2 }}" min="1" max="10">
-                                    <span class="input-group-text">horas</span>
+                            <!-- Límites de Horas Muertas por Tipo de Profesor -->
+                            <div class="col-12" id="max_horas_muertas_container" style="{% if not (restriccion_horas_muertas == 'true' or restriccion_horas_muertas == True) %}display: none;{% endif %}">
+                                <div class="row g-3 mt-1">
+                                    <div class="col-md-4">
+                                        <label for="max_horas_muertas" class="form-label">
+                                            <i class="fas fa-clock me-1 text-secondary"></i>
+                                            General (legacy)
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="max_horas_muertas" 
+                                                   value="{{ max_horas_muertas or 2 }}" min="0" max="10">
+                                            <span class="input-group-text">horas</span>
+                                        </div>
+                                        <div class="form-text">Valor por defecto si no se especifica por tipo</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="max_horas_muertas_tc" class="form-label">
+                                            <i class="fas fa-briefcase me-1 text-primary"></i>
+                                            Tiempo Completo
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="max_horas_muertas_tc" 
+                                                   value="{{ max_horas_muertas_tc or max_horas_muertas or 2 }}" min="0" max="10">
+                                            <span class="input-group-text">horas</span>
+                                        </div>
+                                        <div class="form-text">Máx. huecos por día para TC</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="max_horas_muertas_asignatura" class="form-label">
+                                            <i class="fas fa-book me-1 text-success"></i>
+                                            Por Asignatura
+                                        </label>
+                                        <div class="input-group">
+                                            <input type="number" class="form-control" id="max_horas_muertas_asignatura" 
+                                                   value="{{ max_horas_muertas_asignatura or max_horas_muertas or 2 }}" min="0" max="10">
+                                            <span class="input-group-text">horas</span>
+                                        </div>
+                                        <div class="form-text">Máx. huecos por día para asignatura</div>
+                                    </div>
                                 </div>
-                                <div class="form-text">Número máximo de huecos permitidos por día por profesor</div>
                             </div>
                         </div>
 
@@ -686,7 +717,9 @@ function guardarHorarios() {
         duracion_clase: document.getElementById('duracion_clase').value,
         tiempo_entre_clases: document.getElementById('tiempo_entre_clases').value,
         restriccion_horas_muertas: document.getElementById('restriccion_horas_muertas').checked,
-        max_horas_muertas: document.getElementById('max_horas_muertas').value
+        max_horas_muertas: document.getElementById('max_horas_muertas').value,
+        max_horas_muertas_tc: document.getElementById('max_horas_muertas_tc').value,
+        max_horas_muertas_asignatura: document.getElementById('max_horas_muertas_asignatura').value
     };
 
     secureFetch('/admin/configuracion/horarios', {

@@ -247,7 +247,7 @@
                                         <tbody>
                                             {% for horario in horarios %}
                                             <tr>
-                                                <td class="bg-white border-end"><small>{{ horario.nombre }}</small></td>
+                                                <td class="bg-white border-end"><small>{{ horario.get_hora_inicio_str() }} - {{ horario.get_hora_fin_str() }}</small></td>
                                                 {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'] %}
                                                 <td>
                                                     <input class="form-check-input availability-check" type="checkbox"

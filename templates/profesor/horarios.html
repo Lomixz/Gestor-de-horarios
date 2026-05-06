@@ -10,7 +10,12 @@
                 <i class="fas fa-calendar-alt me-2"></i>
                 Mis Horarios
             </h2>
-            <div class="page-actions">
+            <div class="page-actions d-flex gap-2">
+                {% if current_user.is_profesor_completo() %}
+                <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalAgregarActividad">
+                    <i class="fas fa-plus me-1"></i> Agregar Actividad PTC
+                </button>
+                {% endif %}
                 <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
                     <i class="fas fa-arrow-left me-2"></i>
                     Volver al Dashboard
@@ -22,6 +27,67 @@
 
 <!-- Estadísticas del profesor -->
 <div class="row mb-4">
+    {% if current_user.is_profesor_completo() %}
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ total_horas }}</h4>
+                        <p class="mb-0">Horas de Clase</p>
+                    </div>
+                    <div class="align-self-center"><i class="fas fa-chalkboard-teacher fa-2x"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ horas_actividades }}</h4>
+                        <p class="mb-0">Asesoría / Tutoría / Gestión</p>
+                    </div>
+                    <div class="align-self-center"><i class="fas fa-tasks fa-2x"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        {% set porcentaje = ((horas_totales_ptc / horas_contrato) * 100)|int %}
+        <div class="card {% if horas_totales_ptc >= horas_contrato %}bg-success{% elif horas_totales_ptc >= horas_contrato * 0.8 %}bg-info{% else %}bg-secondary{% endif %} text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ horas_totales_ptc }} / {{ horas_contrato }}</h4>
+                        <p class="mb-0">Total Horas Contrato</p>
+                    </div>
+                    <div class="align-self-center"><i class="fas fa-hourglass-half fa-2x"></i></div>
+                </div>
+                <div class="mt-2">
+                    <div class="progress" style="height:6px;">
+                        <div class="progress-bar bg-white" style="width:{{ [porcentaje, 100]|min }}%"></div>
+                    </div>
+                    <small>{{ horas_contrato - horas_totales_ptc }} horas pendientes por cubrir</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h4 class="mb-0">{{ materias_unicas }}</h4>
+                        <p class="mb-0">Materias Diferentes</p>
+                    </div>
+                    <div class="align-self-center"><i class="fas fa-book fa-2x"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
     <div class="col-md-4">
         <div class="card bg-primary text-white">
             <div class="card-body">
@@ -30,9 +96,7 @@
                         <h4 class="mb-0">{{ total_horas }}</h4>
                         <p class="mb-0">Horas Semanales</p>
                     </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-clock fa-2x"></i>
-                    </div>
+                    <div class="align-self-center"><i class="fas fa-clock fa-2x"></i></div>
                 </div>
             </div>
         </div>
@@ -45,9 +109,7 @@
                         <h4 class="mb-0">{{ materias_unicas }}</h4>
                         <p class="mb-0">Materias Diferentes</p>
                     </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-book fa-2x"></i>
-                    </div>
+                    <div class="align-self-center"><i class="fas fa-book fa-2x"></i></div>
                 </div>
             </div>
         </div>
@@ -60,77 +122,135 @@
                         <h4 class="mb-0">{% if current_user.carreras|length > 0 %}{{ current_user.carreras|map(attribute='nombre')|join(', ') }}{% else %}Sin asignar{% endif %}</h4>
                         <p class="mb-0">Carrera Asignada</p>
                     </div>
-                    <div class="align-self-center">
-                        <i class="fas fa-graduation-cap fa-2x"></i>
-                    </div>
+                    <div class="align-self-center"><i class="fas fa-graduation-cap fa-2x"></i></div>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <!-- Horario semanal -->
 <div class="row">
     <div class="col-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="fas fa-calendar-week me-2"></i>
                     Horario Semanal
                 </h5>
+                {% if current_user.is_profesor_completo() %}
+                <span class="badge bg-secondary">
+                    <i class="fas fa-circle text-warning me-1" style="font-size:0.6rem"></i> Actividades PTC editables
+                </span>
+                {% endif %}
             </div>
             <div class="card-body">
-                {% if horarios_por_dia %}
+                {% set tiene_cualquier_horario = (total_horas > 0) or (horas_actividades > 0) %}
+                {% if tiene_cualquier_horario %}
                     <div class="table-responsive">
                         <table class="table table-bordered table-hover">
                             <thead class="table-dark">
                                 <tr>
                                     <th width="12%">Día</th>
                                     <th width="15%">Hora</th>
-                                    <th width="25%">Materia</th>
-                                    <th width="12%">Código</th>
-                                    <th width="18%">Grupo</th>
-                                    <th width="18%">Turno</th>
+                                    <th width="30%">Actividad</th>
+                                    <th width="15%">Tipo</th>
+                                    <th width="15%">Grupo / Info</th>
+                                    {% if current_user.is_profesor_completo() %}
+                                    <th width="13%">Acciones</th>
+                                    {% else %}
+                                    <th width="13%">Turno</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for dia in dias_semana %}
-                                    {% set horarios_dia = horarios_por_dia[dia] %}
-                                    {% if horarios_dia %}
-                                        {% for horario in horarios_dia %}
+                                    {% set clases_dia = horarios_por_dia[dia] %}
+                                    {% set acts_dia = actividades_por_dia[dia] if current_user.is_profesor_completo() else [] %}
+                                    {% set total_dia = clases_dia|length + acts_dia|length %}
+                                    {% if total_dia > 0 %}
+                                        {# Clases #}
+                                        {% for h in clases_dia %}
                                         <tr>
-                                            {% if loop.first %}
-                                            <td rowspan="{{ horarios_dia|length }}" class="align-middle fw-bold bg-light">
-                                                {{ horario.get_dia_display() }}
+                                            {% if loop.first and acts_dia|length == 0 %}
+                                            <td rowspan="{{ clases_dia|length }}" class="align-middle fw-bold bg-light">
+                                                {{ h.get_dia_display() }}
+                                            </td>
+                                            {% elif loop.first %}
+                                            <td rowspan="{{ total_dia }}" class="align-middle fw-bold bg-light">
+                                                {{ h.get_dia_display() }}
                                             </td>
                                             {% endif %}
                                             <td>
                                                 <span class="badge bg-primary">
-                                                    {{ horario.get_hora_inicio_str() }} - {{ horario.get_hora_fin_str() }}
+                                                    {{ h.get_hora_inicio_str() }} - {{ h.get_hora_fin_str() }}
                                                 </span>
                                             </td>
+                                            <td><strong>{{ h.get_materia_nombre() }}</strong></td>
+                                            <td><span class="badge bg-info text-dark">Clase</span></td>
                                             <td>
-                                                <strong>{{ horario.get_materia_nombre() }}</strong>
-                                            </td>
-                                            <td>
-                                                <span class="badge bg-secondary">{{ horario.get_materia_codigo() }}</span>
-                                            </td>
-                                            <td>
-                                                {% if horario.grupo %}
-                                                    <span class="badge bg-dark">{{ horario.grupo }}</span>
+                                                {% if h.grupo %}
+                                                    <span class="badge bg-dark">{{ h.grupo }}</span>
                                                 {% else %}
                                                     <span class="text-muted">-</span>
                                                 {% endif %}
                                             </td>
                                             <td>
-                                                <span class="badge bg-warning text-dark">{{ horario.get_turno_display() }}</span>
+                                                {% if current_user.is_profesor_completo() %}
+                                                    <span class="text-muted small">No editable</span>
+                                                {% else %}
+                                                    <span class="badge bg-warning text-dark">{{ h.get_turno_display() }}</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        {# Actividades PTC #}
+                                        {% for a in acts_dia %}
+                                        <tr class="table-warning">
+                                            {% if loop.first and clases_dia|length == 0 %}
+                                            <td rowspan="{{ acts_dia|length }}" class="align-middle fw-bold bg-light">
+                                                {{ a.get_dia_display() }}
+                                            </td>
+                                            {% endif %}
+                                            <td>
+                                                <span class="badge bg-secondary">
+                                                    {{ a.horario.get_hora_inicio_str() }} - {{ a.horario.get_hora_fin_str() }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="text-muted">{{ a.notas or '—' }}</span>
+                                            </td>
+                                            <td>
+                                                {% if a.tipo_actividad == 'asesoria' %}
+                                                    <span class="badge bg-success">Asesoría</span>
+                                                {% elif a.tipo_actividad == 'tutoria' %}
+                                                    <span class="badge bg-warning text-dark">Tutoría</span>
+                                                {% else %}
+                                                    <span class="badge bg-danger">Gestión</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>—</td>
+                                            <td>
+                                                <button class="btn btn-xs btn-outline-primary btn-edit-actividad me-1"
+                                                    data-id="{{ a.id }}"
+                                                    data-tipo="{{ a.tipo_actividad }}"
+                                                    data-notas="{{ a.notas or '' }}"
+                                                    title="Editar">
+                                                    <i class="fas fa-pencil-alt"></i>
+                                                </button>
+                                                <button class="btn btn-xs btn-outline-danger btn-eliminar-actividad"
+                                                    data-id="{{ a.id }}"
+                                                    title="Eliminar">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
                                             </td>
                                         </tr>
                                         {% endfor %}
                                     {% endif %}
                                 {% endfor %}
-                                
-                                {% if total_horas == 0 %}
+
+                                {% if not tiene_cualquier_horario %}
                                 <tr>
                                     <td colspan="6" class="text-center text-muted py-4">
                                         <i class="fas fa-calendar-times fa-3x mb-3"></i>
@@ -154,15 +274,69 @@
     </div>
 </div>
 
+{% if current_user.is_profesor_completo() and actividades_ptc|length > 0 %}
+<!-- Lista completa de actividades PTC -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-list me-2"></i> Mis Actividades PTC</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Día</th>
+                                <th>Hora</th>
+                                <th>Tipo</th>
+                                <th>Notas</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in actividades_ptc %}
+                            <tr>
+                                <td>{{ a.get_dia_display() }}</td>
+                                <td>{{ a.horario.get_hora_inicio_str() }} - {{ a.horario.get_hora_fin_str() }}</td>
+                                <td>
+                                    {% if a.tipo_actividad == 'asesoria' %}
+                                        <span class="badge bg-success">Asesoría</span>
+                                    {% elif a.tipo_actividad == 'tutoria' %}
+                                        <span class="badge bg-warning text-dark">Tutoría</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Gestión</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ a.notas or '—' }}</td>
+                                <td>
+                                    <button class="btn btn-xs btn-outline-primary btn-edit-actividad me-1"
+                                        data-id="{{ a.id }}" data-tipo="{{ a.tipo_actividad }}"
+                                        data-notas="{{ a.notas or '' }}">
+                                        <i class="fas fa-pencil-alt"></i>
+                                    </button>
+                                    <button class="btn btn-xs btn-outline-danger btn-eliminar-actividad"
+                                        data-id="{{ a.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Información adicional -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Información de Contacto
-                </h5>
+                <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i> Información de Contacto</h5>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -179,39 +353,211 @@
         </div>
     </div>
 </div>
+
+{% if current_user.is_profesor_completo() %}
+<!-- Modal: Agregar actividad PTC -->
+<div class="modal fade" id="modalAgregarActividad" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i> Agregar Actividad PTC</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Día de la semana</label>
+                    <select class="form-select" id="agrDia">
+                        <option value="">-- Seleccionar --</option>
+                        <option value="lunes">Lunes</option>
+                        <option value="martes">Martes</option>
+                        <option value="miercoles">Miércoles</option>
+                        <option value="jueves">Jueves</option>
+                        <option value="viernes">Viernes</option>
+                        <option value="sabado">Sábado</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Hora</label>
+                    <select class="form-select" id="agrHorario">
+                        <option value="">-- Seleccionar --</option>
+                        {% for h in todos_los_horarios %}
+                        <option value="{{ h.id }}">{{ h.get_hora_inicio_str() }} - {{ h.get_hora_fin_str() }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de actividad</label>
+                    <select class="form-select" id="agrTipo">
+                        {% for key, label in tipos_actividad.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" class="form-control" id="agrNotas" placeholder="Ej: Sala 201, alumnos de 3er cuatrimestre...">
+                </div>
+                <div id="agrError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnGuardarActividad">
+                    <i class="fas fa-save me-1"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar actividad PTC -->
+<div class="modal fade" id="modalEditarActividad" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-pencil-alt me-2"></i> Editar Actividad PTC</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de actividad</label>
+                    <select class="form-select" id="editTipo">
+                        {% for key, label in tipos_actividad.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" class="form-control" id="editNotas">
+                </div>
+                <div id="editError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnActualizarActividad">
+                    <i class="fas fa-save me-1"></i> Actualizar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Resaltar la hora actual si es un día de clase
+    // Resaltar hora actual
     const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTime = currentHour * 60 + currentMinute;
-    
-    // Resaltar filas de horarios actuales
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
     document.querySelectorAll('tbody tr').forEach(function(row) {
-        const timeCell = row.querySelector('td:nth-child(2) .badge');
-        if (timeCell) {
-            const timeText = timeCell.textContent.trim();
-            const times = timeText.split(' - ');
-            if (times.length === 2) {
-                const startTime = parseTime(times[0]);
-                const endTime = parseTime(times[1]);
-                
-                if (currentTime >= startTime && currentTime <= endTime) {
-                    row.classList.add('table-warning');
+        const badge = row.querySelector('td:nth-child(2) .badge');
+        if (badge) {
+            const parts = badge.textContent.trim().split(' - ');
+            if (parts.length === 2) {
+                const [sh, sm] = parts[0].split(':').map(Number);
+                const [eh, em] = parts[1].split(':').map(Number);
+                const start = sh * 60 + sm, end = eh * 60 + em;
+                if (currentTime >= start && currentTime <= end) {
+                    row.classList.add('table-info');
                     row.style.fontWeight = 'bold';
                 }
             }
         }
     });
-    
-    function parseTime(timeStr) {
-        const parts = timeStr.split(':');
-        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+
+    {% if current_user.is_profesor_completo() %}
+    // --- Agregar actividad ---
+    document.getElementById('btnGuardarActividad').addEventListener('click', function() {
+        const dia = document.getElementById('agrDia').value;
+        const horario_id = document.getElementById('agrHorario').value;
+        const tipo = document.getElementById('agrTipo').value;
+        const notas = document.getElementById('agrNotas').value;
+        const errDiv = document.getElementById('agrError');
+
+        if (!dia || !horario_id || !tipo) {
+            errDiv.textContent = 'Por favor completa todos los campos requeridos.';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+        errDiv.classList.add('d-none');
+
+        fetch('{{ url_for("agregar_actividad_ptc") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({dia_semana: dia, horario_id: parseInt(horario_id), tipo_actividad: tipo, notas: notas})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                errDiv.textContent = data.message || 'Error al guardar.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => {
+            errDiv.textContent = 'Error de conexión.';
+            errDiv.classList.remove('d-none');
+        });
+    });
+
+    // --- Editar actividad ---
+    document.querySelectorAll('.btn-edit-actividad').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('editId').value = this.dataset.id;
+            document.getElementById('editTipo').value = this.dataset.tipo;
+            document.getElementById('editNotas').value = this.dataset.notas;
+            document.getElementById('editError').classList.add('d-none');
+            new bootstrap.Modal(document.getElementById('modalEditarActividad')).show();
+        });
+    });
+
+    document.getElementById('btnActualizarActividad').addEventListener('click', function() {
+        const id = document.getElementById('editId').value;
+        const tipo = document.getElementById('editTipo').value;
+        const notas = document.getElementById('editNotas').value;
+        const errDiv = document.getElementById('editError');
+
+        fetch(`/profesor/actividad-ptc/${id}/editar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({tipo_actividad: tipo, notas: notas})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { location.reload(); }
+            else {
+                errDiv.textContent = data.message || 'Error al actualizar.';
+                errDiv.classList.remove('d-none');
+            }
+        });
+    });
+
+    // --- Eliminar actividad ---
+    document.querySelectorAll('.btn-eliminar-actividad').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('¿Eliminar esta actividad de tu horario?')) return;
+            const id = this.dataset.id;
+            fetch(`/profesor/actividad-ptc/${id}/eliminar`, {
+                method: 'DELETE',
+                headers: {'X-CSRFToken': getCsrfToken()}
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) { location.reload(); }
+                else { alert(data.message || 'Error al eliminar.'); }
+            });
+        });
+    });
+
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
     }
+    {% endif %}
 });
 </script>
 {% endblock %}

@@ -1,0 +1,370 @@
+{% extends 'base.html' %}
+
+{% block title %}Actividades PTC - {{ profesor.get_nombre_completo() }}{% endblock %}
+{% block body_class %}admin-ui{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="admin-page-title">
+                        <i class="fas fa-tasks me-2"></i> Actividades PTC
+                    </h2>
+                    <p class="text-muted mb-0">
+                        Profesor: <strong>{{ profesor.get_nombre_completo() }}</strong>
+                        &nbsp;|&nbsp; Panel de Administrador
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAgregarActividad">
+                        <i class="fas fa-plus me-1"></i> Agregar Actividad
+                    </button>
+                    <a href="{{ url_for('gestionar_profesores') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Volver a Profesores
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h3>{{ horas_clase }}</h3>
+                    <p class="mb-0">Horas de Clase</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body text-center">
+                    <h3>{{ horas_actividades }}</h3>
+                    <p class="mb-0">Asesoría / Tutoría / Gestión</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            {% set porcentaje = ((horas_totales / horas_contrato) * 100)|int %}
+            <div class="card {% if horas_totales >= horas_contrato %}bg-success{% elif horas_totales >= horas_contrato * 0.8 %}bg-info{% else %}bg-secondary{% endif %} text-white">
+                <div class="card-body text-center">
+                    <h3>{{ horas_totales }} / {{ horas_contrato }}</h3>
+                    <p class="mb-0">Total Horas Contrato</p>
+                    <div class="progress mt-2" style="height:5px;">
+                        <div class="progress-bar bg-white" style="width:{{ [porcentaje, 100]|min }}%"></div>
+                    </div>
+                    <small>{{ horas_contrato - horas_totales }} pendientes</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h3>{{ actividades|length }}</h3>
+                    <p class="mb-0">Actividades Registradas</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vista de Cuadrícula (Horario) -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i> Horario de Actividades de {{ profesor.nombre }}</h5>
+            <div class="small">
+                <span class="badge bg-secondary me-2">Clase</span>
+                <span class="badge bg-success me-2">Asesoría</span>
+                <span class="badge bg-warning text-dark me-2">Tutoría</span>
+                <span class="badge bg-danger">Gestión</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered mb-0 ptc-grid">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center">Hora</th>
+                            {% for dia in dias_semana %}
+                            <th class="text-center">{{ dia[:1]|upper }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in todos_los_horarios %}
+                        <tr>
+                            <td class="align-middle text-center small fw-bold">
+                                {{ h.get_hora_inicio_str() }} - {{ h.get_hora_fin_str() }}
+                            </td>
+                            {% for dia in dias_semana %}
+                            <td>
+                                {% set item = grid[h.id][dia] %}
+                                {% if item %}
+                                    {% if item.tipo == 'clase' %}
+                                        <div class="slot-clase" title="Materia: {{ item.materia }}">
+                                            <span class="fw-bold">{{ item.materia[:15] }}{% if item.materia|length > 15 %}...{% endif %}</span>
+                                            <span class="small">G: {{ item.grupo }}</span>
+                                        </div>
+                                    {% else %}
+                                        <div class="slot-ptc {{ item.actividad }}" 
+                                             onclick="abrirEditar('{{ item.id }}', '{{ item.actividad }}', '{{ item.notas }}')"
+                                             title="{{ item.label }}: {{ item.notas or 'Sin notas' }}">
+                                            <span class="fw-bold">{{ item.label }}</span>
+                                            <button class="btn-quick-delete" onclick="eliminarActividad(event, '{{ item.id }}')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="slot-empty" onclick="abrirAgregar('{{ dia }}', '{{ h.id }}')" title="Clic para agregar actividad">
+                                        <i class="fas fa-plus small"></i>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .ptc-grid { table-layout: fixed; min-width: 800px; }
+        .ptc-grid th, .ptc-grid td { width: 14%; height: 65px; vertical-align: middle; padding: 4px !important; position: relative; }
+        .ptc-grid td:first-child { width: 90px; background-color: #f8f9fa; }
+        
+        .slot-clase { 
+            background-color: #f1f3f5; color: #6c757d; border: 1px solid #dee2e6; 
+            font-size: 0.7rem; height: 100%; display: flex; flex-direction: column; 
+            justify-content: center; border-radius: 4px; border-left: 3px solid #6c757d;
+        }
+        
+        .slot-ptc { 
+            color: white; font-size: 0.75rem; height: 100%; display: flex; 
+            flex-direction: column; justify-content: center; border-radius: 4px; 
+            cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .slot-ptc:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); filter: brightness(1.1); }
+        .slot-ptc.asesoria { background-color: #28a745; border-left: 3px solid #1e7e34; }
+        .slot-ptc.tutoria { background-color: #ffc107; color: #212529; border-left: 3px solid #d39e00; }
+        .slot-ptc.gestion { background-color: #dc3545; border-left: 3px solid #bd2130; }
+
+        .slot-empty { 
+            height: 100%; border: 1px dashed #dee2e6; border-radius: 4px; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center; 
+            color: #dee2e6; transition: all 0.2s; 
+        }
+        .slot-empty:hover { background-color: #f8f9fa; color: #adb5bd; border-style: solid; border-color: #adb5bd; }
+        
+        .btn-quick-delete { 
+            position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.1); 
+            border: none; color: white; border-radius: 50%; width: 18px; height: 18px; 
+            font-size: 9px; display: none; align-items: center; justify-content: center;
+        }
+        .slot-ptc:hover .btn-quick-delete { display: flex; }
+        .slot-ptc.tutoria .btn-quick-delete { color: #212529; background: rgba(0,0,0,0.05); }
+        .btn-quick-delete:hover { background: rgba(0,0,0,0.3); }
+    </style>
+</div>
+
+<!-- Modal: Agregar -->
+<div class="modal fade" id="modalAgregarActividad" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus-circle me-2"></i> Agregar Actividad PTC</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Día de la semana</label>
+                    <select class="form-select" id="agrDia">
+                        <option value="">-- Seleccionar --</option>
+                        <option value="lunes">Lunes</option>
+                        <option value="martes">Martes</option>
+                        <option value="miercoles">Miércoles</option>
+                        <option value="jueves">Jueves</option>
+                        <option value="viernes">Viernes</option>
+                        <option value="sabado">Sábado</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Hora</label>
+                    <select class="form-select" id="agrHorario">
+                        <option value="">-- Seleccionar --</option>
+                        {% for h in todos_los_horarios %}
+                        <option value="{{ h.id }}">{{ h.get_hora_inicio_str() }} - {{ h.get_hora_fin_str() }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de actividad</label>
+                    <select class="form-select" id="agrTipo">
+                        {% for key, label in tipos_actividad.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" class="form-control" id="agrNotas" placeholder="Ej: Sala 201, grupo asesorado...">
+                </div>
+                <div id="agrError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnGuardarActividad">
+                    <i class="fas fa-save me-1"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Editar -->
+<div class="modal fade" id="modalEditarActividad" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-pencil-alt me-2"></i> Editar Actividad PTC</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tipo de actividad</label>
+                    <select class="form-select" id="editTipo">
+                        {% for key, label in tipos_actividad.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Notas <span class="text-muted fw-normal">(opcional)</span></label>
+                    <input type="text" class="form-control" id="editNotas">
+                </div>
+                <div id="editError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnActualizarActividad">
+                    <i class="fas fa-save me-1"></i> Actualizar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const profesorId = {{ profesor.id }};
+    const modalAgregar = new bootstrap.Modal(document.getElementById('modalAgregarActividad'));
+    const modalEditar = new bootstrap.Modal(document.getElementById('modalEditarActividad'));
+
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    // Funciones globales para la cuadrícula
+    window.abrirAgregar = function(dia, horarioId) {
+        document.getElementById('agrDia').value = dia;
+        document.getElementById('agrHorario').value = horarioId;
+        document.getElementById('agrError').classList.add('d-none');
+        modalAgregar.show();
+    };
+
+    window.abrirEditar = function(id, tipo, notas) {
+        document.getElementById('editId').value = id;
+        document.getElementById('editTipo').value = tipo;
+        document.getElementById('editNotas').value = notas;
+        document.getElementById('editError').classList.add('d-none');
+        modalEditar.show();
+    };
+
+    window.eliminarActividad = function(event, id) {
+        if (event) event.stopPropagation(); // Evitar abrir modal de edición
+        if (!confirm('¿Eliminar esta actividad?')) return;
+
+        fetch(`/profesor/actividad-ptc/${id}/eliminar`, {
+            method: 'DELETE',
+            headers: {'X-CSRFToken': getCsrfToken()}
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { location.reload(); }
+            else { alert(data.message || 'Error al eliminar.'); }
+        });
+    };
+
+    // Agregar
+    document.getElementById('btnGuardarActividad').addEventListener('click', function() {
+        const dia = document.getElementById('agrDia').value;
+        const horario_id = document.getElementById('agrHorario').value;
+        const tipo = document.getElementById('agrTipo').value;
+        const notas = document.getElementById('agrNotas').value;
+        const errDiv = document.getElementById('agrError');
+
+        if (!dia || !horario_id || !tipo) {
+            errDiv.textContent = 'Por favor completa todos los campos requeridos.';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+        errDiv.classList.add('d-none');
+
+        fetch('{{ url_for("agregar_actividad_ptc") }}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({
+                profesor_id: profesorId,
+                dia_semana: dia,
+                horario_id: parseInt(horario_id),
+                tipo_actividad: tipo,
+                notas: notas
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { location.reload(); }
+            else {
+                errDiv.textContent = data.message || 'Error al guardar.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => {
+            errDiv.textContent = 'Error de conexión.';
+            errDiv.classList.remove('d-none');
+        });
+    });
+
+    // Editar
+    document.getElementById('btnActualizarActividad').addEventListener('click', function() {
+        const id = document.getElementById('editId').value;
+        const tipo = document.getElementById('editTipo').value;
+        const notas = document.getElementById('editNotas').value;
+        const errDiv = document.getElementById('editError');
+
+        fetch(`/profesor/actividad-ptc/${id}/editar`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+            body: JSON.stringify({tipo_actividad: tipo, notas: notas})
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { location.reload(); }
+            else {
+                errDiv.textContent = data.message || 'Error al actualizar.';
+                errDiv.classList.remove('d-none');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

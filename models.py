@@ -737,10 +737,24 @@ def init_db():
         )
         ConfiguracionSistema.set_config(
             'max_horas_muertas', '2',
-            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor',
+            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor (general/legacy)',
             categoria='horarios'
         )
         print("Configuración de restricción de horas muertas inicializada")
+
+    # Inicializar horas muertas por tipo de profesor si no existen
+    if not ConfiguracionSistema.query.filter_by(clave='max_horas_muertas_tc').first():
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas_tc', '2',
+            tipo='int', descripcion='Horas muertas máximas por día para profesores de tiempo completo',
+            categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas_asignatura', '2',
+            tipo='int', descripcion='Horas muertas máximas por día para profesores por asignatura',
+            categoria='horarios'
+        )
+        print("Configuración de horas muertas por tipo de profesor inicializada")
 
 
 class Materia(db.Model):
@@ -835,6 +849,7 @@ class Grupo(db.Model):
     numero_grupo = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
     turno = db.Column(db.String(1), nullable=False)  # 'M' = Matutino, 'V' = Vespertino
     cuatrimestre = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
+    modalidad = db.Column(db.String(20), nullable=False, default='regular')  # 'regular' o 'dual'
     
     # Relaciones
     carrera_id = db.Column(db.Integer, db.ForeignKey('carrera.id'), nullable=False)
@@ -851,11 +866,12 @@ class Grupo(db.Model):
     # Relación con el usuario que lo creó
     creador = db.relationship('User', backref=db.backref('grupos_creados', lazy=True))
     
-    def __init__(self, numero_grupo, turno, carrera_id, cuatrimestre, creado_por=None):
+    def __init__(self, numero_grupo, turno, carrera_id, cuatrimestre, creado_por=None, modalidad='regular'):
         self.numero_grupo = numero_grupo
         self.turno = turno.upper()
         self.carrera_id = carrera_id
         self.cuatrimestre = cuatrimestre
+        self.modalidad = modalidad
         self.creado_por = creado_por
         # Generar código automáticamente
         self.codigo = self.generar_codigo()
@@ -867,6 +883,14 @@ class Grupo(db.Model):
         if carrera:
             return f"{self.cuatrimestre}{self.turno}{carrera.codigo}{self.numero_grupo}"
         return f"{self.cuatrimestre}{self.turno}XX{self.numero_grupo}"
+    
+    def is_dual(self):
+        """Verificar si el grupo es dual"""
+        return self.modalidad == 'dual'
+    
+    def get_modalidad_display(self):
+        """Obtener nombre de la modalidad para mostrar"""
+        return 'Dual' if self.modalidad == 'dual' else 'Regular'
     
     def get_turno_display(self):
         """Obtener nombre completo del turno"""
@@ -1443,3 +1467,49 @@ class ChatbotConfig(db.Model):
 
     def __repr__(self):
         return f'<ChatbotConfig provider={self.provider} model={self.model_name} habilitado={self.habilitado}>'
+
+
+class ActividadPTC(db.Model):
+    """Actividades no-docentes de profesores de tiempo completo (asesoría, tutoría, gestión)."""
+    __tablename__ = 'actividad_ptc'
+
+    TIPOS = {
+        'asesoria': 'Asesoría',
+        'tutoria': 'Tutoría',
+        'gestion': 'Gestión',
+    }
+
+    __table_args__ = (
+        db.Index(
+            'ix_actividad_ptc_slot',
+            'profesor_id', 'horario_id', 'dia_semana',
+            unique=True,
+            postgresql_where=db.text('activo = true'),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    profesor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    horario_id = db.Column(db.Integer, db.ForeignKey('horario.id'), nullable=False)
+    dia_semana = db.Column(db.String(10), nullable=False)
+    tipo_actividad = db.Column(db.String(20), nullable=False)  # asesoria | tutoria | gestion
+    notas = db.Column(db.String(200))
+    periodo_academico = db.Column(db.String(50))
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    profesor = db.relationship('User', backref=db.backref('actividades_ptc', lazy='dynamic'))
+    horario = db.relationship('Horario', backref=db.backref('actividades_ptc', lazy='dynamic'))
+
+    def get_tipo_display(self):
+        return self.TIPOS.get(self.tipo_actividad, self.tipo_actividad.title())
+
+    def get_dia_display(self):
+        dias = {
+            'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+            'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado',
+        }
+        return dias.get(self.dia_semana, self.dia_semana.title())
+
+    def __repr__(self):
+        return f'<ActividadPTC {self.tipo_actividad} {self.dia_semana} horario_id={self.horario_id}>'

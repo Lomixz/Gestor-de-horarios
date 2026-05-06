@@ -7,7 +7,7 @@ from sqlalchemy import func, text
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
-from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role, ChatbotConfig
+from models import db, User, Horario, Carrera, Materia, HorarioAcademico, DisponibilidadProfesor, Grupo, init_db, init_upload_dirs, AsignacionProfesorGrupo, Role, ChatbotConfig, ActividadPTC
 from forms import (LoginForm, RegistrationForm, HorarioForm, EliminarHorarioForm, 
                    CarreraForm, ImportarProfesoresForm, FiltrarProfesoresForm, ExportarProfesoresForm,
                    MateriaForm, ImportarMateriasForm, FiltrarMateriasForm, ExportarMateriasForm,
@@ -1467,7 +1467,7 @@ def profesor_horarios():
     if not current_user.is_profesor():
         flash('No tienes permisos para acceder a esta página.', 'error')
         return redirect(url_for('dashboard'))
-    
+
     # Obtener horarios académicos del profesor actual
     horarios = HorarioAcademico.query.filter_by(
         profesor_id=current_user.id,
@@ -1476,23 +1476,223 @@ def profesor_horarios():
         Horario.orden,
         HorarioAcademico.dia_semana
     ).all()
-    
+
     # Organizar horarios por día de la semana
     dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
     horarios_por_dia = {}
-    
     for dia in dias_semana:
         horarios_por_dia[dia] = [h for h in horarios if h.dia_semana == dia]
-    
+
     # Estadísticas del profesor
     total_horas = len(horarios)
     materias_unicas = len(set(h.materia_id for h in horarios))
-    
-    return render_template('profesor/horarios.html', 
+
+    # Datos PTC
+    actividades_ptc = []
+    actividades_por_dia = {dia: [] for dia in dias_semana}
+    horas_actividades = 0
+    todos_los_horarios = []
+    if current_user.is_profesor_completo():
+        actividades_ptc = ActividadPTC.query.filter_by(
+            profesor_id=current_user.id,
+            activo=True
+        ).join(Horario).order_by(Horario.orden, ActividadPTC.dia_semana).all()
+        for a in actividades_ptc:
+            if a.dia_semana in actividades_por_dia:
+                actividades_por_dia[a.dia_semana].append(a)
+        horas_actividades = len(actividades_ptc)
+        todos_los_horarios, _ = obtener_horarios_unicos_y_mapa()
+
+    horas_contrato = 40
+    horas_totales_ptc = total_horas + horas_actividades
+
+    return render_template('profesor/horarios.html',
                          horarios_por_dia=horarios_por_dia,
                          total_horas=total_horas,
                          materias_unicas=materias_unicas,
-                         dias_semana=dias_semana)
+                         dias_semana=dias_semana,
+                         actividades_por_dia=actividades_por_dia,
+                         actividades_ptc=actividades_ptc,
+                         horas_actividades=horas_actividades,
+                         horas_totales_ptc=horas_totales_ptc,
+                         horas_contrato=horas_contrato,
+                         todos_los_horarios=todos_los_horarios,
+                         tipos_actividad=ActividadPTC.TIPOS)
+
+def _puede_gestionar_actividad_ptc(profesor_id):
+    """El propio PTC o un admin pueden gestionar las actividades PTC."""
+    return current_user.is_admin() or (current_user.is_profesor_completo() and current_user.id == profesor_id)
+
+
+@app.route('/profesor/actividad-ptc/agregar', methods=['POST'])
+@login_required
+def agregar_actividad_ptc():
+    """Agregar una actividad PTC (asesoría, tutoría, gestión) al horario."""
+    if not (current_user.is_admin() or current_user.is_profesor_completo()):
+        return jsonify({'success': False, 'message': 'Sin permisos'}), 403
+
+    data = request.get_json()
+    # Admin puede especificar profesor_id; el profesor siempre usa el suyo
+    if current_user.is_admin() and data.get('profesor_id'):
+        profesor_id = int(data['profesor_id'])
+        profesor = User.query.get_or_404(profesor_id)
+        if not profesor.is_profesor_completo():
+            return jsonify({'success': False, 'message': 'El usuario seleccionado no es PTC'}), 400
+    else:
+        profesor_id = current_user.id
+
+    horario_id = data.get('horario_id')
+    dia_semana = data.get('dia_semana', '').lower()
+    tipo_actividad = data.get('tipo_actividad')
+    notas = data.get('notas', '')
+
+    if not horario_id or not dia_semana or tipo_actividad not in ActividadPTC.TIPOS:
+        return jsonify({'success': False, 'message': 'Datos incompletos o inválidos'}), 400
+
+    conflicto_clase = HorarioAcademico.query.filter_by(
+        profesor_id=profesor_id, horario_id=horario_id, dia_semana=dia_semana, activo=True
+    ).first()
+    if conflicto_clase:
+        return jsonify({'success': False, 'message': 'El profesor ya tiene una clase asignada en ese horario'}), 409
+
+    existente = ActividadPTC.query.filter_by(
+        profesor_id=profesor_id, horario_id=horario_id, dia_semana=dia_semana, activo=True
+    ).first()
+    if existente:
+        return jsonify({'success': False, 'message': 'Ya existe una actividad en ese horario'}), 409
+
+    actividad = ActividadPTC(
+        profesor_id=profesor_id,
+        horario_id=int(horario_id),
+        dia_semana=dia_semana,
+        tipo_actividad=tipo_actividad,
+        notas=notas or None,
+    )
+    db.session.add(actividad)
+    db.session.commit()
+    return jsonify({'success': True, 'id': actividad.id, 'message': 'Actividad agregada'}), 201
+
+
+@app.route('/profesor/actividad-ptc/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_actividad_ptc(id):
+    """Editar tipo o notas de una actividad PTC."""
+    actividad = ActividadPTC.query.get_or_404(id)
+    if not _puede_gestionar_actividad_ptc(actividad.profesor_id):
+        return jsonify({'success': False, 'message': 'Sin permisos'}), 403
+
+    data = request.get_json()
+    tipo_actividad = data.get('tipo_actividad')
+    notas = data.get('notas', '')
+
+    if tipo_actividad and tipo_actividad in ActividadPTC.TIPOS:
+        actividad.tipo_actividad = tipo_actividad
+    actividad.notas = notas or None
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Actividad actualizada'})
+
+
+@app.route('/profesor/actividad-ptc/<int:id>/eliminar', methods=['DELETE'])
+@login_required
+def eliminar_actividad_ptc(id):
+    """Eliminar (desactivar) una actividad PTC."""
+    actividad = ActividadPTC.query.get_or_404(id)
+    if not _puede_gestionar_actividad_ptc(actividad.profesor_id):
+        return jsonify({'success': False, 'message': 'Sin permisos'}), 403
+
+    actividad.activo = False
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Actividad eliminada'})
+
+
+# --- Admin: gestionar actividades PTC de cualquier profesor ---
+
+def obtener_horarios_unicos_y_mapa():
+    """Obtiene horarios sin duplicados de hora y mapa de IDs."""
+    todos = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
+    horarios_unicos = []
+    horarios_vistos = set()
+    mapa_horarios = {}
+    for h in todos:
+        hora_str = f"{h.get_hora_inicio_str()}-{h.get_hora_fin_str()}"
+        if hora_str not in horarios_vistos:
+            horarios_vistos.add(hora_str)
+            horarios_unicos.append(h)
+            mapa_horarios[h.id] = h.id
+        else:
+            for h_u in horarios_unicos:
+                if f"{h_u.get_hora_inicio_str()}-{h_u.get_hora_fin_str()}" == hora_str:
+                    mapa_horarios[h.id] = h_u.id
+                    break
+    return horarios_unicos, mapa_horarios
+
+@app.route("/admin/profesores/<int:profesor_id>/actividades-ptc")
+
+@login_required
+def admin_actividades_ptc(profesor_id):
+    """Vista admin para ver y gestionar las actividades PTC de un profesor."""
+    if not current_user.is_admin():
+        abort(403)
+
+    profesor = User.query.get_or_404(profesor_id)
+    if not profesor.is_profesor_completo():
+        flash('El profesor seleccionado no es de tiempo completo.', 'warning')
+        return redirect(url_for('gestionar_profesores'))
+
+    actividades = ActividadPTC.query.filter_by(
+        profesor_id=profesor_id, activo=True
+    ).join(Horario).order_by(Horario.hora_inicio, ActividadPTC.dia_semana).all()
+
+    horarios_clase = HorarioAcademico.query.filter_by(
+        profesor_id=profesor_id, activo=True
+    ).join(Horario).order_by(Horario.hora_inicio, HorarioAcademico.dia_semana).all()
+
+    todos_los_horarios, mapa_horarios = obtener_horarios_unicos_y_mapa()
+    dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    horas_clase = len(horarios_clase)
+    horas_actividades = len(actividades)
+    horas_totales = horas_clase + horas_actividades
+
+    # Construir cuadrícula de horarios
+    grid = {}
+    for h in todos_los_horarios:
+        grid[h.id] = {dia: None for dia in dias_semana}
+    
+    # Llenar con clases académicas
+    for hc in horarios_clase:
+        mapped_id = mapa_horarios.get(hc.horario_id)
+        if mapped_id and hc.dia_semana in grid[mapped_id]:
+            grid[mapped_id][hc.dia_semana] = {
+                'tipo': 'clase',
+                'materia': hc.materia.nombre,
+                'grupo': hc.grupo,
+                'id': hc.id
+            }
+            
+    # Llenar con actividades PTC (asesoría, tutoría, gestión)
+    for a in actividades:
+        mapped_id = mapa_horarios.get(a.horario_id)
+        if mapped_id and a.dia_semana in grid[mapped_id]:
+            grid[mapped_id][a.dia_semana] = {
+                'tipo': 'ptc',
+                'actividad': a.tipo_actividad,
+                'label': a.get_tipo_display(),
+                'id': a.id,
+                'notas': a.notas
+            }
+
+    return render_template('admin/actividades_ptc_profesor.html',
+                         profesor=profesor,
+                         actividades=actividades,
+                         todos_los_horarios=todos_los_horarios,
+                         tipos_actividad=ActividadPTC.TIPOS,
+                         horas_clase=horas_clase,
+                         horas_actividades=horas_actividades,
+                         horas_totales=horas_totales,
+                         horas_contrato=40,
+                         dias_semana=dias_semana,
+                         grid=grid)
+
 
 @app.route('/profesor/mis-materias')
 @login_required
@@ -1542,64 +1742,63 @@ def profesor_disponibilidad():
         return redirect(url_for('dashboard'))
     
     dias_semana = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
-    
-    # Obtener todos los horarios disponibles del sistema (matutinos primero, luego vespertinos)
-    horarios = Horario.query.filter_by(activo=True).order_by(Horario.turno, Horario.orden).all()
-    
+
+    # Deduplicar horarios por franja horaria (matutino y vespertino con misma hora → 1 fila)
+    horarios_raw = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
+    horarios_unicos, horario_map = _construir_horarios_unicos(horarios_raw)
+    # Mapa inverso: real_id → rep_id
+    real_a_rep = {real_id: rep_id for rep_id, real_ids in horario_map.items() for real_id in real_ids}
+
     if request.method == 'POST':
         try:
-            # Eliminar disponibilidades anteriores (pero mantener inactivas para historial)
             DisponibilidadProfesor.query.filter_by(
                 profesor_id=current_user.id,
                 activo=True
             ).update({DisponibilidadProfesor.activo: False})
-            
-            # Procesar los datos del formulario
+
             disponibilidades_creadas = 0
             for dia in dias_semana:
-                for horario in horarios:
-                    checkbox_name = f'disponible_{dia}_{horario.id}'
-                    # Si el checkbox está marcado, significa que SÍ está disponible
+                for rep_horario in horarios_unicos:
+                    checkbox_name = f'disponible_{dia}_{rep_horario.id}'
                     disponible = checkbox_name in request.form
-                    
-                    # Crear registro de disponibilidad
-                    nueva_disponibilidad = DisponibilidadProfesor(
-                        profesor_id=current_user.id,
-                        horario_id=horario.id,
-                        dia_semana=dia,
-                        disponible=disponible,
-                        creado_por=current_user.id
-                    )
-                    db.session.add(nueva_disponibilidad)
-                    disponibilidades_creadas += 1
-            
+                    # Propagar a todos los IDs reales del mismo bloque horario
+                    for real_id in horario_map[rep_horario.id]:
+                        db.session.add(DisponibilidadProfesor(
+                            profesor_id=current_user.id,
+                            horario_id=real_id,
+                            dia_semana=dia,
+                            disponible=disponible,
+                            creado_por=current_user.id
+                        ))
+                        disponibilidades_creadas += 1
+
             db.session.commit()
-            flash(f'✅ Disponibilidad actualizada correctamente. Se crearon {disponibilidades_creadas} registros.', 'success')
+            flash(f'✅ Disponibilidad actualizada correctamente.', 'success')
             return redirect(url_for('profesor_disponibilidad'))
-            
+
         except Exception as e:
             db.session.rollback()
             flash(f'❌ Error al guardar la disponibilidad: {str(e)}', 'error')
             logger.error(f"Error al guardar disponibilidad: {e}")
-    
-    # GET: Obtener disponibilidades actuales del profesor
+
+    # GET: leer disponibilidades actuales y mapear al rep_id correspondiente
     disponibilidades_actuales = DisponibilidadProfesor.query.filter_by(
         profesor_id=current_user.id,
         activo=True
     ).all()
-    
-    # Crear diccionario para acceso rápido
+
     disponibilidad_dict = {}
     for disp in disponibilidades_actuales:
-        key = f"{disp.dia_semana}_{disp.horario_id}"
-        disponibilidad_dict[key] = disp.disponible
-    
-    # Si no hay disponibilidades, asumir que está disponible en todo (para facilitar primer uso)
+        rep_id = real_a_rep.get(disp.horario_id, disp.horario_id)
+        key = f"{disp.dia_semana}_{rep_id}"
+        if disp.disponible or key not in disponibilidad_dict:
+            disponibilidad_dict[key] = disp.disponible
+
     tiene_disponibilidades = len(disponibilidades_actuales) > 0
-    
+
     return render_template('profesor/disponibilidad.html',
                          dias_semana=dias_semana,
-                         horarios=horarios,
+                         horarios=horarios_unicos,
                          disponibilidad_dict=disponibilidad_dict,
                          tiene_disponibilidades=tiene_disponibilidades)
 
@@ -1781,11 +1980,13 @@ def crear_grupo():
                 turno=form.turno.data,
                 carrera_id=form.carrera.data,
                 cuatrimestre=form.cuatrimestre.data,
-                creado_por=current_user.id
+                creado_por=current_user.id,
+                modalidad=form.modalidad.data or 'regular'
             )
             db.session.add(grupo)
             db.session.commit()
-            flash(f'Grupo {grupo.codigo} creado exitosamente.', 'success')
+            modalidad_txt = ' (Dual)' if grupo.is_dual() else ''
+            flash(f'Grupo {grupo.codigo}{modalidad_txt} creado exitosamente.', 'success')
             return redirect(url_for('gestionar_grupos'))
     
     return render_template('admin/grupo_form.html', form=form, titulo='Crear Grupo', 
@@ -1845,6 +2046,7 @@ def editar_grupo(id):
             grupo.turno = form.turno.data
             grupo.carrera_id = form.carrera.data
             grupo.cuatrimestre = form.cuatrimestre.data
+            grupo.modalidad = form.modalidad.data or 'regular'
             grupo.codigo = grupo.generar_codigo()  # Regenerar código
             
             db.session.commit()
@@ -1857,6 +2059,7 @@ def editar_grupo(id):
         form.turno.data = grupo.turno
         form.carrera.data = grupo.carrera_id
         form.cuatrimestre.data = grupo.cuatrimestre
+        form.modalidad.data = grupo.modalidad or 'regular'
     
     return render_template('admin/grupo_form.html', form=form, grupo=grupo, 
                          titulo=f'Editar Grupo {grupo.codigo}',
@@ -2247,8 +2450,8 @@ def gestionar_horarios():
         return redirect(url_for('dashboard'))
     
     # Obtener horarios separados por turno y ordenados
-    horarios_matutino = Horario.query.filter_by(turno='matutino', activo=True).order_by(Horario.orden).all()
-    horarios_vespertino = Horario.query.filter_by(turno='vespertino', activo=True).order_by(Horario.orden).all()
+    horarios_matutino = Horario.query.filter_by(turno='matutino', activo=True).order_by(Horario.hora_inicio).all()
+    horarios_vespertino = Horario.query.filter_by(turno='vespertino', activo=True).order_by(Horario.hora_inicio).all()
     
     return render_template('admin/horarios.html', 
                          horarios_matutino=horarios_matutino,
@@ -4810,10 +5013,10 @@ def editar_horario_academico(id):
         User.activo == True
     ).order_by(User.nombre, User.apellido).all()
 
-    horarios = Horario.query.filter_by(activo=True).order_by(Horario.orden).all()
+    horarios = Horario.query.filter_by(activo=True).order_by(Horario.hora_inicio).all()
 
     form.profesor_id.choices = [(str(p.id), p.get_nombre_completo()) for p in profesores]
-    form.horario_id.choices = [(str(h.id), f"{h.nombre} ({h.get_hora_inicio_str()}-{h.get_hora_fin_str()})") for h in horarios]
+    form.horario_id.choices = [(str(h.id), f"{h.get_hora_inicio_str()} - {h.get_hora_fin_str()}") for h in horarios]
 
     if form.validate_on_submit():
         horario_academico.profesor_id = int(form.profesor_id.data)
@@ -5566,6 +5769,8 @@ def configuracion_sistema():
 
     restriccion_horas_muertas = ConfiguracionSistema.get_config('restriccion_horas_muertas', True)
     max_horas_muertas = ConfiguracionSistema.get_config('max_horas_muertas', 2)
+    max_horas_muertas_tc = ConfiguracionSistema.get_config('max_horas_muertas_tc', max_horas_muertas)
+    max_horas_muertas_asignatura = ConfiguracionSistema.get_config('max_horas_muertas_asignatura', max_horas_muertas)
     firmas_usuario_habilitadas = ConfiguracionSistema.get_config('firmas_usuario_habilitadas', 'true')
 
     return render_template('admin/configuracion.html',
@@ -5573,6 +5778,8 @@ def configuracion_sistema():
                            config_excel=config_excel,
                            restriccion_horas_muertas=restriccion_horas_muertas,
                            max_horas_muertas=max_horas_muertas,
+                           max_horas_muertas_tc=max_horas_muertas_tc,
+                           max_horas_muertas_asignatura=max_horas_muertas_asignatura,
                            firmas_usuario_habilitadas=firmas_usuario_habilitadas)
 
 
@@ -5962,7 +6169,15 @@ def guardar_configuracion_horarios():
         )
         ConfiguracionSistema.set_config(
             'max_horas_muertas', data.get('max_horas_muertas', '2'),
-            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor', categoria='horarios'
+            tipo='int', descripcion='Número máximo de horas muertas permitidas por día por profesor (general)', categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas_tc', data.get('max_horas_muertas_tc', data.get('max_horas_muertas', '2')),
+            tipo='int', descripcion='Horas muertas máximas por día para profesores de tiempo completo', categoria='horarios'
+        )
+        ConfiguracionSistema.set_config(
+            'max_horas_muertas_asignatura', data.get('max_horas_muertas_asignatura', data.get('max_horas_muertas', '2')),
+            tipo='int', descripcion='Horas muertas máximas por día para profesores por asignatura', categoria='horarios'
         )
 
         return jsonify({'success': True, 'message': 'Configuración de horarios guardada exitosamente'})
@@ -6974,7 +7189,85 @@ def admin_horario_profesores():
     horas_sistema = sorted(set(
         h.hora_inicio.hour for h in Horario.query.filter_by(activo=True).all()
     ))
-    return render_template('admin/admin_horario_profesores.html', horarios_data=horarios_data, horas_sistema=horas_sistema)
+    
+    # Inject PTC activities into schedule data for TC professors
+    dias_map = {
+        'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
+        'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
+    }
+    ptc_labels = {'asesoria': 'Asesoría', 'tutoria': 'Tutoría', 'gestion': 'Gestión'}
+    ptc_colors = {'asesoria': 'success', 'tutoria': 'warning', 'gestion': 'danger'}
+    
+    profesores_ptc_info = {}  # {nombre: {es_tc, horas_clase, horas_asesoria, ...}}
+    
+    # Find all professors that have schedules and check if they are TC
+    profesores_con_horario = User.query.filter(
+        db.or_(
+            User.rol == 'profesor_completo',
+            User.roles.any(Role.nombre == 'profesor_completo')
+        ),
+        User.activo == True
+    ).all()
+    
+    for prof in profesores_con_horario:
+        nombre = prof.get_nombre_completo()
+        
+        # Query PTC activities for this professor
+        ptc_acts = ActividadPTC.query.filter_by(
+            profesor_id=prof.id, activo=True
+        ).all()
+        
+        if nombre not in horarios_data and not ptc_acts:
+            continue
+        
+        # Ensure the professor entry exists in horarios_data
+        if nombre not in horarios_data:
+            horarios_data[nombre] = {d: [] for d in dias_map.values()}
+        
+        # Count class hours for this professor
+        horas_clase = 0
+        for dia_data in horarios_data[nombre].values():
+            for item in dia_data:
+                if isinstance(item, dict) and 'id' in item and 'ptc_tipo' not in item:
+                    horas_clase += 1
+        
+        # Count PTC hours by type
+        cnt = {'asesoria': 0, 'tutoria': 0, 'gestion': 0}
+        for p in ptc_acts:
+            if p.tipo_actividad in cnt:
+                cnt[p.tipo_actividad] += 1
+        
+        profesores_ptc_info[nombre] = {
+            'es_tc': True,
+            'horas_clase': horas_clase,
+            'horas_asesoria': cnt['asesoria'],
+            'horas_tutoria': cnt['tutoria'],
+            'horas_gestion': cnt['gestion'],
+            'horas_total': horas_clase + sum(cnt.values()),
+            'profesor_id': prof.id
+        }
+        
+        # Add PTC activities to horarios_data
+        for p in ptc_acts:
+            dia_correcto = dias_map.get(p.dia_semana.lower())
+            if not dia_correcto or not p.horario:
+                continue
+            hora_inicio_int = p.horario.hora_inicio.hour if p.horario.hora_inicio else 7
+            ptc_entry = {
+                'id': p.id,
+                'ptc_tipo': p.tipo_actividad,
+                'ptc_label': ptc_labels.get(p.tipo_actividad, p.tipo_actividad),
+                'ptc_color': ptc_colors.get(p.tipo_actividad, 'secondary'),
+                'hora_inicio': hora_inicio_int,
+                'notas': p.notas or '',
+                'html': f"{ptc_labels.get(p.tipo_actividad, p.tipo_actividad)}",
+            }
+            horarios_data[nombre][dia_correcto].append(ptc_entry)
+    
+    return render_template('admin/admin_horario_profesores.html', 
+                         horarios_data=horarios_data, 
+                         horas_sistema=horas_sistema,
+                         profesores_ptc_info=profesores_ptc_info)
 
 @app.route('/admin/horarios/grupos')
 @login_required
@@ -7039,6 +7332,8 @@ def exportar_horarios_profesor_excel():
         abort(403)
 
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.worksheet.properties import PageSetupProperties
+    from openpyxl.worksheet.page import PageMargins
 
     asignaciones = HorarioAcademico.query.filter_by(activo=True).all()
     if not asignaciones:
@@ -7049,139 +7344,202 @@ def exportar_horarios_profesor_excel():
         'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
         'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
     }
+    dias_rev = {v: k for k, v in dias_map.items()}
     dias_base = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 
     profesores_data = {}
     for a in asignaciones:
         if not a.profesor or not a.materia or not a.horario:
             continue
-        profesor_id = a.profesor.id
-        if profesor_id not in profesores_data:
-            profesores_data[profesor_id] = {
+        pid = a.profesor.id
+        if pid not in profesores_data:
+            profesores_data[pid] = {
                 'nombre': a.profesor.get_nombre_completo(),
-                'asignaciones': []
+                'user': a.profesor,
+                'asignaciones': [],
+                'ptc_actividades': []
             }
-        profesores_data[profesor_id]['asignaciones'].append(a)
+        profesores_data[pid]['asignaciones'].append(a)
 
     if not profesores_data:
         flash('No hay horarios válidos para exportar.', 'warning')
         return redirect(url_for('admin_horario_profesores'))
 
-    header_fill = PatternFill(start_color='1E3C72', end_color='1E3C72', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF', size=11)
-    hora_fill = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
-    hora_font = Font(bold=True, size=10, color='495057')
-    title_font = Font(bold=True, size=16, color='1E3C72')
-    subtitle_font = Font(size=10, color='6C757D', italic=True)
-    materia_font = Font(bold=True, size=9, color='111827')
-    thin_border = Border(
-        left=Side(style='thin', color='DEE2E6'),
-        right=Side(style='thin', color='DEE2E6'),
-        top=Side(style='thin', color='DEE2E6'),
-        bottom=Side(style='thin', color='DEE2E6')
+    for pid, data in profesores_data.items():
+        if data['user'].is_profesor_completo():
+            data['ptc_actividades'] = ActividadPTC.query.filter_by(
+                profesor_id=pid, activo=True
+            ).join(Horario).all()
+
+    # Estilos
+    header_fill  = PatternFill(start_color='1E3C72', end_color='1E3C72', fill_type='solid')
+    header_font  = Font(bold=True, color='FFFFFF', size=10)
+    hora_fill    = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+    hora_font    = Font(bold=True, size=9, color='495057')
+    title_font   = Font(bold=True, size=13, color='1E3C72')
+    sub_font     = Font(size=8, color='6C757D', italic=True)
+    ptc_sub_font = Font(size=8, color='155724', bold=True)
+    mat_font     = Font(bold=True, size=8, color='111827')
+    ptc_w_font   = Font(bold=True, size=8, color='FFFFFF')
+    ptc_d_font   = Font(bold=True, size=8, color='212529')
+    thin_border  = Border(
+        left=Side(style='thin', color='DEE2E6'), right=Side(style='thin', color='DEE2E6'),
+        top=Side(style='thin', color='DEE2E6'),  bottom=Side(style='thin', color='DEE2E6')
     )
-    even_row_fill = PatternFill(start_color='F0F7FF', end_color='F0F7FF', fill_type='solid')
+    even_fill     = PatternFill(start_color='F0F7FF', end_color='F0F7FF', fill_type='solid')
+    ases_fill     = PatternFill(start_color='28A745', end_color='28A745', fill_type='solid')
+    tuto_fill     = PatternFill(start_color='FFC107', end_color='FFC107', fill_type='solid')
+    gest_fill     = PatternFill(start_color='DC3545', end_color='DC3545', fill_type='solid')
+    ptc_fills     = {'asesoria': ases_fill, 'tutoria': tuto_fill, 'gestion': gest_fill}
+    ptc_labels    = {'asesoria': 'ASESORÍA', 'tutoria': 'TUTORÍA', 'gestion': 'GESTIÓN'}
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    used_sheet_names = set()
+    used_names = set()
     for _, data_prof in sorted(profesores_data.items(), key=lambda x: x[1]['nombre']):
         profesor_nombre = data_prof['nombre']
-        asig_prof = data_prof['asignaciones']
+        asig_prof  = data_prof['asignaciones']
+        ptc_acts   = data_prof['ptc_actividades']
+        is_ptc     = data_prof['user'].is_profesor_completo()
 
-        horas_inicio = [a.horario.hora_inicio.hour for a in asig_prof if a.horario and a.horario.hora_inicio]
-        horas_fin = [a.horario.hora_fin.hour for a in asig_prof if a.horario and a.horario.hora_fin]
-        if horas_inicio and horas_fin:
-            hora_inicio = min(horas_inicio)
-            hora_fin = max(horas_fin)
-        else:
-            hora_inicio, hora_fin = 7, 14
-
+        # Rango de horas (clases + PTC)
+        h_ini_list = [a.horario.hora_inicio.hour for a in asig_prof if a.horario and a.horario.hora_inicio]
+        h_fin_list = [a.horario.hora_fin.hour   for a in asig_prof if a.horario and a.horario.hora_fin]
+        for p in ptc_acts:
+            if p.horario and p.horario.hora_inicio:
+                h_ini_list.append(p.horario.hora_inicio.hour)
+            if p.horario and p.horario.hora_fin:
+                h_fin_list.append(p.horario.hora_fin.hour)
+        hora_inicio = min(h_ini_list) if h_ini_list else 7
+        hora_fin    = max(h_fin_list) if h_fin_list else 14
         if hora_fin <= hora_inicio:
             hora_fin = hora_inicio + 1
 
-        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asig_prof)
+        tiene_sabado = (any(a.dia_semana.lower() == 'sabado' for a in asig_prof) or
+                        any(p.dia_semana.lower() == 'sabado' for p in ptc_acts))
         dias_cols = dias_base.copy()
         if tiene_sabado:
             dias_cols.append('Sábado')
 
-        safe_name = ''.join(ch for ch in profesor_nombre if ch not in '[]:*?/\\')[:31]
-        if not safe_name:
-            safe_name = 'Profesor'
-        base_name = safe_name
-        suffix = 1
-        while safe_name in used_sheet_names:
-            tag = f"_{suffix}"
-            safe_name = f"{base_name[:31-len(tag)]}{tag}"
-            suffix += 1
-        used_sheet_names.add(safe_name)
+        # Lookups de celdas
+        clase_lookup = {}
+        for a in asig_prof:
+            if a.horario and a.horario.hora_inicio:
+                clase_lookup[(a.horario.hora_inicio.hour, a.dia_semana.lower())] = a
+        ptc_lookup = {}
+        for p in ptc_acts:
+            if p.horario and p.horario.hora_inicio:
+                ptc_lookup[(p.horario.hora_inicio.hour, p.dia_semana.lower())] = p
 
-        ws = wb.create_sheet(title=safe_name)
+        # Nombre de la hoja
+        safe = ''.join(ch for ch in profesor_nombre if ch not in '[]:*?/\\')[:31] or 'Profesor'
+        base = safe; suf = 1
+        while safe in used_names:
+            tag = f'_{suf}'; safe = f'{base[:31-len(tag)]}{tag}'; suf += 1
+        used_names.add(safe)
+        ws = wb.create_sheet(title=safe)
 
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=1 + len(dias_cols))
-        title_cell = ws.cell(row=1, column=1, value=f'Horario: {profesor_nombre}')
-        title_cell.font = title_font
-        title_cell.alignment = Alignment(horizontal='center', vertical='center')
-        ws.row_dimensions[1].height = 35
+        ncols = 1 + len(dias_cols)
 
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=1 + len(dias_cols))
-        sub_cell = ws.cell(row=2, column=1, value='Sistema de Gestión Académica — Horarios por Profesor')
-        sub_cell.font = subtitle_font
-        sub_cell.alignment = Alignment(horizontal='center', vertical='center')
-        ws.row_dimensions[2].height = 22
-        ws.row_dimensions[3].height = 8
+        # Fila 1: título
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+        tc = ws.cell(row=1, column=1, value=f'Carga Horaria: {profesor_nombre}')
+        tc.font = title_font
+        tc.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 28
 
-        header_row = 4
-        ws.cell(row=header_row, column=1, value='Hora').font = header_font
-        ws.cell(row=header_row, column=1).fill = header_fill
-        ws.cell(row=header_row, column=1).alignment = Alignment(horizontal='center', vertical='center')
-        ws.cell(row=header_row, column=1).border = thin_border
+        # Fila 2: subtítulo / resumen PTC
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncols)
+        if is_ptc:
+            cnt = {k: 0 for k in ('asesoria', 'tutoria', 'gestion')}
+            for p in ptc_acts:
+                if p.tipo_actividad in cnt:
+                    cnt[p.tipo_actividad] += 1
+            tc_cls = len(asig_prof)
+            tc_ptc = sum(cnt.values())
+            sc = ws.cell(row=2, column=1,
+                         value=(f'Tiempo Completo  |  Clases: {tc_cls}h  |  '
+                                f'Asesoría: {cnt["asesoria"]}h  |  Tutoría: {cnt["tutoria"]}h  |  '
+                                f'Gestión: {cnt["gestion"]}h  |  TOTAL: {tc_cls+tc_ptc}/40h'))
+            sc.font = ptc_sub_font
+        else:
+            sc = ws.cell(row=2, column=1, value='Sistema de Gestión Académica — Carga Horaria')
+            sc.font = sub_font
+        sc.alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[2].height = 18
+        ws.row_dimensions[3].height = 5
 
-        for col_idx, dia in enumerate(dias_cols, 2):
-            cell = ws.cell(row=header_row, column=col_idx, value=dia)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.border = thin_border
-        ws.row_dimensions[header_row].height = 28
+        # Fila 4: encabezados de columna
+        HR = 4
+        for col, val in [(1, 'Hora')] + [(i+2, d) for i, d in enumerate(dias_cols)]:
+            c = ws.cell(row=HR, column=col, value=val)
+            c.font = header_font; c.fill = header_fill
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border = thin_border
+        ws.row_dimensions[HR].height = 22
 
-        for hora_idx, hora in enumerate(range(hora_inicio, hora_fin)):
-            row_num = header_row + 1 + hora_idx
-            hora_str = f'{hora:02d}:00 - {hora+1:02d}:00'
+        # Filas de datos (skip empty hours)
+        rn = HR + 1
+        row_count = 0
+        for hora in range(hora_inicio, hora_fin):
+            # Check if this hour has any content
+            has_content = False
+            for dia in dias_cols:
+                db_dia = dias_rev.get(dia, dia.lower())
+                if (hora, db_dia) in clase_lookup or (hora, db_dia) in ptc_lookup:
+                    has_content = True
+                    break
+            if not has_content:
+                continue
 
-            hora_cell = ws.cell(row=row_num, column=1, value=hora_str)
-            hora_cell.font = hora_font
-            hora_cell.fill = hora_fill
-            hora_cell.alignment = Alignment(horizontal='center', vertical='center')
-            hora_cell.border = thin_border
+            hc = ws.cell(row=rn, column=1, value=f'{hora:02d}:00\n{hora+1:02d}:00')
+            hc.font = hora_font; hc.fill = hora_fill
+            hc.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            hc.border = thin_border
 
-            for col_idx, dia in enumerate(dias_cols, 2):
-                cell = ws.cell(row=row_num, column=col_idx)
+            for cidx, dia in enumerate(dias_cols, 2):
+                cell = ws.cell(row=rn, column=cidx)
                 cell.border = thin_border
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                if row_count % 2 == 0:
+                    cell.fill = even_fill
 
-                if hora_idx % 2 == 0:
-                    cell.fill = even_row_fill
+                db_dia = dias_rev.get(dia, dia.lower())
+                ck = (hora, db_dia)
 
-                for a in asig_prof:
-                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
-                    if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
-                        grupo_txt = f" ({a.grupo})" if a.grupo else ''
-                        cell.value = f'{a.materia.nombre}{grupo_txt}'
-                        cell.font = materia_font
-                        break
+                if ck in clase_lookup:
+                    a = clase_lookup[ck]
+                    grupo_txt = f' ({a.grupo})' if a.grupo else ''
+                    cell.value = f'{a.materia.nombre}{grupo_txt}'
+                    cell.font = mat_font
+                elif ck in ptc_lookup:
+                    p = ptc_lookup[ck]
+                    label = ptc_labels.get(p.tipo_actividad, p.tipo_actividad.upper())
+                    if p.notas:
+                        label += f'\n{p.notas[:22]}'
+                    cell.value = label
+                    cell.fill = ptc_fills.get(p.tipo_actividad, even_fill)
+                    cell.font = ptc_d_font if p.tipo_actividad == 'tutoria' else ptc_w_font
 
-            ws.row_dimensions[row_num].height = 52
+            ws.row_dimensions[rn].height = 40
+            rn += 1
+            row_count += 1
 
-        ws.column_dimensions['A'].width = 16
-        for col_idx in range(2, 2 + len(dias_cols)):
-            ws.column_dimensions[get_column_letter(col_idx)].width = 28
+        # Anchos: carta vertical ~ 102 unidades usables
+        ws.column_dimensions['A'].width = 13
+        day_w = max(12, int((102 - 13) / len(dias_cols)))
+        for ci in range(2, 2 + len(dias_cols)):
+            ws.column_dimensions[get_column_letter(ci)].width = day_w
 
-        ws.sheet_properties.pageSetUpPr = None
-        ws.page_setup.orientation = 'landscape'
+        # Configurar página: vertical, carta, una sola hoja
+        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+        ws.page_setup.orientation = 'portrait'
+        ws.page_setup.paperSize = 1          # Letter
         ws.page_setup.fitToWidth = 1
         ws.page_setup.fitToHeight = 1
+        ws.page_margins = PageMargins(left=0.5, right=0.5, top=0.75, bottom=0.75,
+                                      header=0.3, footer=0.3)
 
     buffer = BytesIO()
     wb.save(buffer)
@@ -7189,7 +7547,7 @@ def exportar_horarios_profesor_excel():
     return send_file(
         buffer,
         as_attachment=True,
-        download_name='horarios_por_profesor.xlsx',
+        download_name='cargas_horarias_profesores.xlsx',
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
@@ -7214,109 +7572,108 @@ def exportar_horarios_profesor_pdf():
     for a in asignaciones:
         if not a.profesor or not a.materia or not a.horario:
             continue
-        profesor_id = a.profesor.id
-        if profesor_id not in profesores_data:
-            profesores_data[profesor_id] = {
+        pid = a.profesor.id
+        if pid not in profesores_data:
+            profesores_data[pid] = {
                 'nombre': a.profesor.get_nombre_completo(),
-                'asignaciones': []
+                'user': a.profesor,
+                'asignaciones': [],
+                'ptc_actividades': []
             }
-        profesores_data[profesor_id]['asignaciones'].append(a)
+        profesores_data[pid]['asignaciones'].append(a)
 
     if not profesores_data:
         flash('No hay horarios válidos para exportar.', 'warning')
         return redirect(url_for('admin_horario_profesores'))
 
+    for pid, data in profesores_data.items():
+        if data['user'].is_profesor_completo():
+            data['ptc_actividades'] = ActividadPTC.query.filter_by(
+                profesor_id=pid, activo=True
+            ).join(Horario).all()
+
     dias_map = {
         'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles',
         'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado'
     }
+    dias_rev = {v: k for k, v in dias_map.items()}
 
-    COLOR_TEAL = colors.HexColor('#00847C')
-    COLOR_NAVY = colors.HexColor('#1E3C72')
-    COLOR_HEADER_BG = colors.HexColor('#1E3C72')
-    COLOR_HORA_BG = colors.HexColor('#F8F9FA')
-    COLOR_ROW_EVEN = colors.HexColor('#F0F7FF')
-    COLOR_BORDER = colors.HexColor('#DEE2E6')
-    COLOR_GOLD = colors.HexColor('#FFD600')
+    COLOR_TEAL      = colors.HexColor('#00847C')
+    COLOR_NAVY      = colors.HexColor('#1E3C72')
+    COLOR_HORA_BG   = colors.HexColor('#F8F9FA')
+    COLOR_ROW_EVEN  = colors.HexColor('#F0F7FF')
+    COLOR_BORDER    = colors.HexColor('#DEE2E6')
+    COLOR_GOLD      = colors.HexColor('#FFD600')
+    COLOR_ASESORIA  = colors.HexColor('#28A745')
+    COLOR_TUTORIA   = colors.HexColor('#FFC107')
+    COLOR_GESTION   = colors.HexColor('#DC3545')
+    COLOR_PTC_TEXT  = colors.white
+    COLOR_TUTO_TEXT = colors.HexColor('#212529')
+    ptc_colors = {'asesoria': COLOR_ASESORIA, 'tutoria': COLOR_TUTORIA, 'gestion': COLOR_GESTION}
+    ptc_labels_pdf = {'asesoria': 'ASESORÍA', 'tutoria': 'TUTORÍA', 'gestion': 'GESTIÓN'}
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    logo_path = os.path.join(base_dir, 'static', 'images', 'logo.png')
+    base_dir   = os.path.dirname(os.path.abspath(__file__))
+    logo_path  = os.path.join(base_dir, 'static', 'images', 'logo.png')
     logo_exists = os.path.exists(logo_path)
 
     buffer = BytesIO()
-    page_w, page_h = landscape(letter)
+    # ---- VERTICAL (portrait) carta ----
+    page_w, page_h = letter          # 612 x 792 pt
     doc = SimpleDocTemplate(
-        buffer, pagesize=landscape(letter),
-        topMargin=85, bottomMargin=35,
-        leftMargin=40, rightMargin=40
+        buffer, pagesize=letter,
+        topMargin=78, bottomMargin=30,
+        leftMargin=32, rightMargin=32
     )
 
     def draw_page(canvas_obj, doc_obj):
         canvas_obj.saveState()
         canvas_obj.setFillColor(COLOR_TEAL)
-        canvas_obj.rect(0, page_h - 70, page_w, 70, fill=1, stroke=0)
+        canvas_obj.rect(0, page_h - 65, page_w, 65, fill=1, stroke=0)
         canvas_obj.setFillColor(COLOR_GOLD)
-        canvas_obj.rect(0, page_h - 73, page_w, 3, fill=1, stroke=0)
-
+        canvas_obj.rect(0, page_h - 68, page_w, 3, fill=1, stroke=0)
         if logo_exists:
             try:
-                canvas_obj.drawImage(logo_path, 25, page_h - 62, width=60, height=44,
+                canvas_obj.drawImage(logo_path, 18, page_h - 58, width=50, height=37,
                                      preserveAspectRatio=True, mask='auto')
             except Exception:
                 pass
-
         canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFont('Helvetica-Bold', 14)
-        canvas_obj.drawCentredString(page_w / 2, page_h - 32, 'Horarios Semanales por Profesor')
-        canvas_obj.setFont('Helvetica', 9)
-        canvas_obj.drawCentredString(page_w / 2, page_h - 48, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
-
+        canvas_obj.setFont('Helvetica-Bold', 13)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 28, 'Carga Horaria por Profesor')
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawCentredString(page_w / 2, page_h - 44, 'Universidad Politécnica de Texcoco — Sistema de Gestión Académica')
         canvas_obj.setFillColor(colors.HexColor('#546E7A'))
         canvas_obj.setFont('Helvetica-Oblique', 7)
         canvas_obj.drawCentredString(
-            page_w / 2, 18,
+            page_w / 2, 16,
             f'Página {canvas_obj.getPageNumber()} — Generado el {datetime.now().strftime("%d/%m/%Y %H:%M")}'
         )
         canvas_obj.restoreState()
 
     styles = getSampleStyleSheet()
-    cell_style = ParagraphStyle(
-        'CellMateriaProfesor',
-        parent=styles['Normal'],
-        fontSize=7,
-        leading=9,
-        fontName='Helvetica-Bold',
-        alignment=1
-    )
-    title_style = ParagraphStyle(
-        'ProfesorTitle',
-        parent=styles['Heading1'],
-        fontSize=17,
-        leading=21,
-        alignment=1,
-        textColor=COLOR_NAVY,
-        fontName='Helvetica-Bold',
-        spaceBefore=0,
-        spaceAfter=4
-    )
-    subtitle_style = ParagraphStyle(
-        'ProfesorSub',
-        parent=styles['Normal'],
-        fontSize=9,
-        leading=12,
-        alignment=1,
-        textColor=colors.HexColor('#6C757D'),
-        fontName='Helvetica-Oblique',
-        spaceAfter=10
-    )
-    hdr_style = ParagraphStyle(
-        'HdrProfesor',
-        parent=styles['Normal'],
-        fontSize=9,
-        fontName='Helvetica-Bold',
-        textColor=colors.white,
-        alignment=1
-    )
+    cell_style = ParagraphStyle('CellMat', parent=styles['Normal'],
+                                fontSize=7, leading=8, fontName='Helvetica-Bold', alignment=1)
+    ptc_style  = ParagraphStyle('CellPTC', parent=styles['Normal'],
+                                fontSize=7, leading=8, fontName='Helvetica-Bold', alignment=1,
+                                textColor=colors.white)
+    ptc_tuto_style = ParagraphStyle('CellTuto', parent=styles['Normal'],
+                                    fontSize=7, leading=8, fontName='Helvetica-Bold', alignment=1,
+                                    textColor=colors.HexColor('#212529'))
+    title_style = ParagraphStyle('ProfTit', parent=styles['Heading1'],
+                                 fontSize=14, leading=18, alignment=1,
+                                 textColor=COLOR_NAVY, fontName='Helvetica-Bold',
+                                 spaceBefore=0, spaceAfter=2)
+    subtitle_style = ParagraphStyle('ProfSub', parent=styles['Normal'],
+                                    fontSize=8, leading=10, alignment=1,
+                                    textColor=colors.HexColor('#6C757D'),
+                                    fontName='Helvetica-Oblique', spaceAfter=6)
+    ptc_sum_style = ParagraphStyle('PTCSum', parent=styles['Normal'],
+                                   fontSize=8, leading=10, alignment=1,
+                                   textColor=colors.HexColor('#155724'),
+                                   fontName='Helvetica-Bold', spaceAfter=6)
+    hdr_style = ParagraphStyle('HdrP', parent=styles['Normal'],
+                               fontSize=8, fontName='Helvetica-Bold',
+                               textColor=colors.white, alignment=1)
 
     elements = []
     for idx, (_, data_prof) in enumerate(sorted(profesores_data.items(), key=lambda x: x[1]['nombre'])):
@@ -7324,82 +7681,136 @@ def exportar_horarios_profesor_pdf():
             elements.append(PageBreak())
 
         profesor_nombre = data_prof['nombre']
-        asig_prof = data_prof['asignaciones']
+        asig_prof  = data_prof['asignaciones']
+        ptc_acts   = data_prof['ptc_actividades']
+        is_ptc     = data_prof['user'].is_profesor_completo()
 
-        horas_inicio = [a.horario.hora_inicio.hour for a in asig_prof if a.horario and a.horario.hora_inicio]
-        horas_fin = [a.horario.hora_fin.hour for a in asig_prof if a.horario and a.horario.hora_fin]
-        if horas_inicio and horas_fin:
-            hora_inicio = min(horas_inicio)
-            hora_fin = max(horas_fin)
-        else:
-            hora_inicio, hora_fin = 7, 14
-
+        # Rango de horas (clases + PTC)
+        h_ini = [a.horario.hora_inicio.hour for a in asig_prof if a.horario and a.horario.hora_inicio]
+        h_fin = [a.horario.hora_fin.hour   for a in asig_prof if a.horario and a.horario.hora_fin]
+        for p in ptc_acts:
+            if p.horario and p.horario.hora_inicio:
+                h_ini.append(p.horario.hora_inicio.hour)
+            if p.horario and p.horario.hora_fin:
+                h_fin.append(p.horario.hora_fin.hour)
+        hora_inicio = min(h_ini) if h_ini else 7
+        hora_fin    = max(h_fin) if h_fin else 14
         if hora_fin <= hora_inicio:
             hora_fin = hora_inicio + 1
 
-        tiene_sabado = any(a.dia_semana.lower() == 'sabado' for a in asig_prof)
-        dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        tiene_sabado = (any(a.dia_semana.lower() == 'sabado' for a in asig_prof) or
+                        any(p.dia_semana.lower() == 'sabado' for p in ptc_acts))
+        dias_cols = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
         if tiene_sabado:
-            dias_semana.append('Sábado')
+            dias_cols.append('Sábado')
 
-        elements.append(Spacer(1, 6))
+        # Lookups
+        clase_lookup = {}
+        for a in asig_prof:
+            if a.horario and a.horario.hora_inicio:
+                clase_lookup[(a.horario.hora_inicio.hour, a.dia_semana.lower())] = a
+        ptc_lookup = {}
+        for p in ptc_acts:
+            if p.horario and p.horario.hora_inicio:
+                ptc_lookup[(p.horario.hora_inicio.hour, p.dia_semana.lower())] = p
+
+        elements.append(Spacer(1, 4))
         elements.append(Paragraph(profesor_nombre, title_style))
-        elements.append(Paragraph(f'{len(asig_prof)} clases asignadas', subtitle_style))
 
-        header_row = [Paragraph('<b>Hora</b>', hdr_style)]
-        for dia in dias_semana:
-            header_row.append(Paragraph(f'<b>{dia}</b>', hdr_style))
-        data = [header_row]
+        if is_ptc:
+            cnt = {k: 0 for k in ('asesoria', 'tutoria', 'gestion')}
+            for p in ptc_acts:
+                if p.tipo_actividad in cnt:
+                    cnt[p.tipo_actividad] += 1
+            tc_cls = len(asig_prof); tc_ptc = sum(cnt.values())
+            elements.append(Paragraph(
+                f'Tiempo Completo  |  Clases: {tc_cls}h  |  Asesoría: {cnt["asesoria"]}h  |  '
+                f'Tutoría: {cnt["tutoria"]}h  |  Gestión: {cnt["gestion"]}h  |  TOTAL: {tc_cls+tc_ptc}/40h',
+                ptc_sum_style))
+        else:
+            elements.append(Paragraph(f'{len(asig_prof)} clases asignadas', subtitle_style))
+
+        # Construir tabla
+        header_row_data = [Paragraph('<b>Hora</b>', hdr_style)]
+        for dia in dias_cols:
+            header_row_data.append(Paragraph(f'<b>{dia}</b>', hdr_style))
+        tbl_data = [header_row_data]
+
+        ptc_bg_cmds = []   # (col, row_in_table, color)
 
         for hora in range(hora_inicio, hora_fin):
+            # Check if this hour has any content
+            has_content = False
+            for dia in dias_cols:
+                db_dia = dias_rev.get(dia, dia.lower())
+                if (hora, db_dia) in clase_lookup or (hora, db_dia) in ptc_lookup:
+                    has_content = True
+                    break
+            if not has_content:
+                continue
+
+            row_idx_in_table = len(tbl_data)
             row = [f'{hora:02d}:00\n{hora+1:02d}:00']
-            for dia in dias_semana:
-                cell_content = ''
-                for a in asig_prof:
-                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
-                    if dia_correcto == dia and a.horario.hora_inicio.hour == hora:
-                        grupo_txt = f' ({a.grupo})' if a.grupo else ''
-                        cell_content = Paragraph(f'<b>{a.materia.nombre}{grupo_txt}</b>', cell_style)
-                        break
-                row.append(cell_content)
-            data.append(row)
+            for cidx, dia in enumerate(dias_cols):
+                db_dia = dias_rev.get(dia, dia.lower())
+                ck = (hora, db_dia)
+                if ck in clase_lookup:
+                    a = clase_lookup[ck]
+                    grupo_txt = f' ({a.grupo})' if a.grupo else ''
+                    row.append(Paragraph(f'<b>{a.materia.nombre}{grupo_txt}</b>', cell_style))
+                elif ck in ptc_lookup:
+                    p = ptc_lookup[ck]
+                    lbl = ptc_labels_pdf.get(p.tipo_actividad, p.tipo_actividad.upper())
+                    if p.notas:
+                        lbl += f'<br/><font size="6">{p.notas[:25]}</font>'
+                    st = ptc_tuto_style if p.tipo_actividad == 'tutoria' else ptc_style
+                    row.append(Paragraph(f'<b>{lbl}</b>', st))
+                    ptc_bg_cmds.append((cidx + 1, row_idx_in_table, ptc_colors.get(p.tipo_actividad, COLOR_ROW_EVEN)))
+                else:
+                    row.append('')
+            tbl_data.append(row)
 
-        usable_w = page_w - 80
-        hora_w = 55
-        dia_w = (usable_w - hora_w) / max(1, len(dias_semana))
-        col_widths = [hora_w] + [dia_w] * len(dias_semana)
+        # Anchos: carta vertical, márgenes 32 c/lado → usable = 612-64 = 548 pt
+        usable_w = page_w - 64
+        hora_w   = 52
+        dia_w    = (usable_w - hora_w) / max(1, len(dias_cols))
+        col_widths = [hora_w] + [dia_w] * len(dias_cols)
 
-        table = Table(data, colWidths=col_widths, repeatRows=1)
+        # Altura de filas: llenar la página disponible
+        # usable_h = page_h - topMargin - bottomMargin - título(18) - subtítulo(12) - spacers(~20)
+        usable_h  = page_h - 78 - 30 - 18 - 12 - 24
+        num_data_rows = max(1, len(tbl_data) - 1)  # exclude header
+        row_h     = max(34, min(68, usable_h / (num_data_rows + 1)))
+
         style_cmds = [
-            ('BACKGROUND', (0, 0), (-1, 0), COLOR_HEADER_BG),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('TOPPADDING', (0, 0), (-1, 0), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('BACKGROUND', (0, 0), (-1, 0), COLOR_NAVY),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 0), (-1, 0), 8),
+            ('TOPPADDING',    (0, 0), (-1, 0), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('ALIGN',  (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('BACKGROUND', (0, 1), (0, -1), COLOR_HORA_BG),
-            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 1), (0, -1), 8),
-            ('TEXTCOLOR', (0, 1), (0, -1), colors.HexColor('#495057')),
-            ('GRID', (0, 0), (-1, -1), 0.5, COLOR_BORDER),
-            ('LINEBELOW', (0, 0), (-1, 0), 2, COLOR_NAVY),
-            ('TOPPADDING', (0, 1), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
-            ('LEFTPADDING', (0, 0), (-1, -1), 4),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('FONTNAME',   (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE',   (0, 1), (0, -1), 8),
+            ('TEXTCOLOR',  (0, 1), (0, -1), colors.HexColor('#495057')),
+            ('GRID',       (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+            ('LINEBELOW',  (0, 0), (-1, 0), 1.5, COLOR_NAVY),
+            ('TOPPADDING',    (0, 1), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 3),
+            ('ROWHEIGHTS', (0, 1), (-1, -1), row_h),
         ]
+        for ri in range(1, len(tbl_data)):
+            if ri % 2 == 0:
+                style_cmds.append(('BACKGROUND', (1, ri), (-1, ri), COLOR_ROW_EVEN))
+        # Celdas PTC coloreadas (sobreescriben el even_fill)
+        for (col, row, bg) in ptc_bg_cmds:
+            style_cmds.append(('BACKGROUND', (col, row), (col, row), bg))
 
-        for row_idx in range(1, len(data)):
-            if row_idx % 2 == 0:
-                style_cmds.append(('BACKGROUND', (1, row_idx), (-1, row_idx), COLOR_ROW_EVEN))
-
-        usable_h = page_h - 85 - 35 - 80
-        num_horas = max(1, hora_fin - hora_inicio)
-        row_height = max(38, usable_h / (num_horas + 1))
-        style_cmds.append(('ROWHEIGHTS', (0, 1), (-1, -1), row_height))
-
+        table = Table(tbl_data, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle(style_cmds))
         table.hAlign = 'CENTER'
         elements.append(table)
@@ -7409,7 +7820,7 @@ def exportar_horarios_profesor_pdf():
     return send_file(
         buffer,
         as_attachment=True,
-        download_name='horarios_por_profesor.pdf',
+        download_name='cargas_horarias_profesores.pdf',
         mimetype='application/pdf'
     )
 

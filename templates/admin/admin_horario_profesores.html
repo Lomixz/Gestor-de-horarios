@@ -28,21 +28,46 @@
         </div>
     </div>
     
-    <div class="mb-3">
+    <!-- Leyenda de colores -->
+    <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
         <span class="badge bg-info fs-6">
             <i class="fas fa-users me-1"></i>
             <span id="contadorProfesores">{{ horarios_data|length }}</span> profesores
         </span>
+        <div class="d-flex align-items-center gap-2 ms-auto">
+            <span class="badge" style="background-color:#6c757d;font-size:.75rem;"><i class="fas fa-book me-1"></i>Clase</span>
+            <span class="badge" style="background-color:#28a745;font-size:.75rem;"><i class="fas fa-user-graduate me-1"></i>Asesoría</span>
+            <span class="badge" style="background-color:#ffc107;color:#212529;font-size:.75rem;"><i class="fas fa-hands-helping me-1"></i>Tutoría</span>
+            <span class="badge" style="background-color:#dc3545;font-size:.75rem;"><i class="fas fa-cogs me-1"></i>Gestión</span>
+        </div>
     </div>
     
     <div id="profesoresContainer">
         {% for profesor, dias in horarios_data.items() %}
         <div class="profesor-card profesor-item" data-profesor="{{ profesor }}">
             <div class="profesor-header">
-                <h4 class="profesor-titulo">
-                    <i class="fas fa-user-tie"></i>
-                    {{ profesor }}
-                </h4>
+                <div>
+                    <h4 class="profesor-titulo">
+                        <i class="fas fa-user-tie"></i>
+                        {{ profesor }}
+                    </h4>
+                    {% if profesor in profesores_ptc_info %}
+                    <div class="ptc-resumen-banner">
+                        <span class="badge bg-dark me-1"><i class="fas fa-id-badge me-1"></i>Tiempo Completo</span>
+                        <span class="badge bg-secondary">Clases: {{ profesores_ptc_info[profesor].horas_clase }}h</span>
+                        {% if profesores_ptc_info[profesor].horas_asesoria > 0 %}
+                        <span class="badge" style="background:#28a745">Asesoría: {{ profesores_ptc_info[profesor].horas_asesoria }}h</span>
+                        {% endif %}
+                        {% if profesores_ptc_info[profesor].horas_tutoria > 0 %}
+                        <span class="badge" style="background:#ffc107;color:#212529">Tutoría: {{ profesores_ptc_info[profesor].horas_tutoria }}h</span>
+                        {% endif %}
+                        {% if profesores_ptc_info[profesor].horas_gestion > 0 %}
+                        <span class="badge" style="background:#dc3545">Gestión: {{ profesores_ptc_info[profesor].horas_gestion }}h</span>
+                        {% endif %}
+                        <span class="badge bg-primary">TOTAL: {{ profesores_ptc_info[profesor].horas_total }}/40h</span>
+                    </div>
+                    {% endif %}
+                </div>
                 <div class="acciones-profesor">
                     <button type="button" class="btn-accion-profesor btn-warning" 
                             onclick="abrirModalHorasTC('{{ profesor }}')" 
@@ -70,8 +95,18 @@
                     <div class="grid-header">Jueves</div>
                     <div class="grid-header">Viernes</div>
                     
-                    <!-- Filas de horas (solo las configuradas en el sistema) -->
+                    <!-- Filas de horas (solo las que tienen contenido) -->
                     {% for hora in horas_sistema %}
+                    {% set ns = namespace(tiene_contenido=false) %}
+                    {% for dia_semana in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'] %}
+                        {% for clase in dias[dia_semana] %}
+                            {% if clase is mapping and clase.hora_inicio == hora %}
+                                {% set ns.tiene_contenido = true %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                    
+                    {% if ns.tiene_contenido %}
                     <div class="hora-label">
                         <span class="hora-inicio">{{ '%02d:00'|format(hora) }}</span>
                         <span class="hora-fin">{{ '%02d:00'|format(hora + 1) }}</span>
@@ -81,30 +116,50 @@
                     <div class="celda-horario">
                         {% for clase in dias[dia_semana] %}
                             {% if clase is mapping %}
-                                {# Usar comparación por entero #}
                                 {% if clase.hora_inicio == hora %}
-                                <div class="clase-card">
-                                    {% set partes = clase.html.split('<br>') %}
-                                    <div class="clase-materia">{{ partes[0] | safe }}</div>
-                                    {% if partes|length > 1 %}
-                                    <div class="clase-codigo">{{ partes[1] | safe }}</div>
+                                    {% if clase.ptc_tipo is defined and clase.ptc_tipo %}
+                                    {# --- PTC Activity Cell --- #}
+                                    <div class="clase-card ptc-card ptc-{{ clase.ptc_tipo }}">
+                                        <div class="clase-materia ptc-materia">
+                                            {% if clase.ptc_tipo == 'asesoria' %}
+                                            <i class="fas fa-user-graduate me-1"></i>
+                                            {% elif clase.ptc_tipo == 'tutoria' %}
+                                            <i class="fas fa-hands-helping me-1"></i>
+                                            {% elif clase.ptc_tipo == 'gestion' %}
+                                            <i class="fas fa-cogs me-1"></i>
+                                            {% endif %}
+                                            {{ clase.ptc_label }}
+                                        </div>
+                                        {% if clase.notas %}
+                                        <div class="clase-codigo ptc-notas">{{ clase.notas[:25] }}</div>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    {# --- Regular Class Cell --- #}
+                                    <div class="clase-card">
+                                        {% set partes = clase.html.split('<br>') %}
+                                        <div class="clase-materia">{{ partes[0] | safe }}</div>
+                                        {% if partes|length > 1 %}
+                                        <div class="clase-codigo">{{ partes[1] | safe }}</div>
+                                        {% endif %}
+                                        {% if clase.grupo %}
+                                        <div class="clase-grupo"><i class="fas fa-users fa-xs me-1"></i>{{ clase.grupo }}</div>
+                                        {% endif %}
+                                        <button type="button" class="btn-eliminar-clase" 
+                                                onclick="if(confirm('¿Eliminar este horario?')) { document.getElementById('form-eliminar-{{ clase.id }}').submit(); }">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                        <form id="form-eliminar-{{ clase.id }}" method="POST" 
+                                              action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" 
+                                            class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
+                                    </div>
                                     {% endif %}
-                                    {% if clase.grupo %}
-                                    <div class="clase-grupo"><i class="fas fa-users fa-xs me-1"></i>{{ clase.grupo }}</div>
-                                    {% endif %}
-                                    <button type="button" class="btn-eliminar-clase" 
-                                            onclick="if(confirm('¿Eliminar este horario?')) { document.getElementById('form-eliminar-{{ clase.id }}').submit(); }">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                    <form id="form-eliminar-{{ clase.id }}" method="POST" 
-                                          action="{{ url_for('eliminar_horario_rapido', id=clase.id) }}" 
-                                        class="d-none"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"></form>
-                                </div>
                                 {% endif %}
                             {% endif %}
                         {% endfor %}
                     </div>
                     {% endfor %}
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>
@@ -119,6 +174,51 @@
         {% endfor %}
     </div>
 </div>
+
+<style>
+/* PTC Activity card styles */
+.ptc-card {
+    color: white !important;
+    border: none !important;
+}
+.ptc-card.ptc-asesoria {
+    background: linear-gradient(135deg, #28a745, #20c997) !important;
+    border-left: 3px solid #1e7e34 !important;
+}
+.ptc-card.ptc-tutoria {
+    background: linear-gradient(135deg, #ffc107, #ffcd39) !important;
+    border-left: 3px solid #d39e00 !important;
+    color: #212529 !important;
+}
+.ptc-card.ptc-gestion {
+    background: linear-gradient(135deg, #dc3545, #e4606d) !important;
+    border-left: 3px solid #bd2130 !important;
+}
+.ptc-materia {
+    font-weight: 700 !important;
+    font-size: 0.7rem !important;
+}
+.ptc-notas {
+    font-size: 0.6rem !important;
+    opacity: 0.9;
+}
+.ptc-card.ptc-tutoria .ptc-materia,
+.ptc-card.ptc-tutoria .ptc-notas {
+    color: #212529 !important;
+}
+/* PTC summary banner */
+.ptc-resumen-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+.ptc-resumen-banner .badge {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 3px 7px;
+}
+</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

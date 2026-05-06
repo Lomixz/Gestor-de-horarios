@@ -139,7 +139,12 @@
                                 {% for grupo in grupos %}
                                 {% set resumen = grupo.get_resumen_completo() %}
                                 <tr class="fila-grupo">
-                                    <td><strong>{{ grupo.codigo }}</strong></td>
+                                    <td>
+                                        <strong>{{ grupo.codigo }}</strong>
+                                        {% if grupo.modalidad == 'dual' %}
+                                        <span class="badge bg-warning text-dark ms-1" title="Grupo Dual">DUAL</span>
+                                        {% endif %}
+                                    </td>
                                     <td class="col-text-wide">{{ grupo.get_carrera_nombre() }}</td>
                                     <td>{{ grupo.get_cuatrimestre_display() }}</td>
                                     <td>

@@ -95,11 +95,42 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Modalidad del Grupo -->
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.modalidad.label(class="form-label") }}
+                                    {{ form.modalidad(class="form-control" + (" is-invalid" if form.modalidad.errors else ""), id="modalidad") }}
+                                    {% if form.modalidad.errors %}
+                                        <div class="invalid-feedback">
+                                            {% for error in form.modalidad.errors %}
+                                                <span>{{ error }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Aviso para Grupo Dual -->
+                        <div class="row mt-2" id="dual-info" style="display: none;">
+                            <div class="col-12">
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <strong>Grupo Dual:</strong> Este grupo no tendrá todas las materias del cuatrimestre.
+                                    El jefe de carrera y/o admin podrán seleccionar qué materias incluir desde la gestión de materias del grupo.
+                                </div>
+                            </div>
+                        </div>
                         
                         {% if grupo %}
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i> 
                             <strong>Código del grupo:</strong> {{ grupo.codigo }}
+                            {% if grupo.is_dual() %}
+                                <span class="badge bg-warning text-dark ms-2">DUAL</span>
+                            {% endif %}
                             <br>
                             <small>El código se genera automáticamente como: {número}{turno}{código_carrera}{cuatrimestre}</small>
                         </div>
@@ -126,4 +157,23 @@
         </div>
     </div>
 </div>
+
+<script>
+// Mostrar/ocultar aviso de grupo dual
+function toggleDualInfo() {
+    const modalidad = document.getElementById('modalidad');
+    const dualInfo = document.getElementById('dual-info');
+    if (modalidad && dualInfo) {
+        dualInfo.style.display = modalidad.value === 'dual' ? 'block' : 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalidad = document.getElementById('modalidad');
+    if (modalidad) {
+        modalidad.addEventListener('change', toggleDualInfo);
+        toggleDualInfo(); // Ejecutar al cargar
+    }
+});
+</script>
 {% endblock %}

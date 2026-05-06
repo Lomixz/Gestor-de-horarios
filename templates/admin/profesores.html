@@ -314,10 +314,19 @@
                                                            title="Ver Materias y Horarios">
                                                             <i class="fas fa-eye me-1"></i>Ver Detalles
                                                         </a>
-                                                        <a href="{{ url_for('cambiar_password_profesor', id=profesor.id) }}" 
+                                                        {% if profesor.is_profesor_completo() %}
+                                                        <a href="{{ url_for('admin_actividades_ptc', profesor_id=profesor.id) }}"
+                                                           class="btn btn-sm btn-warning me-1"
+                                                           data-bs-toggle="tooltip"
+                                                           data-bs-placement="top"
+                                                           title="Gestionar Actividades PTC (Asesoría / Tutoría / Gestión)">
+                                                            <i class="fas fa-tasks me-1"></i>Act. PTC
+                                                        </a>
+                                                        {% endif %}
+                                                        <a href="{{ url_for('cambiar_password_profesor', id=profesor.id) }}"
                                                            class="btn btn-sm btn-secondary me-1"
-                                                           data-bs-toggle="tooltip" 
-                                                           data-bs-placement="top" 
+                                                           data-bs-toggle="tooltip"
+                                                           data-bs-placement="top"
                                                            title="Cambiar Contraseña del Profesor">
                                                             <i class="fas fa-key me-1"></i>Cambiar Contraseña
                                                         </a>

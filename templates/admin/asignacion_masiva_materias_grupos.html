@@ -247,15 +247,15 @@
                                                     <th class="text-center" style="min-width: 120px;">
                                                         <div class="d-flex flex-column">
                                                             <strong>{{ materia.codigo }}</strong>
-                                                            <small class="text-muted">{{ materia.nombre[:20] }}{% if materia.nombre|length > 20 %}...{% endif %}</small>
-                                                            <small class="text-info">{{ materia.creditos }} créd.</small>
+                                                            <small class="text-white-50">{{ materia.nombre[:20] }}{% if materia.nombre|length > 20 %}...{% endif %}</small>
+                                                            <small class="text-white opacity-75">{{ materia.creditos }} créd.</small>
                                                         </div>
                                                         <div class="form-check mt-2">
                                                             <input type="checkbox" 
                                                                    class="form-check-input columna-checkbox" 
                                                                    data-materia-id="{{ materia.id }}"
                                                                    onclick="toggleColumna({{ materia.id }})">
-                                                            <label class="form-check-label small">Todos</label>
+                                                            <label class="form-check-label small text-white">Todos</label>
                                                         </div>
                                                     </th>
                                                 {% endfor %}
@@ -268,6 +268,9 @@
                                                         <div class="d-flex justify-content-between align-items-center">
                                                             <div>
                                                                 <strong>{{ grupo.codigo }}</strong>
+                                                                {% if grupo.modalidad == 'dual' %}
+                                                                    <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem; padding: 0.2rem 0.4rem;">DUAL</span>
+                                                                {% endif %}
                                                                 <br>
                                                                 <small class="text-muted">{{ grupo.get_turno_display() }}</small>
                                                             </div>

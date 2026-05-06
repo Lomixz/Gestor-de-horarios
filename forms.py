@@ -1094,6 +1094,11 @@ class GrupoForm(FlaskForm):
         DataRequired(message='Debe seleccionar un cuatrimestre'),
         validate_not_negative
     ])
+
+    modalidad = SelectField('Modalidad', choices=[
+        ('regular', 'Regular'),
+        ('dual', 'Dual')
+    ], default='regular', validators=[DataRequired(message='Debe seleccionar una modalidad')])
     
     submit = SubmitField('Guardar Grupo')
     

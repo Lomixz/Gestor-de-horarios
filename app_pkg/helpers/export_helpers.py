@@ -294,10 +294,73 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         except Exception:
             pass
 
+    # Add PTC activities for TC professors
+    from models import ActividadPTC as ActPTCModel
+    ptc_por_dia_hora = {}
+    profesor_id = datos_profesor['info'].get('id')
+    es_tc = datos_profesor['info'].get('es_tc', False)
+    if profesor_id and es_tc:
+        ptc_activities = ActPTCModel.query.filter_by(profesor_id=profesor_id, activo=True).all()
+        ptc_label_map = {'asesoria': 'ASESORÍA', 'tutoria': 'TUTORÍA', 'gestion': 'GESTIÓN'}
+        for p in ptc_activities:
+            if p.horario and p.horario.hora_inicio:
+                dia_raw = p.dia_semana.lower()
+                if dia_raw == 'miércoles':
+                    dia_raw = 'miercoles'
+                if dia_raw == 'sábado':
+                    dia_raw = 'sabado'
+                hora_key = f"{p.horario.hora_inicio.hour:02d}:00"
+                key = (dia_raw, hora_key)
+                ptc_por_dia_hora[key] = {
+                    'tipo': p.tipo_actividad,
+                    'label': ptc_label_map.get(p.tipo_actividad, p.tipo_actividad.upper()),
+                    'notas': p.notas or ''
+                }
+
     dia_col_map = {
         'lunes': 'B', 'martes': 'C', 'miercoles': 'D',
         'jueves': 'E', 'viernes': 'F', 'sabado': 'I'
     }
+
+    # PTC fill styles for Excel
+    ptc_fill_map = {
+        'asesoria': PatternFill(start_color="28A745", end_color="28A745", fill_type="solid"),
+        'tutoria': PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"),
+        'gestion': PatternFill(start_color="DC3545", end_color="DC3545", fill_type="solid"),
+    }
+    ptc_font_white = Font(bold=True, name='Century Gothic', size=7, color="FFFFFF")
+    ptc_font_dark = Font(bold=True, name='Century Gothic', size=7, color="212529")
+
+    def _write_cell(ws, col, fila_inicio, fila_fin, dia, hora, merge_end_col=None):
+        """Write class or PTC content into a cell range."""
+        key = (dia, hora)
+        if merge_end_col:
+            ws.merge_cells(f'{col}{fila_inicio}:{merge_end_col}{fila_fin}')
+        else:
+            ws.merge_cells(f'{col}{fila_inicio}:{col}{fila_fin}')
+        
+        if key in clases_por_dia_hora:
+            clase = clases_por_dia_hora[key]
+            ws[f'{col}{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
+            ws[f'{col}{fila_inicio}'].font = tiny_font
+        elif key in ptc_por_dia_hora:
+            ptc = ptc_por_dia_hora[key]
+            ws[f'{col}{fila_inicio}'] = ptc['label']
+            ws[f'{col}{fila_inicio}'].fill = ptc_fill_map.get(ptc['tipo'], PatternFill())
+            ws[f'{col}{fila_inicio}'].font = ptc_font_dark if ptc['tipo'] == 'tutoria' else ptc_font_white
+            # Also fill merged cells
+            if merge_end_col:
+                for c in range(ord(col), ord(merge_end_col) + 1):
+                    for r in [fila_inicio, fila_fin]:
+                        ws[f'{chr(c)}{r}'].fill = ptc_fill_map.get(ptc['tipo'], PatternFill())
+            else:
+                ws[f'{col}{fila_fin}'].fill = ptc_fill_map.get(ptc['tipo'], PatternFill())
+        else:
+            ws[f'{col}{fila_inicio}'].font = tiny_font
+        
+        ws[f'{col}{fila_inicio}'].alignment = center_align
+        ws[f'{col}{fila_inicio}'].border = thin_border
+        ws[f'{col}{fila_fin}'].border = thin_border
 
     fila_actual = 12
     for hora in horas:
@@ -312,50 +375,26 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
         hora_rango = f"{h_int:02d}:00 - {h_int+1:02d}:00"
         
         ws[f'A{fila_inicio}'] = hora_rango
-        ws[f'A{fila_inicio}'].font = tiny_font  # Usar tiny para que quepa el rango
+        ws[f'A{fila_inicio}'].font = tiny_font
         ws[f'A{fila_inicio}'].alignment = center_align
         ws[f'A{fila_inicio}'].border = thin_border
         ws[f'A{fila_fin}'].border = thin_border
 
         # Lunes a Jueves (combinar 2 filas cada uno)
         for dia, col in [('lunes', 'B'), ('martes', 'C'), ('miercoles', 'D'), ('jueves', 'E')]:
-            ws.merge_cells(f'{col}{fila_inicio}:{col}{fila_fin}')
-            key = (dia, hora)
-            if key in clases_por_dia_hora:
-                clase = clases_por_dia_hora[key]
-                ws[f'{col}{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-            ws[f'{col}{fila_inicio}'].font = tiny_font
-            ws[f'{col}{fila_inicio}'].alignment = center_align
-            ws[f'{col}{fila_inicio}'].border = thin_border
-            ws[f'{col}{fila_fin}'].border = thin_border
+            _write_cell(ws, col, fila_inicio, fila_fin, dia, hora)
 
         # Viernes (F:H - combinar)
-        ws.merge_cells(f'F{fila_inicio}:H{fila_fin}')
-        key = ('viernes', hora)
-        if key in clases_por_dia_hora:
-            clase = clases_por_dia_hora[key]
-            ws[f'F{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-        ws[f'F{fila_inicio}'].font = tiny_font
-        ws[f'F{fila_inicio}'].alignment = center_align
-        ws[f'F{fila_inicio}'].border = thin_border
+        _write_cell(ws, 'F', fila_inicio, fila_fin, 'viernes', hora, merge_end_col='H')
         for col in ['G', 'H']:
             ws[f'{col}{fila_inicio}'].border = thin_border
             ws[f'{col}{fila_fin}'].border = thin_border
-        ws[f'F{fila_fin}'].border = thin_border
 
         # Sábado (I:L - combinar)
-        ws.merge_cells(f'I{fila_inicio}:L{fila_fin}')
-        key = ('sabado', hora)
-        if key in clases_por_dia_hora:
-            clase = clases_por_dia_hora[key]
-            ws[f'I{fila_inicio}'] = f"{clase['asignatura']} {clase['grupo']}"
-        ws[f'I{fila_inicio}'].font = tiny_font
-        ws[f'I{fila_inicio}'].alignment = center_align
-        ws[f'I{fila_inicio}'].border = thin_border
+        _write_cell(ws, 'I', fila_inicio, fila_fin, 'sabado', hora, merge_end_col='L')
         for col in ['J', 'K', 'L']:
             ws[f'{col}{fila_inicio}'].border = thin_border
             ws[f'{col}{fila_fin}'].border = thin_border
-        ws[f'I{fila_fin}'].border = thin_border
 
         fila_actual += 2
 
@@ -379,7 +418,14 @@ def generar_excel_formato_fda(datos_profesor, periodo=None, año=None):
     horas_dual = 0
     horas_investigacion = 0
 
-    if profesor_id:
+    if profesor_id and es_tc and ptc_por_dia_hora:
+        # Count from actual PTC activities
+        horas_asesoria = sum(1 for v in ptc_por_dia_hora.values() if v['tipo'] == 'asesoria')
+        horas_tutoria = sum(1 for v in ptc_por_dia_hora.values() if v['tipo'] == 'tutoria')
+        horas_gestion = sum(1 for v in ptc_por_dia_hora.values() if v['tipo'] == 'gestion')
+        horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_dual', 0) or 0)
+        horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_investigacion', 0) or 0)
+    elif profesor_id:
         horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_asesoria', 0) or 0)
         horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_tutoria', 0) or 0)
         horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor_id}_gestion', 0) or 0)
@@ -683,7 +729,7 @@ def generar_excel_profesor_buffer(profesor_nombre):
                 'miércoles': 'miercoles', 'jueves': 'jueves', 'viernes': 'viernes',
                 'sabado': 'sabado', 'sábado': 'sabado'}
 
-    es_tc = getattr(profesor, 'rol', '') == 'profesor_completo'
+    es_tc = profesor.is_profesor_completo()
 
     datos_profesor = {
         'info': {
@@ -778,8 +824,8 @@ def generar_pdf_profesor_buffer(profesor_nombre):
                     'miércoles': 'Miércoles', 'jueves': 'Jueves', 'viernes': 'Viernes',
                     'sabado': 'Sábado', 'sábado': 'Sábado'}
 
-        es_tc = profesor.rol == 'profesor_completo'
-        es_asignatura = profesor.rol == 'profesor_asignatura'
+        es_tc = profesor.is_profesor_completo()
+        es_asignatura = profesor.is_profesor_asignatura()
 
         horas_imparticion = 0
         for a in asignaciones:
@@ -789,15 +835,17 @@ def generar_pdf_profesor_buffer(profesor_nombre):
                 horas_imparticion += duracion
         horas_imparticion = int(horas_imparticion) if horas_imparticion == int(horas_imparticion) else horas_imparticion
 
-        # Horas TC desde configuración
-        horas_asesoria = 0
-        horas_tutoria = 0
-        horas_gestion = 0
-        horas_dual = 0
-        horas_investigacion = 0
-        horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_asesoria', 0) or 0)
-        horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_tutoria', 0) or 0)
-        horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_gestion', 0) or 0)
+        # Horas TC: contar desde actividades PTC reales si existen, sino desde configuración
+        from models import ActividadPTC as ActPTC
+        ptc_real = ActPTC.query.filter_by(profesor_id=profesor.id, activo=True).all()
+        if ptc_real:
+            horas_asesoria = sum(1 for p in ptc_real if p.tipo_actividad == 'asesoria')
+            horas_tutoria = sum(1 for p in ptc_real if p.tipo_actividad == 'tutoria')
+            horas_gestion = sum(1 for p in ptc_real if p.tipo_actividad == 'gestion')
+        else:
+            horas_asesoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_asesoria', 0) or 0)
+            horas_tutoria = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_tutoria', 0) or 0)
+            horas_gestion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_gestion', 0) or 0)
         horas_dual = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_dual', 0) or 0)
         horas_investigacion = int(ConfiguracionSistema.get_config(f'horas_tc_{profesor.id}_investigacion', 0) or 0)
         total_horas = horas_imparticion + horas_asesoria + horas_tutoria + horas_gestion + horas_dual + horas_investigacion
@@ -850,7 +898,8 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         # 2. CREAR PDF
         # =====================================================================
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=20, bottomMargin=20, leftMargin=30, rightMargin=30)
+        # Portrait orientation (vertical) — letter = 612x792 pt
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=20, bottomMargin=20, leftMargin=24, rightMargin=24)
         elements = []
         styles = getSampleStyleSheet()
 
@@ -858,11 +907,13 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         gris_claro = colors.Color(0.85, 0.85, 0.85)
 
         # Estilos personalizados
-        title_style = ParagraphStyle('FDATitle', parent=styles['Heading1'], fontSize=14, alignment=1, spaceAfter=0, spaceBefore=0, fontName='Helvetica-Bold', textColor=colors.white)
+        title_style = ParagraphStyle('FDATitle', parent=styles['Heading1'], fontSize=12, alignment=1, spaceAfter=0, spaceBefore=0, fontName='Helvetica-Bold', textColor=colors.white)
         label_style = ParagraphStyle('FDALabel', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=1)
         label_white = ParagraphStyle('FDALabelW', parent=styles['Normal'], fontSize=8, fontName='Helvetica-Bold', alignment=1, textColor=colors.white)
         normal_style = ParagraphStyle('FDANormal', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=1)
-        cell_style = ParagraphStyle('FDACell', parent=styles['Normal'], fontSize=6, leading=7, alignment=1, fontName='Helvetica')
+        cell_style = ParagraphStyle('FDACell', parent=styles['Normal'], fontSize=5.5, leading=6.5, alignment=1, fontName='Helvetica')
+        ptc_cell_style = ParagraphStyle('FDAPTCCell', parent=styles['Normal'], fontSize=5.5, leading=6.5, alignment=1, fontName='Helvetica-Bold', textColor=colors.white)
+        ptc_tuto_cell_style = ParagraphStyle('FDATutoCell', parent=styles['Normal'], fontSize=5.5, leading=6.5, alignment=1, fontName='Helvetica-Bold', textColor=colors.HexColor('#212529'))
         small_style = ParagraphStyle('FDASmall', parent=styles['Normal'], fontSize=6, fontName='Helvetica', alignment=1)
         left_style = ParagraphStyle('FDALeft', parent=styles['Normal'], fontSize=8, fontName='Helvetica', alignment=0)
         note_style = ParagraphStyle('FDANote', parent=styles['Normal'], fontSize=6, fontName='Helvetica-Oblique', alignment=0, spaceAfter=0)
@@ -880,11 +931,12 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         # =====================================================================
         # ENCABEZADO - Logo + Carga Horaria + Área/Vigencia/Código (verde)
         # =====================================================================
+        page_usable = 612 - 48  # letter width minus margins
         header_data = [
             [logo_elem or '', Paragraph('Carga Horaria', title_style), Paragraph('<b>Código:</b> FDA-02.5', label_white)],
             ['', Paragraph('<b>Área:</b> Dirección Académica', label_white), Paragraph(f'<b>Vigencia:</b> {periodo} {anio}', label_white)],
         ]
-        header_table = Table(header_data, colWidths=[0.8*inch, 7.5*inch, 2.2*inch])
+        header_table = Table(header_data, colWidths=[0.6*inch, 5.3*inch, 1.95*inch])
         header_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), verde_uptex_color),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
@@ -904,7 +956,7 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         nombre_row = [
             Paragraph(f'<b>{profesor_nombre.upper()}</b>', ParagraphStyle('Name', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=0)),
         ]
-        nombre_table = Table([nombre_row], colWidths=[10.5*inch])
+        nombre_table = Table([nombre_row], colWidths=[page_usable])
         nombre_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -918,7 +970,7 @@ def generar_pdf_profesor_buffer(profesor_nombre):
             Paragraph(f"Prof. Asignatura: <b>{'X' if es_asignatura else '  '}</b>", label_white),
             Paragraph(f"Prof. Tiempo Completo: <b>{'X' if es_tc else '  '}</b>", label_white),
         ]
-        tipo_table = Table([tipo_row], colWidths=[5.25*inch, 5.25*inch])
+        tipo_table = Table([tipo_row], colWidths=[page_usable/2, page_usable/2])
         tipo_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), verde_uptex_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -934,7 +986,7 @@ def generar_pdf_profesor_buffer(profesor_nombre):
             Paragraph(f'<b>Fecha de Inicio:</b> {fecha_inicio}', label_style),
             Paragraph(f'<b>Plan de Estudios:</b> {anio}', label_style),
         ]
-        periodo_table = Table([periodo_row], colWidths=[3.5*inch, 3.5*inch, 3.5*inch])
+        periodo_table = Table([periodo_row], colWidths=[page_usable/3]*3)
         periodo_table.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -949,10 +1001,32 @@ def generar_pdf_profesor_buffer(profesor_nombre):
         # =====================================================================
         # CUADRÍCULA DE HORARIOS (encabezados verdes)
         # =====================================================================
-        grid_data = [[Paragraph('<b>Horario</b>', label_white)] + [Paragraph(f'<b>{d}</b>', label_white) for d in dias_semana]]
+        # Query PTC activities for this professor
+        from models import Horario as HorarioModel, ActividadPTC
+        ptc_acts = []
+        if es_tc:
+            ptc_acts = ActividadPTC.query.filter_by(
+                profesor_id=profesor.id, activo=True
+            ).all()
+        ptc_lookup = {}
+        for p in ptc_acts:
+            if p.horario and p.horario.hora_inicio:
+                ptc_lookup[(p.horario.hora_inicio.hour, p.dia_semana.lower())] = p
+        ptc_labels_map = {'asesoria': 'ASESORÍA', 'tutoria': 'TUTORÍA', 'gestion': 'GESTIÓN'}
+        COLOR_ASESORIA = colors.HexColor('#28A745')
+        COLOR_TUTORIA = colors.HexColor('#FFC107')
+        COLOR_GESTION = colors.HexColor('#DC3545')
+        ptc_bg_map = {'asesoria': COLOR_ASESORIA, 'tutoria': COLOR_TUTORIA, 'gestion': COLOR_GESTION}
 
-        # Use actual time slots from the system instead of hardcoded range
-        from models import Horario as HorarioModel
+        # Use only days L-V (no Sábado unless needed)
+        dias_semana_pdf = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        dias_rev_pdf = {'Lunes': 'lunes', 'Martes': 'martes', 'Miércoles': 'miercoles', 'Jueves': 'jueves', 'Viernes': 'viernes', 'Sábado': 'sabado'}
+        tiene_sabado = any(a.dia_semana.lower() in ('sabado','sábado') for a in asignaciones) or any(p.dia_semana.lower() in ('sabado','sábado') for p in ptc_acts)
+        if tiene_sabado:
+            dias_semana_pdf.append('Sábado')
+
+        grid_data = [[Paragraph('<b>Hora</b>', label_white)] + [Paragraph(f'<b>{d}</b>', label_white) for d in dias_semana_pdf]]
+
         horarios_sistema_pdf = HorarioModel.query.filter_by(activo=True).order_by(HorarioModel.hora_inicio).all()
         horas_pdf = []
         seen_pdf = set()
@@ -962,40 +1036,75 @@ def generar_pdf_profesor_buffer(profesor_nombre):
                 seen_pdf.add(h_hour)
                 horas_pdf.append((h_hour, hs.hora_inicio, hs.hora_fin))
 
-        for hora, h_inicio, h_fin in horas_pdf:
-            hora_str = f"{h_inicio.strftime('%H:%M')} - {h_fin.strftime('%H:%M')}"
-            row = [Paragraph(f'<b>{hora_str}</b>', label_style)]
+        # Build clase lookup
+        clase_lk = {}
+        for a in asignaciones:
+            if a.horario and a.horario.hora_inicio:
+                dia_key = dias_map.get(a.dia_semana.lower(), '')
+                if dia_key:
+                    clase_lk[(a.horario.hora_inicio.hour, dias_rev_pdf.get(dia_key, a.dia_semana.lower()))] = a
 
-            for dia in dias_semana:
-                contenido = ""
-                for a in asignaciones:
-                    dia_correcto = dias_map.get(a.dia_semana.lower(), '')
-                    if dia_correcto == dia and a.horario and a.horario.hora_inicio.hour == hora:
-                        grupo_codigo = a.grupo if a.grupo else "N/A"
-                        contenido = f"{a.materia.nombre} {grupo_codigo}"
-                        break
-                row.append(Paragraph(contenido, cell_style))
+        ptc_bg_cmds = []  # (col, row, color) for PTC cell backgrounds
+
+        for hora, h_inicio, h_fin in horas_pdf:
+            # Skip hours with no content at all
+            has_content = False
+            for dia in dias_semana_pdf:
+                db_dia = dias_rev_pdf.get(dia, dia.lower())
+                if (hora, db_dia) in clase_lk or (hora, db_dia) in ptc_lookup:
+                    has_content = True
+                    break
+            if not has_content:
+                continue
+
+            hora_str = f"{h_inicio.strftime('%H:%M')}\n{h_fin.strftime('%H:%M')}"
+            row = [Paragraph(f'<b>{h_inicio.strftime("%H:%M")}<br/>{h_fin.strftime("%H:%M")}</b>', label_style)]
+
+            for cidx, dia in enumerate(dias_semana_pdf):
+                db_dia = dias_rev_pdf.get(dia, dia.lower())
+                ck = (hora, db_dia)
+                if ck in clase_lk:
+                    a = clase_lk[ck]
+                    grupo_codigo = a.grupo if a.grupo else ''
+                    row.append(Paragraph(f'{a.materia.nombre} {grupo_codigo}', cell_style))
+                elif ck in ptc_lookup:
+                    p = ptc_lookup[ck]
+                    lbl = ptc_labels_map.get(p.tipo_actividad, p.tipo_actividad.upper())
+                    st = ptc_tuto_cell_style if p.tipo_actividad == 'tutoria' else ptc_cell_style
+                    row.append(Paragraph(f'{lbl}', st))
+                    ptc_bg_cmds.append((cidx + 1, len(grid_data), ptc_bg_map.get(p.tipo_actividad, colors.grey)))
+                else:
+                    row.append('')
 
             grid_data.append(row)
 
-        col_widths = [0.8*inch] + [1.62*inch] * 6
+        n_dias = len(dias_semana_pdf)
+        hora_col_w = 0.55 * inch
+        dia_col_w = (page_usable - hora_col_w) / n_dias
+        col_widths = [hora_col_w] + [dia_col_w] * n_dias
         grid_table = Table(grid_data, colWidths=col_widths)
 
-        grid_table.setStyle(TableStyle([
+        grid_style_cmds = [
             ('BACKGROUND', (0, 0), (-1, 0), verde_uptex_color),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
             ('BACKGROUND', (0, 1), (0, -1), colors.Color(0.95, 0.95, 0.95)),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.Color(0.75, 0.75, 0.75)),
             ('ROWHEIGHTS', (0, 0), (-1, -1), 18),
-        ]))
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ]
+        # Add PTC cell background colors
+        for (col, row_idx, bg) in ptc_bg_cmds:
+            grid_style_cmds.append(('BACKGROUND', (col, row_idx), (col, row_idx), bg))
+
+        grid_table.setStyle(TableStyle(grid_style_cmds))
         elements.append(grid_table)
 
-        # Salto de página para que tabla de horas y firmas queden en página 2
-        elements.append(PageBreak())
+        elements.append(Spacer(1, 6))
 
         # =====================================================================
         # TABLA DE TIPOS DE HORAS (encabezados verdes)
@@ -1021,7 +1130,7 @@ def generar_pdf_profesor_buffer(profesor_nombre):
             Paragraph(f'<b>{total_horas}</b>', label_style)
         ])
 
-        horas_table = Table(horas_data, colWidths=[2.5*inch, 1.0*inch])
+        horas_table = Table(horas_data, colWidths=[2.0*inch, 0.8*inch])
         horas_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), verde_uptex_color),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -1057,7 +1166,8 @@ def generar_pdf_profesor_buffer(profesor_nombre):
              Paragraph('Firma', label_style)],
         ]
 
-        firma_table = Table(firma_data, colWidths=[3.5*inch, 3.5*inch, 3.5*inch])
+        fw = page_usable / 3
+        firma_table = Table(firma_data, colWidths=[fw, fw, fw])
         firma_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), gris_claro),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
