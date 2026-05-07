@@ -65,7 +65,7 @@ services:
     image: sistema_login-celery_worker:latest
     container_name: gestor_celery_worker
     restart: unless-stopped
-    command: celery -A celery_app worker --loglevel=info --concurrency=2
+    command: ./entrypoint_celery.sh
     volumes:
       - ./instance:/app/instance
       - ./static/uploads:/app/static/uploads
