@@ -46,9 +46,10 @@ def _get_progress_tracker():
 def _calcular_horas_por_profesor_por_grupo(grupos_ids):
     """
     For each professor assigned to any group in the batch, builds a mapping of
-    (grupo_id, horas) so the sequential generator can reserve capacity upfront.
+    (grupo_id, horas, turno) so the sequential generator can reserve capacity
+    per turno upfront.
 
-    Returns: {profesor_id: [(grupo_id, horas), ...]}
+    Returns: {profesor_id: [(grupo_id, horas, turno), ...]}
     """
     from models import AsignacionProfesorGrupo, Grupo
 
@@ -57,6 +58,7 @@ def _calcular_horas_por_profesor_por_grupo(grupos_ids):
         grupo = Grupo.query.get(grupo_id)
         if not grupo:
             continue
+        turno = 'matutino' if grupo.turno == 'M' else 'vespertino'
         materias = [m for m in grupo.materias if m.activa]
         for materia in materias:
             horas = int(round(materia.horas_semanales or 3))
@@ -64,7 +66,7 @@ def _calcular_horas_por_profesor_por_grupo(grupos_ids):
                 grupo_id=grupo_id, materia_id=materia.id, activo=True
             ).all()
             for asig in asignaciones:
-                resultado[asig.profesor_id].append((grupo_id, horas))
+                resultado[asig.profesor_id].append((grupo_id, horas, turno))
     return dict(resultado)
 
 
@@ -151,16 +153,23 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
 
             # Calcular reserva dinámica: horas que cada profesor necesita para los
             # grupos AÚN NO generados (los que vienen después en la secuencia).
+            # Solo se reservan horas del MISMO turno que el grupo actual para no
+            # recortar capacidad de un turno por horas del otro.
             grupos_futuros = set(grupos_ordenados[i:])  # i es 1-based, índice real = i
+            turno_actual = 'matutino' if grupo.turno == 'M' else 'vespertino'
             horas_reservadas = {
-                prof_id: sum(h for gid, h in grupos_horas if gid in grupos_futuros)
+                prof_id: sum(
+                    h for gid, h, t in grupos_horas
+                    if gid in grupos_futuros and t == turno_actual
+                )
                 for prof_id, grupos_horas in profesor_horas_por_grupo.items()
-                if any(gid in grupos_futuros for gid, _ in grupos_horas)
+                if any(gid in grupos_futuros and t == turno_actual for gid, _, t in grupos_horas)
             }
             if horas_reservadas:
                 logger.info(
-                    f"Grupo {grupo.codigo}: reservando cupo para {len(horas_reservadas)} "
-                    f"profesores compartidos con {len(grupos_futuros)} grupos futuros"
+                    f"Grupo {grupo.codigo} ({turno_actual}): reservando cupo para "
+                    f"{len(horas_reservadas)} profesores compartidos con "
+                    f"{len(grupos_futuros)} grupos futuros"
                 )
 
             generador = GeneradorHorariosMejorado(
