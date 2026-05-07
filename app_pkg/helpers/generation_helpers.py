@@ -8,6 +8,7 @@ app.py still re-exports these functions for backwards compatibility.
 """
 import threading
 import logging
+from collections import defaultdict
 
 logger = logging.getLogger('sistema_academico')
 
@@ -40,6 +41,31 @@ def _get_progress_tracker():
         return tracker
     except Exception:
         return None
+
+
+def _calcular_horas_por_profesor_por_grupo(grupos_ids):
+    """
+    For each professor assigned to any group in the batch, builds a mapping of
+    (grupo_id, horas) so the sequential generator can reserve capacity upfront.
+
+    Returns: {profesor_id: [(grupo_id, horas), ...]}
+    """
+    from models import AsignacionProfesorGrupo, Grupo
+
+    resultado = defaultdict(list)
+    for grupo_id in grupos_ids:
+        grupo = Grupo.query.get(grupo_id)
+        if not grupo:
+            continue
+        materias = [m for m in grupo.materias if m.activa]
+        for materia in materias:
+            horas = int(round(materia.horas_semanales or 3))
+            asignaciones = AsignacionProfesorGrupo.query.filter_by(
+                grupo_id=grupo_id, materia_id=materia.id, activo=True
+            ).all()
+            for asig in asignaciones:
+                resultado[asig.profesor_id].append((grupo_id, horas))
+    return dict(resultado)
 
 
 def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version_nombre,
@@ -83,7 +109,7 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
         'algoritmo': 'Secuencial con Progreso'
     }
 
-    grupos_ordenados = grupos_ids
+    grupos_ordenados = list(grupos_ids)
     total = len(grupos_ordenados)
 
     # PRE-LIMPIEZA: Eliminar horarios viejos de TODOS los grupos del batch
@@ -103,6 +129,12 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
         db.session.rollback()
         logger.error(f"Error en pre-limpieza de horarios: {e}")
 
+    # PRE-CÁLCULO: Mapa de horas que cada profesor necesita por grupo.
+    # Usado para calcular reservas dinámicas en cada iteración y evitar que
+    # los primeros grupos acaparen los mejores slots de profesores compartidos.
+    profesor_horas_por_grupo = _calcular_horas_por_profesor_por_grupo(grupos_ordenados)
+    logger.info(f"Reserva dinámica: {len(profesor_horas_por_grupo)} profesores con asignaciones en el batch")
+
     for i, grupo_id in enumerate(grupos_ordenados, 1):
         grupo = Grupo.query.get(grupo_id)
         if not grupo:
@@ -117,13 +149,28 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
         try:
             db.session.expire_all()
 
+            # Calcular reserva dinámica: horas que cada profesor necesita para los
+            # grupos AÚN NO generados (los que vienen después en la secuencia).
+            grupos_futuros = set(grupos_ordenados[i:])  # i es 1-based, índice real = i
+            horas_reservadas = {
+                prof_id: sum(h for gid, h in grupos_horas if gid in grupos_futuros)
+                for prof_id, grupos_horas in profesor_horas_por_grupo.items()
+                if any(gid in grupos_futuros for gid, _ in grupos_horas)
+            }
+            if horas_reservadas:
+                logger.info(
+                    f"Grupo {grupo.codigo}: reservando cupo para {len(horas_reservadas)} "
+                    f"profesores compartidos con {len(grupos_futuros)} grupos futuros"
+                )
+
             generador = GeneradorHorariosMejorado(
                 grupos_ids=[grupo_id],
                 periodo_academico=periodo_academico,
                 version_nombre=f"{version_nombre or 'Secuencial'} - {grupo.codigo}",
                 creado_por=creado_por,
                 dias_semana=dias_semana or ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'],
-                tiempo_limite=30
+                tiempo_limite=30,
+                horas_reservadas=horas_reservadas,
             )
 
             resultado = generador.generar()

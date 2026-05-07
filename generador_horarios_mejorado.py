@@ -201,6 +201,7 @@ class GeneradorHorariosMejorado:
         creado_por=None,
         dias_semana=None,
         tiempo_limite=60,  # OPTIMIZADO: Reducido de 300s a 60s
+        horas_reservadas=None,
     ):
         if not ORTOOLS_AVAILABLE:
             raise ImportError("OR-Tools no está disponible")
@@ -208,6 +209,8 @@ class GeneradorHorariosMejorado:
         self.grupos_ids = grupos_ids
         self.periodo_academico = periodo_academico
         self.version_nombre = version_nombre
+        # {profesor_id: int} — hours to keep free for groups not yet generated
+        self._horas_reservadas = horas_reservadas or {}
         
         # Si no se proporciona creado_por, buscar un administrador del sistema
         if creado_por is None:
@@ -488,6 +491,12 @@ class GeneradorHorariosMejorado:
         ).count()
 
         capacidad = max(0, slots_totales - slots_ocupados)
+
+        # Subtract hours reserved for groups not yet generated in this batch.
+        # This prevents early groups from monopolizing shared professors,
+        # ensuring later groups in the sequence also have enough capacity.
+        reserva = self._horas_reservadas.get(profesor_id, 0)
+        capacidad = max(0, capacidad - reserva)
 
         # Guardar en caché
         self._cache_capacidad_profesor[cache_key] = capacidad
