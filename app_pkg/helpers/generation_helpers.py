@@ -70,6 +70,40 @@ def _calcular_horas_por_profesor_por_grupo(grupos_ids):
     return dict(resultado)
 
 
+def _ordenar_grupos_por_stress(grupos_ids, profesor_horas_por_grupo):
+    """Order groups so that the most capacity-constrained groups are generated first.
+
+    For each group, find the professor whose hours in that group represent the
+    largest fraction of their total batch hours. Sort groups descending by that
+    fraction so the tightest constraints are resolved before reservations reduce
+    available capacity.
+    """
+    from models import Grupo
+
+    # Total batch hours per professor (sum across all groups/turnos)
+    total_horas = {}
+    for prof_id, grupos_horas in profesor_horas_por_grupo.items():
+        total_horas[prof_id] = sum(h for _, h, _ in grupos_horas)
+
+    def stress_score(grupo_id):
+        grupo = Grupo.query.get(grupo_id)
+        if not grupo:
+            return 0.0
+        max_fraction = 0.0
+        for prof_id, grupos_horas in profesor_horas_por_grupo.items():
+            horas_en_grupo = sum(h for gid, h, _ in grupos_horas if gid == grupo_id)
+            if horas_en_grupo == 0:
+                continue
+            total = total_horas.get(prof_id, 0)
+            if total > 0:
+                fraction = horas_en_grupo / total
+                if fraction > max_fraction:
+                    max_fraction = fraction
+        return max_fraction
+
+    return sorted(grupos_ids, key=stress_score, reverse=True)
+
+
 def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version_nombre,
                                            creado_por, dias_semana, task_id=None):
     """Genera horarios actualizando progreso via Redis (o fallback global).
@@ -136,6 +170,12 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
     # los primeros grupos acaparen los mejores slots de profesores compartidos.
     profesor_horas_por_grupo = _calcular_horas_por_profesor_por_grupo(grupos_ordenados)
     logger.info(f"Reserva dinámica: {len(profesor_horas_por_grupo)} profesores con asignaciones en el batch")
+
+    # Reorder: process groups where a professor uses the highest fraction of their
+    # total batch capacity first. This ensures the tightest constraints get resolved
+    # before dynamic reservations shrink effective availability for later groups.
+    grupos_ordenados = _ordenar_grupos_por_stress(grupos_ordenados, profesor_horas_por_grupo)
+    logger.info(f"Orden por stress: {[str(g) for g in grupos_ordenados]}")
 
     for i, grupo_id in enumerate(grupos_ordenados, 1):
         grupo = Grupo.query.get(grupo_id)
