@@ -73,24 +73,30 @@ def _calcular_horas_por_profesor_por_grupo(grupos_ids):
 def _ordenar_grupos_por_stress(grupos_ids, profesor_horas_por_grupo):
     """Order groups so that the most capacity-constrained groups are generated first.
 
-    For each group, find the professor whose hours in that group represent the
-    largest fraction of their total batch hours. Sort groups descending by that
-    fraction so the tightest constraints are resolved before reservations reduce
-    available capacity.
+    Only considers SHARED professors (those who appear in more than one group in the
+    batch). Exclusive professors always score 1.0 and would mask the real bottlenecks
+    if included. Sort descending by max fraction so tight multi-group professors get
+    their heaviest group resolved first.
     """
     from models import Grupo
 
-    # Total batch hours per professor (sum across all groups/turnos)
-    total_horas = {}
-    for prof_id, grupos_horas in profesor_horas_por_grupo.items():
-        total_horas[prof_id] = sum(h for _, h, _ in grupos_horas)
+    # Only shared professors (appear in 2+ groups)
+    shared_profs = {
+        prof_id
+        for prof_id, grupos_horas in profesor_horas_por_grupo.items()
+        if len({gid for gid, _, _ in grupos_horas}) > 1
+    }
+
+    total_horas = {
+        prof_id: sum(h for _, h, _ in grupos_horas)
+        for prof_id, grupos_horas in profesor_horas_por_grupo.items()
+        if prof_id in shared_profs
+    }
 
     def stress_score(grupo_id):
-        grupo = Grupo.query.get(grupo_id)
-        if not grupo:
-            return 0.0
         max_fraction = 0.0
-        for prof_id, grupos_horas in profesor_horas_por_grupo.items():
+        for prof_id in shared_profs:
+            grupos_horas = profesor_horas_por_grupo[prof_id]
             horas_en_grupo = sum(h for gid, h, _ in grupos_horas if gid == grupo_id)
             if horas_en_grupo == 0:
                 continue
@@ -197,14 +203,20 @@ def generar_horarios_masivos_con_progreso(grupos_ids, periodo_academico, version
             # recortar capacidad de un turno por horas del otro.
             grupos_futuros = set(grupos_ordenados[i:])  # i es 1-based, índice real = i
             turno_actual = 'matutino' if grupo.turno == 'M' else 'vespertino'
+            # Reserve 80% of future hours: leaving a small slack prevents INFEASIBLE
+            # on 100%-utilization professors where exact reservation leaves zero
+            # wiggle room for the CP-SAT solver to find valid slot assignments.
+            RESERVATION_FACTOR = 0.80
             horas_reservadas = {
-                prof_id: sum(
+                prof_id: int(sum(
                     h for gid, h, t in grupos_horas
                     if gid in grupos_futuros and t == turno_actual
-                )
+                ) * RESERVATION_FACTOR)
                 for prof_id, grupos_horas in profesor_horas_por_grupo.items()
                 if any(gid in grupos_futuros and t == turno_actual for gid, _, t in grupos_horas)
             }
+            # Remove zero-value entries produced by the int()*0.80 floor
+            horas_reservadas = {k: v for k, v in horas_reservadas.items() if v > 0}
             if horas_reservadas:
                 logger.info(
                     f"Grupo {grupo.codigo} ({turno_actual}): reservando cupo para "
